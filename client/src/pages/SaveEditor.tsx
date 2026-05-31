@@ -1,0 +1,468 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Typography, Button, App, Spin, Tag, Tooltip, Space, Popconfirm,
+} from 'antd';
+import {
+  SaveOutlined, DownloadOutlined, ArrowLeftOutlined, BankOutlined,
+  SafetyCertificateOutlined,
+} from '@ant-design/icons';
+import {
+  DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors,
+  useDraggable, useDroppable,
+  type DragStartEvent, type DragEndEvent,
+} from '@dnd-kit/core';
+import { saveFileApi, type SaveFileDetail, type BoxSlotDto, type PokemonDto, type SaveBackupDto } from '../api/saveFile';
+import { bankApi, type BankPokemon } from '../api/bank';
+import EditPanel from '../components/editor/EditPanel';
+import { useAuthStore } from '../stores/authStore';
+
+const { Title, Text } = Typography;
+
+// ── ID helpers ────────────────────────────────────────
+const saveSlotId = (box: number, slot: number) => `save:${box}:${slot}`;
+const bankItemId = (bankId: string) => `bank:${bankId}`;
+const bankDropId = 'bank-drop-zone';
+const parseSaveSlot = (id: string) => ({ boxIndex: +id.split(':')[1], slotIndex: +id.split(':')[2] });
+
+// ── Draggable Slot Component ─────────────────────────
+const DraggableSlot: React.FC<{ boxIndex: number; slot: BoxSlotDto; onPokemonClick?: (p: PokemonDto) => void }> = ({ boxIndex, slot, onPokemonClick }) => {
+  const slotId = saveSlotId(boxIndex, slot.slotIndex);
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: slotId, disabled: slot.isEmpty });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: slotId });
+
+  const p = slot.pokemon;
+  const isEmpty = slot.isEmpty;
+
+  return (
+    <div
+      ref={(node) => { setNodeRef(node); setDropRef(node); }}
+      style={{
+        aspectRatio: '1',
+        border: isOver ? '2px solid #52c41a' : isEmpty ? '2px dashed #d9d9d9' : '1px solid #e8e8e8',
+        borderRadius: 8,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        cursor: isEmpty ? 'default' : 'grab',
+        background: isOver ? '#f6ffed' : isEmpty ? '#fafafa' : '#fff',
+        opacity: isDragging ? 0.5 : 1,
+        transition: 'border-color 0.2s, background 0.2s',
+        userSelect: 'none',
+        position: 'relative',
+      }}
+      {...(!isEmpty ? { ...attributes, ...listeners } : {})}
+      onClick={() => { if (!isEmpty && p && onPokemonClick) onPokemonClick(p); }}
+    >
+      {isEmpty ? (
+        <Text type="secondary" style={{ fontSize: 11 }}>{slot.slotIndex + 1}</Text>
+      ) : (
+        <>
+          <div style={{ position: 'relative' }}>
+            <img src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p!.species}.png`}
+              style={{ width: 32, height: 32, imageRendering: 'pixelated' }}
+              onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect fill="%23f0f0f0" width="32" height="32"/><text x="16" y="16" text-anchor="middle" dy=".3em" fill="%23999" font-size="7">PK</text></svg>'); }}
+            />
+            {p!.isShiny && (
+              <span style={{ position: 'absolute', top: -2, right: -2, fontSize: 10, color: '#faad14', lineHeight: 1 }}>✨</span>
+            )}
+            {/* Legality indicator dot — green if valid */}
+            {!p!.isValid && (
+              <span style={{
+                position: 'absolute', bottom: -2, left: -2,
+                width: 8, height: 8, borderRadius: '50%',
+                background: '#ff4d4f',
+                border: '1px solid #fff',
+              }} title="不合法" />
+            )}
+          </div>
+          <div style={{ fontSize: 10, lineHeight: 1.2, textAlign: 'center', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {p!.nickname || p!.speciesName}
+          </div>
+          <Tag color="blue" style={{ fontSize: 9, margin: 0, padding: '0 3px', lineHeight: '14px' }}>Lv.{p!.level}</Tag>
+        </>
+      )}
+    </div>
+  );
+};
+
+// ── Draggable Bank Item ──────────────────────────────
+const DraggableBankItem: React.FC<{ pokemon: BankPokemon }> = ({ pokemon }) => {
+  const id = bankItemId(pokemon.id);
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      style={{
+        width: 64, textAlign: 'center', cursor: 'grab', padding: 4, borderRadius: 6,
+        border: pokemon.isShiny ? '2px solid #faad14' : '1px solid #e8e8e8',
+        background: '#fff', opacity: isDragging ? 0.5 : 1, flexShrink: 0,
+      }}
+    >
+      <img src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.species}.png`}
+        style={{ width: 40, height: 40, imageRendering: 'pixelated' }}
+        onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect fill="%23f0f0f0" width="40" height="40"/><text x="20" y="20" text-anchor="middle" dy=".3em" fill="%23999" font-size="8">PK</text></svg>'); }}
+      />
+      <div style={{ fontSize: 10, lineHeight: 1.2 }}>{pokemon.nickname || pokemon.speciesName}</div>
+      <Tag color="blue" style={{ fontSize: 9, margin: 0, padding: '0 4px', lineHeight: '16px' }}>Lv.{pokemon.level}</Tag>
+    </div>
+  );
+};
+
+// ── Droppable Bank Zone ──────────────────────────────
+const DroppableBankZone: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { setNodeRef, isOver } = useDroppable({ id: bankDropId });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        display: 'flex', gap: 8, overflow: 'auto', padding: 8, minHeight: 64,
+        border: isOver ? '2px solid #52c41a' : '2px dashed #d9d9d9',
+        borderRadius: 8, background: isOver ? '#f6ffed' : '#fafafa',
+        transition: 'border-color 0.2s, background 0.2s',
+      }}
+    >
+      {children}
+    </div>
+  );
+};
+
+// ── Main Editor Page ─────────────────────────────────
+const SaveEditor: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { message } = App.useApp();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  const [saveData, setSaveData] = useState<SaveFileDetail | null>(null);
+  const [activeBox, setActiveBox] = useState(0);
+  const [bankPokemon, setBankPokemon] = useState<BankPokemon[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeDrag, setActiveDrag] = useState<{ label: string } | null>(null);
+  const [editingPokemon, setEditingPokemon] = useState<PokemonDto | null>(null);
+  const [editingBoxIndex, setEditingBoxIndex] = useState<number | undefined>();
+  const [editingSlotIndex, setEditingSlotIndex] = useState<number | undefined>();
+  const [editingIsParty, setEditingIsParty] = useState(false);
+  const [editPanelOpen, setEditPanelOpen] = useState(false);
+  const [legalityScanning, setLegalityScanning] = useState(false);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const fetchData = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const [saveRes, bankRes] = await Promise.all([
+        saveFileApi.getDetail(id),
+        bankApi.list({ pageSize: 50 }),
+      ]);
+      setSaveData(saveRes.data);
+      setBankPokemon(bankRes.data.items);
+    } catch {
+      message.error('加载存档数据失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [id, message]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // After saveData refreshes, update editingPokemon if the panel is open
+  useEffect(() => {
+    if (!editPanelOpen || !editingPokemon || !saveData) return;
+    const species = editingPokemon.species;
+    // Check party
+    for (const s of saveData.party) {
+      if (s.pokemon && s.pokemon.species === species && s.slotIndex === editingSlotIndex) {
+        setEditingPokemon(s.pokemon);
+        return;
+      }
+    }
+    // Check boxes
+    for (const box of saveData.boxes) {
+      for (const s of box.slots) {
+        if (s.pokemon && s.pokemon.id === editingPokemon.id && editingPokemon.id) {
+          setEditingPokemon(s.pokemon);
+          return;
+        }
+      }
+    }
+  }, [saveData]);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const activeId = String(event.active.id);
+    if (activeId.startsWith('save:')) {
+      const { boxIndex, slotIndex } = parseSaveSlot(activeId);
+      const slot = saveData?.boxes[boxIndex]?.slots[slotIndex];
+      setActiveDrag({ label: slot?.pokemon?.nickname || slot?.pokemon?.speciesName || '宝可梦' });
+    } else if (activeId.startsWith('bank:')) {
+      const bankId = activeId.replace('bank:', '');
+      const item = bankPokemon.find(p => p.id === bankId);
+      setActiveDrag({ label: item?.nickname || item?.speciesName || '宝可梦' });
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDrag(null);
+    if (!over || !id) return;
+
+    const fromId = String(active.id);
+    const toId = String(over.id);
+
+    // Save → Bank
+    if (fromId.startsWith('save:') && toId === bankDropId) {
+      const { boxIndex, slotIndex } = parseSaveSlot(fromId);
+      try {
+        await bankApi.fromSave({ saveFileId: id, boxIndex, slotIndex });
+        message.success('已存入银行');
+        fetchData();
+      } catch { message.error('操作失败'); }
+      return;
+    }
+
+    // Bank → Save
+    if (fromId.startsWith('bank:') && toId.startsWith('save:')) {
+      const bankPokemonId = fromId.replace('bank:', '');
+      const { boxIndex, slotIndex } = parseSaveSlot(toId);
+      try {
+        await bankApi.moveToSave(id, { bankPokemonId, targetBoxIndex: boxIndex, targetSlotIndex: slotIndex });
+        message.success('已移入存档');
+        fetchData();
+      } catch { message.error('操作失败'); }
+      return;
+    }
+
+    // Save → Save (internal move)
+    if (fromId.startsWith('save:') && toId.startsWith('save:')) {
+      const from = parseSaveSlot(fromId);
+      const to = parseSaveSlot(toId);
+      if (from.boxIndex === to.boxIndex && from.slotIndex === to.slotIndex) return;
+      try {
+        await saveFileApi.moveSlot(id, {
+          fromBoxIndex: from.boxIndex, fromSlotIndex: from.slotIndex,
+          toBoxIndex: to.boxIndex, toSlotIndex: to.slotIndex,
+        });
+        message.success('移动成功');
+        fetchData();
+      } catch { message.error('移动失败'); }
+    }
+  };
+
+  const handleSave = async () => { if (!id) return; try { await saveFileApi.save(id); message.success('存档已保存'); } catch { message.error('保存失败'); } };
+  const handleDownload = () => { if (id) window.open(`/api/SaveFile/${id}/download`, '_blank'); };
+  const handleBatchLegalityScan = async () => {
+    if (!id) return;
+    setLegalityScanning(true);
+    try {
+      const res = await saveFileApi.batchLegalityReport(id);
+      message.success(`扫描完成: ${res.data.total}只, ${res.data.legalCount}合法, ${res.data.fishyCount}可疑, ${res.data.illegalCount}不合法`);
+    } catch { message.error('扫描失败'); }
+    finally { setLegalityScanning(false); }
+  };
+  if (!isAuthenticated) return <div style={{ padding: 48, textAlign: 'center' }}>请先登录</div>;
+  if (loading) return <div style={{ padding: 48, textAlign: 'center' }}><Spin size="large" /></div>;
+  if (!saveData) return <div style={{ padding: 48, textAlign: 'center' }}><Title level={4}>存档不存在</Title><Button onClick={() => navigate('/saves')}>返回</Button></div>;
+
+  const currentBox = saveData.boxes[activeBox];
+  const boxList = saveData.boxes;
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div style={{ minHeight: '100vh', background: '#f5f5f5' }}>
+        {/* Toolbar */}
+        <div style={{ background: '#fff', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #e8e8e8' }}>
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/saves')}>返回</Button>
+          <Title level={5} style={{ margin: 0, flex: 1 }}>
+            {saveData.filename}
+            {saveData.isModified && <Tag color="orange" style={{ marginLeft: 8 }}>已修改</Tag>}
+          </Title>
+          <Text type="secondary">Gen{saveData.generation} | {saveData.gameVersionName}</Text>
+          <Space>
+            <Tooltip title="合法性批量扫描">
+              <Button icon={<SafetyCertificateOutlined />} onClick={handleBatchLegalityScan}
+                loading={legalityScanning}>合法性扫描</Button>
+            </Tooltip>
+            <Tooltip title="保存到服务端"><Button icon={<SaveOutlined />} onClick={handleSave}>保存</Button></Tooltip>
+            <Tooltip title="导出下载"><Button icon={<DownloadOutlined />} onClick={handleDownload}>导出</Button></Tooltip>
+          </Space>
+        </div>
+
+        <div style={{ padding: 12 }}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            {/* Box List Sidebar — height matches box grid */}
+            <div style={{
+              width: 150, background: '#fff', borderRadius: 8, padding: '8px 12px', flexShrink: 0,
+              border: '1px solid #e8e8e8', alignSelf: 'flex-start',
+              display: 'flex', flexDirection: 'column',
+            }}>
+              <Text strong style={{ display: 'block', marginBottom: 6, flexShrink: 0 }}>箱子列表</Text>
+              <div style={{ overflow: 'auto', maxHeight: 480 }}>
+                {boxList.map(box => {
+                  const count = box.slots.filter(s => !s.isEmpty).length;
+                  return (
+                    <div key={box.boxIndex} onClick={() => setActiveBox(box.boxIndex)}
+                      style={{ padding: '6px 10px', borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+                        background: activeBox === box.boxIndex ? '#e6f4ff' : 'transparent',
+                        border: activeBox === box.boxIndex ? '1px solid #1677ff' : '1px solid transparent' }}>
+                      <Text style={{ fontSize: 12 }}>{box.boxName}</Text>
+                      <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>{count}/{box.capacity}</Text>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Box Grid */}
+            <div style={{ flex: 1, alignSelf: 'flex-start', background: '#fff', borderRadius: 8, padding: 16, border: '1px solid #e8e8e8' }}>
+              <Text strong style={{ display: 'block', marginBottom: 12 }}>{currentBox?.boxName || `Box ${activeBox + 1}`}</Text>
+              {currentBox && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, maxWidth: 600 }}>
+                  {currentBox.slots.map(slot => (
+                    <DraggableSlot key={slot.slotIndex} boxIndex={activeBox} slot={slot}
+                      onPokemonClick={(p) => { setEditingPokemon(p); setEditingBoxIndex(activeBox); setEditingSlotIndex(slot.slotIndex); setEditingIsParty(false); setEditPanelOpen(true); }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Party Pokémon (随行宝可梦) */}
+          {saveData.party && saveData.party.length > 0 && (
+            <div style={{ marginTop: 12, background: '#fff', borderRadius: 8, padding: 16, border: '1px solid #e8e8e8' }}>
+              <Text strong style={{ marginBottom: 8, display: 'block' }}>🎒 随行宝可梦</Text>
+              <div style={{ display: 'flex', gap: 8, maxWidth: 600 }}>
+                {saveData.party.map((slot: BoxSlotDto) => (
+                  <div key={slot.slotIndex} style={{ flex: 1, maxWidth: 96 }}>
+                    {slot.isEmpty ? (
+                      <div style={{
+                        aspectRatio: '1', border: '2px dashed #d9d9d9', borderRadius: 8,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: '#fafafa', maxWidth: 80,
+                      }}>
+                        <Text type="secondary" style={{ fontSize: 11 }}>空</Text>
+                      </div>
+                    ) : (
+                      <div style={{
+                        aspectRatio: '1', border: slot.pokemon?.isShiny ? '2px solid #faad14' : '1px solid #e8e8e8',
+                        borderRadius: 8, display: 'flex', flexDirection: 'column', cursor: 'pointer',
+                        alignItems: 'center', justifyContent: 'center', background: '#fff', maxWidth: 80,
+                      }} onClick={() => { if (slot.pokemon) { setEditingPokemon(slot.pokemon); setEditingBoxIndex(-1); setEditingSlotIndex(slot.slotIndex); setEditingIsParty(true); setEditPanelOpen(true); } }}>
+                        <img src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${slot.pokemon!.species}.png`}
+                          style={{ width: 32, height: 32, imageRendering: 'pixelated' }}
+                          onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect fill="%23f0f0f0" width="32" height="32"/><text x="16" y="16" text-anchor="middle" dy=".3em" fill="%23999" font-size="7">PK</text></svg>'); }}
+                        />
+                        <div style={{ fontSize: 10, lineHeight: 1.2, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                          {slot.pokemon!.nickname || slot.pokemon!.speciesName}
+                        </div>
+                        <Tag color="blue" style={{ fontSize: 9, margin: 0, padding: '0 3px', lineHeight: '14px' }}>Lv.{slot.pokemon!.level}</Tag>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Bank Panel */}
+          <div style={{ marginTop: 12, background: '#fff', borderRadius: 8, padding: 16, border: '1px solid #e8e8e8', minHeight: 120 }}>
+            <Text strong style={{ marginBottom: 8, display: 'block' }}><BankOutlined /> 我的银行</Text>
+            <DroppableBankZone>
+              {bankPokemon.length === 0 ? (
+                <Text type="secondary" style={{ padding: 16 }}>拖拽宝可梦到这里存入银行</Text>
+              ) : (
+                bankPokemon.map(p => <DraggableBankItem key={p.id} pokemon={p} />)
+              )}
+            </DroppableBankZone>
+          </div>
+
+          {/* Backup Section */}
+          <BackupSection saveFileId={id!} />
+        </div>
+      </div>
+
+      <DragOverlay>
+        {activeDrag ? (
+          <div style={{ background: '#fff', padding: '8px 12px', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', opacity: 0.85 }}>
+            <Text>{activeDrag.label}</Text>
+          </div>
+        ) : null}
+      </DragOverlay>
+
+      <EditPanel
+        open={editPanelOpen}
+        pokemon={editingPokemon}
+        generation={saveData.generation}
+        saveFileId={id}
+        boxIndex={editingBoxIndex}
+        slotIndex={editingSlotIndex}
+        isParty={editingIsParty}
+        onClose={() => { setEditPanelOpen(false); setEditingPokemon(null); setEditingBoxIndex(undefined); setEditingSlotIndex(undefined); }}
+        onSaved={fetchData}
+      />
+    </DndContext>
+  );
+};
+
+// ── Backup Section ──────────────────────────────────
+const BackupSection: React.FC<{ saveFileId: string }> = ({ saveFileId }) => {
+  const [backups, setBackups] = useState<SaveBackupDto[]>([]);
+  const [loading, setLoading] = useState<string | null>(null);
+  const { message } = App.useApp();
+
+  const loadBackups = async () => {
+    try { const r = await saveFileApi.listBackups(saveFileId); setBackups(r.data || []); } catch {}
+  };
+  useEffect(() => { loadBackups(); }, [saveFileId]);
+
+  const handleRestore = async (backupId: string) => {
+    setLoading(backupId);
+    try {
+      await saveFileApi.restoreBackup(saveFileId, backupId);
+      message.success('已从备份恢复！页面将刷新');
+      setTimeout(() => window.location.reload(), 800);
+    } catch { message.error('恢复失败'); }
+    finally { setLoading(null); }
+  };
+
+  if (backups.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 12, background: '#fff', borderRadius: 8, padding: 16, border: '1px solid #e8e8e8' }}>
+      <Text strong style={{ marginBottom: 10, display: 'block' }}>💾 存档备份 (最近5次)</Text>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {backups.map((b, i) => (
+          <div key={b.id} style={{
+            padding: '10px 14px', borderRadius: 8, border: '1px solid #e8e8e8',
+            background: i === 0 ? '#f6ffed' : '#fafafa', minWidth: 200,
+          }}>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
+              {b.label || '备份'}
+            </div>
+            <div style={{ fontSize: 12, color: '#666', lineHeight: 1.6 }}>
+              <div>🕐 {new Date(b.createdAt).toLocaleString('zh-CN')}</div>
+              <div>🎮 {b.gameVersion || '—'}</div>
+              <div>👤 {b.trainerName || '—'}</div>
+              <div>📦 {b.pokemonCount} 只宝可梦 · {b.boxCount} 箱</div>
+              <div>⏱ {b.playTime || '—'}</div>
+            </div>
+            <Popconfirm
+              title="确定恢复到此备份？当前修改将丢失"
+              onConfirm={() => handleRestore(b.id)}
+              okText="恢复" cancelText="取消">
+              <Button size="small" type="primary" danger
+                loading={loading === b.id}
+                style={{ marginTop: 8, width: '100%' }}>
+                恢复此备份
+              </Button>
+            </Popconfirm>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default SaveEditor;

@@ -1,0 +1,16 @@
+node_modules/
+bin/
+obj/
+.env
+*.user
+*.suo
+.vs/
+.vscode/
+dist/
+build/
+publish/
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

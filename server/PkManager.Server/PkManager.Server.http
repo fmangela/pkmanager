@@ -1,0 +1,6 @@
+@PkManager.Server_HostAddress = http://localhost:5052
+
+GET {{PkManager.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
