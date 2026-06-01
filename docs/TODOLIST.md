@@ -724,28 +724,49 @@ Week 15-16: Phase E.2 世代专属工具（Gen3 RTC等）
 | E: 世代专属与打磨 | 17 | 1 | 0 | 16 |
 | F: 后端基础设施 | 8 | 3 | 0 | 5 |
 | G: GBA在线模拟器 | 21 | 17 | 0 | 4 |
-| H: NDS在线模拟器 | 26 | 16 | 0 | 10 |
-| **合计** | **147** | **74** | **0** | **73** |
+| H: NDS在线模拟器 | 27 | 20 | 0 | 7 |
+| **合计** | **148** | **79** | **0** | **69** |
 
-> **更新 (2026-06-01 深夜)**：
-> - **GBA 存档同步流程修复**（4 项）:
->   - `CreateNewGame` 改为使用 PKHeX `SaveUtil.GetBlankSAV()` 创建合法空白存档，写入文件系统
->   - `SyncSave` (JSON) 同步后解析存档并更新 DB 元数据
->   - 新增 `SyncSaveBinary` 端点 — beforeunload 时 sendBeacon 发送二进制存档
->   - 前端 `u8b64` chunk 从 32KB→8KB，移除 keepalive，新增 sendBeacon 紧急同步
-> - **NDS 在线模拟器 Dashboard 集成**（10 项完成）:
->   - Dashboard 新增 9 张 NDS 游戏卡片（钻石/珍珠/白金/心金/魂银/黑/白/黑2/白2）
->   - Modal 支持 NDS：按版本过滤存档、动态 Gen Tag、路由到 `/play-nds/`
->   - Saves 页 `GAME_VERSION_DISPLAY` 补充 Gen4/5（14 个版本号→名称+颜色映射）
->   - Saves 页「游玩」按钮扩展至 Gen4/5
->   - 创建 `NdsEmulatorPage` 组件：双屏渲染、触摸屏覆盖层、按键映射、30s 同步、sendBeacon 紧急同步
->   - `melonds.ts` 导出 `DsInputButton` 类型
->   - `App.tsx` 新增 `/play-nds/:saveFileId` 路由 (React.lazy)
-> - **已知遗留**:
->   - 最小测试页 `/emulator/nds/test.html` 未经浏览器验证（P0 最高优先级）
->   - NDS 存档兼容性未验证（PKHeX 解析 512KB .sav）
->   - beforeunload sendBeacon Token 通过 query string 传递
->   - emoji 已在全局禁用，无需单独处理
+> **更新 (2026-06-01 深夜 / 6月2日凌晨)**：
+> 
+> ### GBA 存档同步流程修复
+> - `CreateNewGame` → 不再使用 PKHeX 预建存档，统一创建空占位记录
+> - 新增 `SyncSaveBinary` 端点 (sendBeacon 二进制存档，绕过 keepalive 64KB 限制)
+> - 前端新增「同步存档」按钮替代 30s 定时轮询，关闭时 await 同步完成再关窗口
+> - `u8b64` chunk 32KB→8KB，React duplicate keys 修复
+> - 按键重绑 bugfix: 重绑时清除旧绑定
+> 
+> ### NDS 在线模拟器 (Phase H)
+> - ✅ `melonds.ts` NdsEmulator 封装 (loadRom/loadSave/getSave/pressButton/touch/pause/setSpeed)
+> - ✅ NdsEmulatorPage 组件: 双屏渲染、触摸屏、按键映射、存档同步
+> - ✅ Dashboard 9 张 NDS 卡片 (Gen4: 钻石/珍珠/白金/心金/魂银 + Gen5: 黑/白/黑2/白2)
+> - ✅ Saves 页 Gen4/5 版本显示 + 游玩按钮
+> - ✅ 新路由: `/play-nds/:saveFileId`, `/play-nds/new/:gameId`, `/play/new/:gameId`
+> - ✅ 音量控制 (GainNode) + 麦克风噪声模拟 (白噪声注入)
+> - ✅ 修复 webmelon API: loadRom→cart.loadFileIntoCart+emulator.loadCart
+> - ✅ 修复 touchScreen API (webmelon 原生处理，移除自定义 handler)
+> - ✅ 修复按键映射: 写入 webmelon 原生 keybinds (event.key→bitmask)
+> - ✅ **melonDS WASM 重新编译**: 启用 SIMD (-msimd128) + PThreads (sPTHREAD_POOL_SIZE=4) + -O3
+>   - Emscripten 5.0.7 编译环境已搭建 (`~/emsdk/`)
+>   - ds-anywhere 源码已克隆并打补丁 (`~/ds-anywhere/`)
+>   - 修复 WasmPlatform semaphore (std::counting_semaphore→pthread sem_t)
+>   - 新版 WASM 843KB，内含 SIMD 指令，预期性能提升 30-50%
+> 
+> ### 存档流程重构
+> - 新游戏不预建 DB 占位记录，首次「同步存档」时服务器自动创建
+> - `SyncSave` 增加 gameId 参数支持自动创建
+> - `CreateNewGame` 统一创建空记录 (PKHeX SAV4/SAV5 不支持空白存档)
+> 
+> ### 版本号修复
+> - PKHeX GameVersion 内部值映射: RS(56)→Ruby, RSE(57)→Emerald, FRLG(58)→FireRed
+> - 黑/白版本号修正: PKHeX W=20, B=21 (原映射反了)
+> - `GameVersionNormalizer` 统一前后端版本号
+> 
+> ### 已知遗留
+> - NDS WASM 开启 PThreads 但未充分测试 (SharedArrayBuffer 需要 HTTPS + COOP/COEP)
+> - NDS 存档同步可靠性需实测 (512KB NDS .sav 同步)
+> - OpenGL GPU 渲染器因 WebGL2 API 兼容问题未启用 (glColorMaski/glDrawBuffer/glMapBuffer 缺失)
+> - 存档目录待迁移至项目内 (`data/saves/`)
 
 ---
 
