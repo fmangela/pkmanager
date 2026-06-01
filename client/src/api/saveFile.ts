@@ -259,6 +259,9 @@ export const saveFileApi = {
 
   restoreBackup: (saveFileId: string, backupId: string) =>
     apiClient.post(`/SaveFile/${saveFileId}/backups/${backupId}/restore`),
+
+  newGame: (gameId: string) =>
+    apiClient.post<SaveFileDetail>('/SaveFile/new-game', { gameId }),
 };
 
 export interface SaveBackupDto {

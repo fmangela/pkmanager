@@ -30,9 +30,15 @@ export const KEY_MAP: Record<string, string> = {
   'ArrowUp': 'Up', 'ArrowDown': 'Down', 'ArrowLeft': 'Left', 'ArrowRight': 'Right',
 };
 
+// PKHeX GameVersion enum → gameId. 包含内部组合版本号（如 RS=56, RSE=57 等）
 export const GBA_VERSION_MAP: Record<number, string> = {
+  // 标准单版本
   1: 'pkm_sapphire', 2: 'pkm_ruby', 3: 'pkm_emerald',
   4: 'pkm_firered', 5: 'pkm_leafgreen',
+  // PKHeX 内部组合版本（存档解析可能返回这些值）
+  56: 'pkm_ruby',    // RS → 红宝石
+  57: 'pkm_emerald', // RSE → 绿宝石
+  58: 'pkm_firered', // FRLG → 火红
 };
 
 export const ROM_DISPLAY_NAMES: Record<string, string> = {

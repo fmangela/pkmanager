@@ -27,6 +27,27 @@ const GENERATION_COLORS: Record<number, string> = {
   6: 'orange', 7: 'purple', 8: 'red', 9: 'volcano',
 };
 
+// 游戏版本号 → 显示名称 & 颜色（用于存档列表精确显示）
+const GAME_VERSION_DISPLAY: Record<number, { name: string; color: string }> = {
+  // GBA Gen3
+  1:  { name: '蓝宝石', color: '#0958d9' },
+  2:  { name: '红宝石', color: '#cf1322' },
+  3:  { name: '绿宝石', color: '#08979c' },
+  4:  { name: '火红',   color: '#d4380d' },
+  5:  { name: '叶绿',   color: '#389e0d' },
+  // NDS Gen4
+  10: { name: '钻石',   color: '#5b8bd4' },
+  11: { name: '珍珠',   color: '#e799b0' },
+  12: { name: '白金',   color: '#b8b8b8' },
+  7:  { name: '心金',   color: '#d4a017' },
+  8:  { name: '魂银',   color: '#8b9dc3' },
+  // NDS Gen5 (PKHeX: W=20, B=21, W2=22, B2=23)
+  20: { name: '白',     color: '#e8e8e8' },
+  21: { name: '黑',     color: '#1a1a1a' },
+  22: { name: '白2',    color: '#f0e6d3' },
+  23: { name: '黑2',    color: '#0d2137' },
+};
+
 const SavesPage: React.FC = () => {
   const [saves, setSaves] = useState<SaveFileInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -88,21 +109,16 @@ const SavesPage: React.FC = () => {
       ellipsis: true,
     },
     {
-      title: '世代',
-      dataIndex: 'generation',
-      key: 'generation',
-      width: 90,
-      render: (gen: number) => (
-        <Tag color={GENERATION_COLORS[gen] || 'default'}>
-          {GENERATION_MAP[gen] || `Gen${gen}`}
-        </Tag>
-      ),
-    },
-    {
-      title: '版本',
-      dataIndex: 'gameVersionName',
-      key: 'gameVersionName',
-      width: 100,
+      title: '游戏',
+      dataIndex: 'gameVersion',
+      key: 'gameVersion',
+      width: 110,
+      render: (ver: number) => {
+        const info = GAME_VERSION_DISPLAY[ver];
+        return info
+          ? <Tag color={info.color}>{info.name}</Tag>
+          : <Tag color={GENERATION_COLORS[ver] || 'default'}>{GENERATION_MAP[ver] || `Gen${ver}`}</Tag>;
+      },
     },
     {
       title: '训练家',
@@ -145,9 +161,9 @@ const SavesPage: React.FC = () => {
       width: 180,
       render: (_, record) => (
         <Space>
-          {(record.generation === 3) && (
+          {(record.generation === 3 || record.generation === 4 || record.generation === 5) && (
             <Button type="link" size="small" icon={<PlayCircleOutlined />}
-              onClick={() => window.open(`/play/${record.saveFileId}`, '_blank')}
+              onClick={() => window.open(`/play${record.generation >= 4 ? '-nds' : ''}/${record.saveFileId}`, '_blank')}
               style={{ color: '#52c41a' }}>游玩</Button>
           )}
           <Button

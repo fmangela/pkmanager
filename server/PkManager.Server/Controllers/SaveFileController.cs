@@ -263,6 +263,26 @@ public class SaveFileController : ControllerBase
             return BadRequest(ApiResponse<object>.Error(ex.ErrorCode, ex.Message));
         }
     }
+
+    /// <summary>
+    /// 创建新游戏空白存档（用于模拟器新游戏入口）
+    /// </summary>
+    [HttpPost("new-game")]
+    public async Task<ActionResult<ApiResponse<SaveFileDetailDto>>> NewGame([FromBody] NewGameRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<SaveFileDetailDto>.Error(401, "未登录"));
+
+        try
+        {
+            var result = await _saveFileService.CreateNewGame(userId.Value, request.GameId);
+            return Ok(ApiResponse<SaveFileDetailDto>.Ok(result, "新游戏存档已创建"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<SaveFileDetailDto>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
 }
 
 public class MoveFromBankRequest
@@ -284,4 +304,9 @@ public class SwapBoxesRequest
 {
     public int BoxIndexA { get; set; }
     public int BoxIndexB { get; set; }
+}
+
+public class NewGameRequest
+{
+    public string GameId { get; set; } = "pkm_emerald";
 }

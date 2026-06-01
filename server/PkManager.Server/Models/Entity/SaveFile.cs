@@ -16,6 +16,7 @@ public class SaveFile
     public int PokemonCount { get; set; }
     public bool IsValidSave { get; set; } = true;
     public byte[] RawSaveData { get; set; } = Array.Empty<byte>();
+    public string? SavePath { get; set; }
     public bool IsModified { get; set; }
     public DateTime? LastAccessedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -27,6 +28,7 @@ public class SaveBackupEntity
     public Guid Id { get; set; }
     public Guid SaveFileId { get; set; }
     public byte[] RawSaveData { get; set; } = Array.Empty<byte>();
+    public string? BackupPath { get; set; }
     public string? Label { get; set; }
     public DateTime CreatedAt { get; set; }
 }
@@ -38,6 +40,7 @@ public class RomFileEntity
     public string DisplayName { get; set; } = string.Empty;
     public int Generation { get; set; }
     public byte[] RomData { get; set; } = Array.Empty<byte>();
+    public string? LocalPath { get; set; }
     public long FileSize { get; set; }
     public DateTime CreatedAt { get; set; }
 }

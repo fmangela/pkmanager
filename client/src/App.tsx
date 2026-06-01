@@ -11,6 +11,7 @@ import BankPage from './pages/Bank';
 import SaveEditor from './pages/SaveEditor';
 import ProtectedRoute from './components/ProtectedRoute';
 const EmulatorPage = React.lazy(() => import('./pages/Emulator'));
+const NdsEmulatorPage = React.lazy(() => import('./pages/NdsEmulator'));
 
 const App: React.FC = () => {
   return (
@@ -58,6 +59,36 @@ const App: React.FC = () => {
                 <ProtectedRoute>
                   <React.Suspense fallback={<div style={{padding:48,textAlign:'center'}}>加载模拟器...</div>}>
                     <EmulatorPage />
+                  </React.Suspense>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/play/new/:gameId"
+              element={
+                <ProtectedRoute>
+                  <React.Suspense fallback={<div style={{padding:48,textAlign:'center'}}>加载模拟器 (新游戏)...</div>}>
+                    <EmulatorPage />
+                  </React.Suspense>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/play-nds/:saveFileId"
+              element={
+                <ProtectedRoute>
+                  <React.Suspense fallback={<div style={{padding:48,textAlign:'center'}}>加载 NDS 模拟器...</div>}>
+                    <NdsEmulatorPage />
+                  </React.Suspense>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/play-nds/new/:gameId"
+              element={
+                <ProtectedRoute>
+                  <React.Suspense fallback={<div style={{padding:48,textAlign:'center'}}>加载 NDS 模拟器 (新游戏)...</div>}>
+                    <NdsEmulatorPage />
                   </React.Suspense>
                 </ProtectedRoute>
               }

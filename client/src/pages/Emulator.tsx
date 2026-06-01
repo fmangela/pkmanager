@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button, Space, Tag, Slider, Modal } from 'antd';
-import { PauseCircleOutlined, PlayCircleOutlined, ArrowLeftOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons';
+import { PauseCircleOutlined, PlayCircleOutlined, ArrowLeftOutlined, ReloadOutlined, SettingOutlined, SaveOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { createMGBA, type MGBAEmulator, GBA_VERSION_MAP, ROM_DISPLAY_NAMES } from '../lib/mgba';
 
 type ScreenScale = 1 | 2 | 4;
@@ -19,46 +19,63 @@ function codeLabel(c: string): string {
 }
 
 const EmulatorPage: React.FC = () => {
-  const { saveFileId } = useParams<{ saveFileId: string }>();
+  const { saveFileId, gameId } = useParams<{ saveFileId?: string; gameId?: string }>();
+  const isNewGame = !!gameId;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const effectiveSaveId = useRef<string | null>(saveFileId || null);
   const [scale, setScale] = useState<ScreenScale>(2);
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [volume, setVolume] = useState(100);
   const [fps, setFps] = useState(0);
   const [romName, setRomName] = useState('');
-  const [saveName, setSaveName] = useState('');
+  const [saveName, setSaveName] = useState(isNewGame ? '新游戏' : '');
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState('初始化中...');
   const [keyMap, setKeyMap] = useState<Record<string,string>>(loadKM);
   const [keyDlg, setKeyDlg] = useState(false);
   const [binding, setBinding] = useState<string|null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [synced, setSynced] = useState(false);
   const emuRef = useRef<MGBAEmulator|null>(null);
   const initDone = useRef(false);
-  const lastSync = useRef(0);
 
   // Init
   useEffect(() => {
-    if (initDone.current || !saveFileId || !canvasRef.current) return;
+    if (initDone.current || !canvasRef.current) return;
     initDone.current = true;
     const auth = `Bearer ${localStorage.getItem('access_token')}`;
     (async () => {
       try {
-        setStatus('获取存档...');
-        const infoRes = await fetch(`/api/SaveFile/${saveFileId}`, { headers: { Authorization: auth } });
-        if (!infoRes.ok) { setStatus('存档不存在'); return; }
-        const sd = (await infoRes.json()).data;
-        setSaveName(sd.filename);
-        const gid = GBA_VERSION_MAP[sd.gameVersion] || 'pkm_emerald';
+        let gid: string;
+        if (saveFileId) {
+          // 已有存档
+          setStatus('获取存档...');
+          const infoRes = await fetch(`/api/SaveFile/${saveFileId}`, { headers: { Authorization: auth } });
+          if (!infoRes.ok) { setStatus('存档不存在'); return; }
+          const sd = (await infoRes.json()).data;
+          setSaveName(sd.filename);
+          gid = GBA_VERSION_MAP[sd.gameVersion] || 'pkm_emerald';
+        } else if (gameId) {
+          // 新游戏
+          gid = gameId;
+          setSaveName(ROM_DISPLAY_NAMES[gid] || gid);
+        } else {
+          setStatus('缺少参数'); return;
+        }
         setRomName(ROM_DISPLAY_NAMES[gid] || gid);
 
         setStatus('下载ROM...');
-        const [romRes, rawRes] = await Promise.all([
-          fetch(`/api/Emulator/roms/${gid}`, { headers: { Authorization: auth } }),
-          fetch(`/api/SaveFile/${saveFileId}/raw`, { headers: { Authorization: auth } }),
-        ]);
+        const romRes = await fetch(`/api/Emulator/roms/${gid}`, { headers: { Authorization: auth } });
         if (!romRes.ok) { setStatus(`ROM缺失: ${gid}`); return; }
         const rom = new Uint8Array(await romRes.arrayBuffer());
+
+        // 加载已有存档（如果有）
+        let savData: Uint8Array | null = null;
+        if (saveFileId) {
+          const rawRes = await fetch(`/api/SaveFile/${saveFileId}/raw`, { headers: { Authorization: auth } });
+          if (rawRes.ok) { const d = new Uint8Array(await rawRes.arrayBuffer()); if (d.length > 0) savData = d; }
+        }
 
         setStatus('启动模拟器...');
         const emu = await createMGBA(canvasRef.current!);
@@ -66,13 +83,13 @@ const EmulatorPage: React.FC = () => {
         const gp = emu.gamePath.endsWith('/') ? emu.gamePath : emu.gamePath + '/';
         const sp = emu.savePath.endsWith('/') ? emu.savePath : emu.savePath + '/';
         emu.FS.writeFile(gp + 'game.gba', rom);
-        let sfp: string|undefined;
-        if (rawRes.ok) { const sav = new Uint8Array(await rawRes.arrayBuffer()); if (sav.length > 0) { emu.FS.writeFile(sp + 'game.sav', sav); sfp = sp + 'game.sav'; } }
+        let sfp: string | undefined;
+        if (savData) { emu.FS.writeFile(sp + 'game.sav', savData); sfp = sp + 'game.sav'; }
         emu.loadGame(gp + 'game.gba', sfp);
         setReady(true); setStatus('就绪');
       } catch (err: any) { setStatus(`失败: ${err.message||err}`); }
     })();
-  }, [saveFileId]);
+  }, [saveFileId, gameId]);
 
   // FPS — independent rAF counter
   useEffect(() => {
@@ -82,18 +99,47 @@ const EmulatorPage: React.FC = () => {
     return () => { run = false; };
   }, []);
 
-  // Auto-save sync
-  useEffect(() => {
-    const iv = setInterval(() => {
-      const now = performance.now();
-      if (now - lastSync.current > 30000) {
-        lastSync.current = now;
-        const emu = emuRef.current;
-        if (emu && saveFileId) { const sd = emu.getSave(); if (sd?.length) fetch('/api/Emulator/sync-save', { method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('access_token')}`}, body:JSON.stringify({saveFileId,saveDataBase64:u8b64(sd)}) }).catch(()=>{}); }
+  // Sync save to server (manual trigger or close)
+  const syncSaveNow = async (): Promise<boolean> => {
+    const emu = emuRef.current;
+    if (!emu) return false;
+    const sd = emu.getSave();
+    if (!sd?.length) return false;
+    const token = localStorage.getItem('access_token');
+    if (!token) return false;
+    setSyncing(true); setSynced(false);
+    try {
+      const encoded = u8b64(sd);
+      const body: any = {
+        saveFileId: effectiveSaveId.current || '00000000-0000-0000-0000-000000000000',
+        saveDataBase64: encoded,
+      };
+      if (isNewGame && gameId) body.gameId = gameId;
+      console.log(`[syncSave] Sending ${sd.length} bytes, new=${isNewGame}, id=${effectiveSaveId.current || '(new)'}`);
+      const r = await fetch('/api/Emulator/sync-save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      if (r.ok) {
+        const resp = await r.json();
+        // 新游戏首次同步: 服务器返回新创建的 saveFileId，存储供后续使用
+        if (resp.data?.saveFileId && !effectiveSaveId.current) {
+          effectiveSaveId.current = resp.data.saveFileId;
+          setSaveName(`存档 - ${resp.data.trainerName || '训练家'}`);
+          console.log(`[syncSave] New save created: ${effectiveSaveId.current}`);
+        }
+        setSynced(true);
+        return true;
       }
-    }, 30000);
-    return () => clearInterval(iv);
-  }, [saveFileId]);
+      console.error('[syncSave] Server error:', r.status);
+    } catch (err) {
+      console.error('[syncSave] Network error:', err);
+    } finally {
+      setSyncing(false);
+    }
+    return false;
+  };
 
   // Keyboard — use keyMap
   useEffect(() => {
@@ -103,7 +149,20 @@ const EmulatorPage: React.FC = () => {
     const down = (e: KeyboardEvent) => { if (binding) return; const btn = rev[e.code]; if (btn) { e.preventDefault(); emuRef.current?.buttonPress(btn); } };
     const up = (e: KeyboardEvent) => { const btn = rev[e.code]; if (btn) emuRef.current?.buttonUnpress(btn); };
     window.addEventListener('keydown', down); window.addEventListener('keyup', up);
-    const unload = () => { const emu = emuRef.current; if (emu && saveFileId) { const sd = emu.getSave(); if (sd?.length) navigator.sendBeacon('/api/Emulator/sync-save', JSON.stringify({saveFileId,saveDataBase64:u8b64(sd)})); } };
+    // beforeunload: 用 sendBeacon 发送二进制存档，保证页面关闭时存档不丢失
+    const unload = () => {
+      const emu = emuRef.current;
+      if (!emu) return;
+      const sd = emu.getSave();
+      if (!sd?.length) return;
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      const id = effectiveSaveId.current;
+      if (id) {
+        const blob = new Blob([sd], { type: 'application/octet-stream' });
+        navigator.sendBeacon(`/api/Emulator/sync-save/${id}?token=${encodeURIComponent(token)}`, blob);
+      }
+    };
     window.addEventListener('beforeunload', unload);
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('beforeunload', unload); };
   }, [ready, saveFileId, keyMap, binding]);
@@ -113,7 +172,11 @@ const EmulatorPage: React.FC = () => {
     if (!binding) return;
     const h = (e: KeyboardEvent) => {
       e.preventDefault(); e.stopPropagation();
-      const nm = { ...keyMap, [binding]: e.code };
+      const nm = { ...keyMap };
+      for (const [btn, code] of Object.entries(nm)) {
+        if (code === e.code) delete nm[btn];
+      }
+      nm[binding] = e.code;
       setKeyMap(nm); saveKM(nm); setBinding(null);
     };
     window.addEventListener('keydown', h, true);
@@ -126,19 +189,22 @@ const EmulatorPage: React.FC = () => {
     <div style={{ minHeight: '100vh', background: '#1a1a2e', color: '#eee' }}>
       {/* Toolbar */}
       <div style={{ background: '#16213e', padding: '6px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #0f3460' }}>
-        <Button icon={<ArrowLeftOutlined />} ghost size="small" onClick={() => window.close()}>关闭</Button>
+        <Button icon={<ArrowLeftOutlined />} ghost size="small" onClick={async () => { await syncSaveNow(); setTimeout(() => window.close(), 300); }}>关闭</Button>
+        <Button ghost size="small" icon={synced ? <CheckCircleOutlined /> : <SaveOutlined />}
+          onClick={syncSaveNow} loading={syncing} disabled={!ready}
+          style={{ color: synced ? '#52c41a' : undefined }}>同步存档</Button>
         <span style={{ fontWeight: 600, fontSize: 13 }}>{saveName || 'GBA'}</span>
         <Tag color="blue" style={{ fontSize: 11 }}>{romName}</Tag>
         <div style={{ flex: 1 }} />
         <Space size={4}>
           <span style={{ fontSize: 11, color: '#888' }}>画面</span>
           {([1,2,4] as const).map(s => (
-            <Button key={s} ghost size="small" type={scale===s?'primary':'default'}
+            <Button key={`scale-${s}`} ghost size="small" type={scale===s?'primary':'default'}
               onClick={() => setScale(s)} disabled={!ready} style={{ padding: '0 8px', fontSize: 12 }}>{s}×</Button>
           ))}
           <span style={{ fontSize: 11, color: '#888', marginLeft: 4 }}>速度</span>
           {([1,2,4] as const).map(s => (
-            <Button key={s} ghost size="small" type={speed===s?'primary':'default'}
+            <Button key={`speed-${s}`} ghost size="small" type={speed===s?'primary':'default'}
               onClick={() => { emuRef.current?.setFastForwardMultiplier(s); setSpeed(s); }} disabled={!ready} style={{ padding: '0 8px', fontSize: 12 }}>{s}×</Button>
           ))}
           <Button ghost size="small" icon={paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
@@ -241,7 +307,7 @@ const TouchBtn: React.FC<{ label: string; btn: string; emu: MGBAEmulator|null; s
 };
 
 function u8b64(data: Uint8Array): string {
-  const CHUNK = 0x8000; const parts: string[] = [];
+  const CHUNK = 0x2000; const parts: string[] = [];
   for (let i = 0; i < data.length; i += CHUNK) parts.push(String.fromCharCode(...data.subarray(i, i + CHUNK)));
   return btoa(parts.join(''));
 }

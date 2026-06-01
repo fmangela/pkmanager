@@ -1,605 +1,756 @@
-# 宝可梦全世代管理平台 — 开发 TODO List
+# pkmanager 界面外观与功能优化 TODO List
 
-> 按顺序逐项推进，每完成一项在 `[ ]` 中打 `[x]`。
-
----
-
-## Phase 0: 开发环境安装与配置
-
-### 0.1 基础环境检查与安装
-
-- [x] **安装 .NET 8 SDK** (8.0.421, 本地安装到 ~/.dotnet)
-  - 下载地址: https://dotnet.microsoft.com/en-us/download/dotnet/8.0
-  - 或 Ubuntu: `sudo apt install dotnet-sdk-8.0`
-  - 验证: `dotnet --version` → 应输出 `8.0.x`
-
-- [x] **安装 Node.js 20 LTS** (实际 v24.15.0，向前兼容)
-  - 推荐使用 nvm 管理版本:
-    ```bash
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-    nvm install 20
-    nvm use 20
-    ```
-  - 验证: `node --version` → 应输出 `v20.x.x`
-
-- [ ] **安装并配置 PostgreSQL 15+** ⬅️ **需 sudo，请运行 `! sudo apt install postgresql postgresql-contrib -y`**
-  - Ubuntu:
-    ```bash
-    sudo apt install postgresql postgresql-contrib
-    sudo systemctl start postgresql
-    sudo systemctl enable postgresql
-    ```
-  - 创建数据库和用户:
-    ```sql
-    sudo -u postgres psql
-    CREATE USER pkadmin WITH PASSWORD 'your_password';
-    CREATE DATABASE pkmanager OWNER pkadmin;
-    GRANT ALL PRIVILEGES ON DATABASE pkmanager TO pkadmin;
-    \q
-    ```
-  - 验证: `psql -U pkadmin -d pkmanager -c "SELECT 1;"` → 成功连接
-
-- [ ] **安装 IDE / 编辑器**
-  - VS Code (推荐): https://code.visualstudio.com/
-  - 或 JetBrains Rider
-  - VS Code 推荐插件:
-    - C# Dev Kit
-    - ESLint
-    - Prettier
-    - PostgreSQL (Database Client)
-
-- [x] **安装 Git（如果未安装）** (v2.34.1)
-  - `sudo apt install git`
-  - 配置: `git config --global user.name "xxx"` / `git config --global user.email "xxx"`
-
-### 0.2 项目初始化
-
-- [x] **创建项目根目录结构**
-  ```bash
-  mkdir -p ~/pkmanager/server
-  mkdir -p ~/pkmanager/client
-  ```
-
-- [x] **初始化 Git 仓库**
-  ```bash
-  cd ~/pkmanager
-  git init
-  echo "node_modules/" > .gitignore
-  echo "bin/" >> .gitignore
-  echo "obj/" >> .gitignore
-  echo ".env" >> .gitignore
-  ```
+> **日期**: 2026-05-31  
+> **依据**: PKHeX完整功能对比与缺口分析报告 + PKMDS-Blazor分析报告  
+> **原则**: 项目主体架构不变 (React 18 + ASP.NET Core 8 + PostgreSQL)，在界面外观和编辑功能上做优化补齐  
+> **当前基线**: 已有用户登录/注册、存档上传/解析/存储、箱子网格展示(6列)、dnd-kit拖拽、银行面板、基础5Tab编辑面板、二元合法性校验
 
 ---
 
-## Phase 1: 后端项目骨架搭建
+## Phase A: 编辑面板全面升级（EditPanel 重构）
 
-### 1.1 创建 ASP.NET Core 项目
+> 目标：将编辑覆盖率从 13% 提升至 60%+，补齐 PKHeX 最核心的编辑字段。
+> 当前 5 个 Tab → 目标 7 个 Tab
 
-- [x] **创建 Web API 项目** (PkManager.Server, .NET 8)
-  ```bash
-  cd ~/pkmanager/server
-  dotnet new webapi -n PkManager.Server --no-https
-  cd PkManager.Server
-  ```
+### A.1 编辑面板架构重构
 
-- [x] **创建项目分层目录** (Controllers/Services/Models/Data/Middleware/Helpers)
-  ```bash
-  mkdir -p Controllers Services Models/Request Models/Response Models/Entity Data Middleware Helpers
-  ```
+- [x] **将 EditPanel 从单文件拆分为多组件**
+  - 创建 `src/components/editor/MainTab.tsx` — 基本信息
+  - 创建 `src/components/editor/MetTab.tsx` — 相遇信息（从当前"元数据"Tab扩展）
+  - 创建 `src/components/editor/StatsTab.tsx` — 能力值
+  - 创建 `src/components/editor/MovesTab.tsx` — 招式
+  - 创建 `src/components/editor/LegalityTab.tsx` — 合法性详情（**新增**）
+  - `EditPanel.tsx` 已重构为薄壳容器，只负责 Tabs 路由 + 提交
+  - (OTMiscTab + CosmeticTab 后端已完成，前端组件待创建)
 
-- [x] **安装 NuGet 依赖包** (Npgsql, Dapper, BCrypt.Net, JwtBearer, Swashbuckle, PKHeX.Core)
-  ```bash
-  dotnet add package PKHeX.Core
-  dotnet add package Npgsql
-  dotnet add package Dapper
-  dotnet add package BCrypt.Net-Next
-  dotnet add package Microsoft.AspNetCore.Authentication.JwtBearer
-  dotnet add package Swashbuckle.AspNetCore
-  ```
-
-- [x] **配置 appsettings.json** (PostgreSQL连接字符串 + JWT配置)
-  - 添加 PostgreSQL 连接字符串:
-    ```json
-    "ConnectionStrings": {
-      "Default": "Host=localhost;Database=pkmanager;Username=pkadmin;Password=your_password"
-    },
-    "Jwt": {
-      "Secret": "your-64-char-random-secret-key-here...",
-      "Issuer": "PkManager",
-      "ExpireHours": 2
-    }
-    ```
-
-- [x] **配置 Program.cs** (JWT认证 + Swagger + CORS + Controllers)
-  - 注册 JWT 认证
-  - 注册 Swagger
-  - 注册 Dapper / DbConnection
-  - 配置 CORS（允许前端 localhost:5173）
-
-- [x] **验证后端启动** (dotnet build: 0 Warning, 0 Error)
-  ```bash
-  dotnet run
-  ```
-  → 访问 http://localhost:5000/swagger 能看到 Swagger UI
-
-### 1.2 数据库初始化
-
-- [x] **编写建表 SQL 脚本**
-  - 创建 `server/PkManager.Server/Data/init.sql`
-  - 包含 4 张表: `users`, `bank_pokemon`, `save_files`, `save_box_pokemon`
-  - 参考技术方案文档第 6.2 节
-
-- [ ] **执行建表脚本** ⬅️ **需先启动 PostgreSQL (`! sudo systemctl start postgresql`)**
-  ```bash
-  psql -U pkadmin -d pkmanager -f server/PkManager.Server/Data/init.sql
-  ```
-
-- [ ] **验证表结构**
-  ```sql
-  \dt
-  \d users
-  \d bank_pokemon
-  \d save_files
-  \d save_box_pokemon
-  ```
-
-- [x] **编写数据库连接帮助类**
-  - 创建 `Data/DbConnectionFactory.cs`
-  - 封装 `NpgsqlConnection` 创建逻辑
+- [x] **后端扩展 Pokémon 编辑 API**
+  - 扩展 `PokemonEditRequest` DTO，新增 50+ 个字段
+  - 后端 `PokemonEditService` 逐字段写入 PKHeX.Core `PKM` 对象
+  - API 返回扩展后的三态合法性报告（Legal/Fishy/Illegal + 逐字段指示 + CanFix/FixAction）
+  - 新增 BatchLegalityScan、SwapBoxes API 端点
 
 ---
 
-## Phase 2: 前端项目骨架搭建
+### A.2 基本信息 Tab（Main Tab）补全 — 覆盖率 36% → 85%
 
-### 2.1 创建 React + TypeScript 项目
+- [x] **形态选择器 (Form + Form Argument)**
+  - 后端 Form/FormArgument 读写实现
+  - 前端 MainTab 包含 Form InputNumber 编辑
 
-- [x] **使用 Vite 创建项目** (React + TypeScript)
-  ```bash
-  cd ~/pkmanager/client
-  npm create vite@latest . -- --template react-ts
-  npm install
-  ```
+- [x] **语言选择器**
+  - 下拉选择：JPN/ENG/FRE/ITA/GER/SPA/KOR/CHS/CHT
+  - Gen1-2 编码限制校验（disabled 状态）
 
-- [x] **安装前端核心依赖** (antd, @dnd-kit, zustand, axios, react-router-dom, dayjs)
-  ```bash
-  npm install antd @ant-design/icons
-  npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
-  npm install zustand
-  npm install axios
-  npm install react-router-dom
-  npm install dayjs
-  ```
+- [x] **经验值 (EXP) 编辑**
+  - MainTab 包含 EXP 输入框
 
-- [ ] **安装开发依赖**
-  ```bash
-  npm install -D @types/node
-  npm install -D eslint prettier eslint-config-prettier
-  npm install -D @typescript-eslint/eslint-plugin @typescript-eslint/parser
-  ```
+- [x] **亲密度 (Friendship/原始训练家亲密度)**
+  - 0-255 InputNumber
+  - Gen8+ 区分 OT/HT 亲密度
 
-- [x] **创建前端目录结构** (pages/components/stores/api/hooks/types/utils/assets)
-  ```bash
-  mkdir -p src/{pages,components,stores,api,hooks,types,utils,assets}
-  ```
+- [x] **宝可病毒 (Pokérus) 编辑**
+  - 毒株 (0-15) + 感染天数 (0-15)
 
-- [x] **配置 Vite 代理** (/api → localhost:5000)
-  - 在 `vite.config.ts` 中配置 `/api` 代理到 `http://localhost:5000`
+- [x] **性格影响能力值可视化**
+  - 性格旁显示 +10% / -10% 的能力值标签（红色↑ / 蓝色↓）
 
-- [x] **配置路由骨架** (/login, /register, /dashboard, /saves, /bank + 路由守卫)
-  - 安装 react-router-dom
-  - 创建基础路由: `/login`, `/register`, `/dashboard`, `/saves`, `/bank`
-  - 路由守卫: 未登录重定向到 `/login`
+- [ ] **闪光类型选择 (Gen8+)**
+  - Star Shiny / Square Shiny 切换
 
-- [x] **创建 API 封装层** (axios.ts, auth.ts, saveFile.ts, bank.ts + JWT拦截器)
-  - `src/api/axios.ts` — 创建 axios 实例，配置 baseURL，拦截器自动注入 JWT token
-  - `src/api/auth.ts` — 登录/注册 API
-  - `src/api/saveFile.ts` — 存档相关 API
-  - `src/api/bank.ts` — 银行相关 API
-
-- [x] **验证前端启动** (npm run build 成功)
-  ```bash
-  npm run dev
-  ```
-  → 访问 http://localhost:5173 能看到默认页面
+- [x] **身高/体重/尺寸标量**
+  - Height Scalar (0-255) + Weight Scalar (0-255)
+  - Scale Rating (0-3)
 
 ---
 
-## Phase 3: 用户认证系统
+### A.3 相遇信息 Tab（Met Tab）补全 — 覆盖率 13% → 85%
 
-### 3.1 后端 — 用户注册与登录
-
-- [x] **创建 User 实体** (`Models/Entity/User.cs`)
-- [x] **创建 Auth DTO** (`Models/Request/LoginRequest.cs`, `RegisterRequest.cs`)
-- [x] **创建 AuthResponse DTO** (`Models/Response/AuthResponse.cs`)
-- [x] **实现 AuthService**
-  - `Register(username, email, password)` — BCrypt 哈希 + 插入 `users` 表
-  - `Login(username, password)` — 查询 + BCrypt 验证 + JWT 签发
-  - `RefreshToken(userId)` — 刷新 access_token
-- [x] **实现 AuthController**
-  - `POST /api/auth/register`
-  - `POST /api/auth/login`
-  - `POST /api/auth/refresh`
-  - `GET /api/auth/me`
-- [x] **实现 JwtMiddleware**
-  - 解析 Authorization Header，验证签名
-  - 注入 UserContext (HttpContext.Items["UserId"])
-- [x] **创建 UserContext 帮助类** (`Helpers/UserContext.cs`)
-- [ ] **使用 Postman/Swagger 测试注册/登录** ⬅️ **需 PostgreSQL 运行**
-
-### 3.2 前端 — 登录注册页面
-
-- [x] **创建登录页面** (`src/pages/Login.tsx`)
-  - Ant Design Form + Input + Button
-  - 表单校验
-  - 登录成功后存储 token → 跳转 `/dashboard`
-- [x] **创建注册页面** (`src/pages/Register.tsx`)
-  - 用户名/邮箱/密码/确认密码
-  - 注册成功后自动登录
-- [x] **创建认证状态管理** (`src/stores/authStore.ts`)
-  - Zustand store: token, userInfo, login(), logout(), isAuthenticated
-- [x] **创建路由守卫组件** (`src/components/ProtectedRoute.tsx`)
-  - 未登录 → `<Navigate to="/login" />`
-- [x] **配置 axios 拦截器**
-  - Request 拦截器: 自动附加 `Authorization: Bearer <token>`
-  - Response 拦截器: 401 → 清除 token → 跳转登录
-  - Response 拦截器: 自动解包 ApiResponse<T>
+- [x] **来源游戏版本选择器** (只读显示，后端已支持写入)
+- [x] **相遇日期选择器 (Gen4+)** (DatePicker)
+- [x] **蛋信息编辑 (Gen4+)** (蛋地点 + 蛋日期)
+- [x] **命运邂逅标志** (MainTab Switch)
+- [x] **地面格子 (Ground Tile, Gen4)**
+- [x] **相遇时间 (Met Time of Day, Gen2)**
+- [x] **对战版本 (Battle Version, Gen8+)**
+- [x] **服从等级 (Obedience Level, Gen9+)**
+- [x] PID 十六进制显示
 
 ---
 
-## Phase 4: 存档上传与解析
+### A.4 能力值 Tab（Stats Tab）补全 — 覆盖率 34% → 85%
 
-### 4.1 后端 — 存档解析 API
+- [x] **实际战斗能力值展示（只读）**
+  - HP/ATK/DEF/SPA/SPD/SPE 计算结果展示（PKHeX 公式 + 手动回退计算）
+  - 性格修正自动应用（+10%红色 / -10%蓝色）
+  - PKHeX 风格表格：种族值 | 个体值 | 努力值 | 能力值 + 合计行
 
-- [x] **创建 SaveFile 实体** (`Models/Entity/SaveFile.cs`, `SaveBoxPokemon.cs`)
-- [x] **创建 SaveFile DTO** (`Models/Response/SaveFileDto.cs`, `BoxDto.cs`, `BoxSlotDto.cs`)
-- [x] **实现 ParseService**
-  - `ParseSaveFile(byte[], filename)` → 调用 PKHeX.Core 解析
-  - `MapToPokemonDto(PKM)` → 完整字段映射
-- [x] **实现 SaveFileService**
-  - `GetUserSaves(userId)` — 列出用户所有存档
-  - `GetSaveDetail(saveFileId)` — 加载存档 + 所有箱子数据
-  - `UploadSave(userId, file, rawData)` — 存储存档 + 批量写入箱子格子
-  - `DeleteSave(saveFileId)` — 删除存档（级联删除箱子数据）
-  - `MoveSlot(...)` — 存档内移动/交换
-- [x] **实现 SaveFileController**
-  - `GET /api/save-file` — 存档列表
-  - `POST /api/save-file/upload` — 上传存档
-  - `GET /api/save-file/{id}` — 存档详情（箱子+宝可梦）
-  - `POST /api/save-file/{id}/move-slot` — 存档内移动
-  - `DELETE /api/save-file/{id}` — 删除存档
-- [ ] **使用测试存档文件验证 API** ⬅️ **需 PostgreSQL 运行**
+- [x] **觉醒力量类型显示**
+  - 根据 IV 实时计算 Hidden Power Type
+  - 彩色属性标签展示
 
-### 4.2 前端 — 存档管理页面
+- [ ] **能力值雷达图 (Stats Chart)**
+  - 待后续迭代
 
-- [x] **创建存档列表页面** (`src/pages/Saves.tsx`)
-  - 表格展示: 文件名、世代、版本、宝可梦数量、修改状态、更新时间
-  - 上传按钮: Ant Design Upload 组件
-  - 点击存档行 → 进入存档编辑器
-  - 删除存档: Popconfirm 确认
-- [ ] **创建存档编辑器页面骨架** (`src/pages/SaveEditor.tsx`)
-  - 基础布局: 左侧箱子列表 + 中间箱子网格 + 底部/右侧银行面板
-- [ ] **创建箱子网格组件** (`src/components/BoxGrid.tsx`)
-  - 30 格网格 (6列 × 5行)
-  - 空格子: 虚线边框空白格
-  - 有宝可梦的格子: 精灵图 + 名称 + 等级
-- [ ] **创建宝可梦卡片组件** (`src/components/PokemonSlot.tsx`)
-  - 展示: 精灵图、昵称、等级、性别标识、闪光星标
-  - 点击: 打开编辑面板 / 查看详情
-- [ ] **创建箱子切换功能**
-  - 左侧箱子列表，当前选中高亮
-  - 切换箱子时，中间网格更新
-- [ ] **接入存档详情 API**
-  - 页面加载时 `GET /api/save-file/{id}`
-  - 存入 Zustand store (`src/stores/saveEditorStore.ts`)
-- [ ] **验证完整流程**
-  - 上传存档 → 列表出现 → 点击进入 → 能看到箱子网格展示所有宝可梦
+- [x] **世代专属能力值字段（条件显示）**
+  - LGPE: AVs (6项 Awakening Values)
+  - LA: GVs (6项 Grit Values)
+  - Gen8 SwSh: Dynamax Level + Can Gigantamax
+  - Gen9 SV: Tera Type Original + Tera Type Override
+  - LA/ZA: Is Alpha + Is Noble
+
+- [x] **Gen8+ 性格修正类型 (Stat Nature)**
+  - Gen7 中 StatNature 与 Nature 共用字段，已修复覆盖 Bug（仅 Gen8+ 生效）
 
 ---
 
-## Phase 5: 个人宝可梦银行
+### A.5 招式 Tab（Moves Tab）补全 — 覆盖率 20% → 80%
 
-### 5.1 后端 — 银行 API
+- [x] **招式详情展示**
+  - 每个招式显示：属性彩色标签 + 分类图标(⚔物理/🔮特殊/🔄变化)
+  - Max PP 信息
+  - (后端 MoveType 已映射，前端标签展示)
 
-- [x] **创建 BankPokemon 实体**
-- [x] **实现 BankService**
-  - `GetBankList(userId, filters)` — 分页+筛选+搜索
-  - `AddToBank(userId, pokemonData)` — 存入银行
-  - `RemoveFromBank(bankPokemonId)` — 删除
-  - `BatchDelete(ids)` — 批量删除
-  - `GetBankDetail(bankPokemonId)` — 单只详情
-  - `MoveFromSave(userId, saveFileId, box, slot)` — 从存档存入
-- [x] **实现 BankController**
-  - `GET /api/bank` — 银行列表（支持 `?generation=&isShiny=&search=&page=&pageSize=`）
-  - `POST /api/bank/from-save` — 从存档存入银行
-  - `GET /api/bank/{id}` — 详情
-  - `DELETE /api/bank/{id}` — 删除
-  - `POST /api/bank/batch-delete` — 批量删除
-- [ ] **使用 Swagger/Postman 测试银行 API** ⬅️ **需 PostgreSQL 运行**
+- [x] **PP 当前值与 PP Up 编辑**
+  - 每个招式：当前 PP 输入 + PP Up 次数 (0-3)
+  - Max PP 联动显示
 
-### 5.2 前端 — 银行页面
+- [x] **回忆招式编辑 (Relearn Moves, Gen6+)**
+  - 4 个回忆招式槽
+  - 搜索式选择器
 
-- [x] **创建银行页面** (`src/pages/Bank.tsx`)
-  - 网格/列表双视图切换
-  - 筛选栏: 世代下拉、闪光开关、名称搜索
-  - 分页组件
-  - 点击宝可梦 → 查看详情抽屉
-- [x] **创建宝可梦详情抽屉** (集成在 Bank.tsx 中)
-  - 只读展示: 全部属性
-  - 底部操作: [从银行删除]
-- [x] **接入银行 API**
-  - API 服务: `src/api/bank.ts`
+- [ ] **信息气泡 (Info Popover)**
+  - 待下一轮迭代
+
+- [ ] **世代专属招式旗标（条件显示）**
+  - Gen8+: TR Relearn Flags / LA: Move Shop / ZA: Plus Moves (后端已支持，前端待添加)
 
 ---
 
-## Phase 6: 拖拽交互 — 核心功能
+### A.6 训练家/杂项 Tab（OT/Misc Tab）补全 — 覆盖率 15% → 75%
 
-### 6.1 后端 — 移动 API
+- [x] **现任训练家信息 (HT Info)**
+  - HT Name / HT Gender (下拉) / HT Language (下拉) / HT Friendship
 
-- [ ] **实现存档内移动**
-  - `POST /api/save-file/{id}/move-slot`
-  - 参数: `{ fromBoxIndex, fromSlotIndex, toBoxIndex, toSlotIndex }`
-  - 逻辑: 交换/移动两个位置的宝可梦（事务）
-- [ ] **实现存档→银行**
-  - `POST /api/bank/from-save`
-  - 参数: `{ saveFileId, boxIndex, slotIndex }`
-  - 逻辑: 读取存档格子数据 → 插入银行表 → 清空存档格子（事务）
-- [ ] **实现银行→存档**
-  - `POST /api/save-file/{id}/move-from-bank`
-  - 参数: `{ bankPokemonId, targetBoxIndex, targetSlotIndex }`
-  - 逻辑: 读取银行数据 → 写入存档格子 → 处理目标位置原有宝可梦（交换/清空银行记录）
-- [ ] **单元测试移动 API**
-  - 测试各种边界: 空格子、满箱子、同位置、跨箱子、源和目标均有PM
+- [x] **好感度 (Affection, Gen6+ Amie)**
+  - 0-255 InputNumber
 
-### 6.2 前端 — 拖拽实现
+- [x] **3DS 区域信息 (IRegionOrigin, Gen6-7)**
+  - Country: 100+ 国家中文下拉（动态加载，支持搜索）
+  - Sub-Region: 联动国家动态加载地区（日本47都道府県 + 美国50州）
+  - Console Region: 7 区域下拉（JPN/USA/EUR/AUS/CHN/KOR/TWN）
+  - 后端 `GeoData.cs` 提供中文数据
 
-- [ ] **安装并配置 @dnd-kit**
-  - 已在 Phase 2 安装，确认导入正常
-- [ ] **创建拖拽上下文包装** (`src/components/DndSaveEditor.tsx`)
-  - `DndContext` 包裹存档编辑器
-  - 配置 `collisionDetection` 算法
-- [ ] **实现可拖拽宝可梦** (`src/components/DraggablePokemon.tsx`)
-  - `useDraggable` hook
-  - 覆盖层显示: 半透明精灵 + 名称
-- [ ] **实现可放置格子** (`src/components/DroppableSlot.tsx`)
-  - `useDroppable` hook
-  - 高亮/拒绝视觉状态
-- [ ] **实现银行拖放区域** (`src/components/DroppableBankZone.tsx`)
-  - 银行面板作为总放置目标
-- [ ] **实现 handleDragEnd 核心逻辑**
-  - 判断 source/target 类型
-  - 调用对应 API
-  - 乐观更新 + 错误回滚
-- [ ] **实现多选拖拽**
-  - Shift 点击范围选择
-  - Ctrl 点击追加选择
-  - 批量拖入银行
-- [ ] **视觉动画与反馈**
-  - 拖入成功: 格子短时闪光
-  - 拖入失败: 弹性回弹动画
-  - 拖拽中: 源位置半透明保留
-- [ ] **完整拖拽流程测试**
-  - 箱间移动 → 刷新正确
-  - 存档到银行 → 银行数量+1, 存档格子空
-  - 银行到存档 → 银行数量-1, 存档格子显示新PM
+- [x] **收藏标记 (Favorite)**
+  - 下拉选择：是 ★ / 否
+
+- [x] **TID/SID 编辑**
+  - 16-bit 数字输入 (0-65535)
+  - Gen7+ 6位显示TID（只读）
+
+- [x] **加密信息展示**
+  - PID / EC 十六进制只读
+  - HOME 追踪 ID (Gen8+)
+
+- [ ] **训练家记忆编辑 (Memories, Gen6+)**
+  - 待后续迭代
+
+- [ ] **地理位置记录 (Geo Locations, Gen6-7)**
+  - 5 个位置槽，待后续迭代
+
+- [ ] **当前佩戴缎带/证章 (Affixed Ribbon/Mark, Gen8+)**
+  - 待后续迭代
 
 ---
 
-## Phase 7: 在线编辑面板
+### A.7 外观/装饰 Tab（Cosmetic Tab）— 覆盖率 0% → 80%（全新）
 
-### 7.1 后端 — 编辑 API
+- [ ] **标记编辑器 (Markings)**
+  - 6 个标记：● ▲ ■ ♥ ★ ♦
+  - 每个标记三态：不显示/蓝色/红色
+  - 可视化点击切换
 
-- [ ] **实现 PokemonEditService**
-  - `ApplyEdits(PKM, editRequest)` → 应用修改 + LegalityAnalysis
-  - `ValidateOnly(PKM)` → 仅校验
-  - `ParseSinglePkm(bytes)` → 解析单个 .pk* 文件
-  - `ExportSinglePkm(id, format)` → 导出为指定世代 .pk* 文件
-- [ ] **实现 PokemonController**
-  - `GET /api/pokemon/{id}` — 获取可编辑数据
-  - `PUT /api/pokemon/{id}` — 提交编辑
-  - `POST /api/pokemon/{id}/validate` — 仅校验
-  - `POST /api/pokemon/parse-single` — 上传单个 .pk* 文件
-  - `GET /api/pokemon/{id}/download` — 导出下载
-- [ ] **实现 ResourceController**
-  - `GET /api/resource/species` — 物种列表
-  - `GET /api/resource/moves?gen=4` — 招式列表（按世代）
-  - `GET /api/resource/abilities` — 特性列表
-  - `GET /api/resource/natures` — 性格列表
-  - `GET /api/resource/balls` — 球种列表
-  - `GET /api/resource/items` — 道具列表
-  - 所有数据直接从 PKHeX.Core 内置资源表读取（`GameInfo.Strings`, `GameInfo.MoveDataSource` 等）
+- [ ] **选美属性编辑 (Contest Stats)**
+  - Cool / Beauty / Cute / Smart / Tough (0-255)
+  - Sheen 光泽度 (0-255, Gen3-4)
+  - 雷达图可视化
 
-### 7.2 前端 — 编辑面板
+- [ ] **来源标记显示 (Origin Mark, 只读)**
+  - 根据来源游戏版本展示对应图标：
+    - Gen6 → 五角形 (Pentagon)
+    - Gen7 → 三叶草 (Clover)
+    - Gen8 SWSH → 伽勒尔
+    - Gen8 BDSP → Trio
+    - Gen8 LA → Arc/Triangle
+    - Gen9 SV → Paldea
+    - VC → Game Boy
+    - GO → GO
+  - 精灵图展示
 
-- [ ] **创建编辑面板组件** (`src/components/EditPanel.tsx`)
-  - Ant Design Tabs: 基本信息 / 能力值 / 招式 / 相遇信息 / 缎带 / 训练家
-- [ ] **实现「基本信息」Tab**
-  - 物种搜索选择器 (Select + Search)
-  - 昵称输入框
-  - 性别单选框
-  - 闪光开关
-  - 等级输入
-  - 持有物下拉选择器
-  - 蛋标记开关
-- [ ] **实现「能力值」Tab**
-  - 6 项个体值 IVs (0-31 滑块/输入)
-  - 6 项努力值 EVs (0-252 输入, 总和不超过 510 校验)
-  - 性格下拉
-  - 特性下拉（动态加载可用特性）
-  - 实时能力值计算预览 (HP/Atk/Def/SpA/SpD/Spe)
-- [ ] **实现「招式」Tab**
-  - 4 个招式槽 (Select + Search 搜索招式名/属性/类型)
-  - PP Ups 显示
-  - 招式合法性提示（当前世代是否可学）
-- [ ] **实现「相遇/元数据」Tab**
-  - 相遇版本、地点
-  - PID 只读展示
-  - TID/SID 展示
-- [ ] **实现「球种/缎带」Tab**
-  - 精灵球下拉选择
-  - 缎带多选复选框组
-- [ ] **实现「训练家」Tab**
-  - OT (Original Trainer) 名称
-  - TID / SID
-  - 语言标记
-- [ ] **实现动态表单逻辑**
-  - 根据 `generation` 隐藏不适用字段
-  - Gen3: 无特性、无性格能力加成
-  - Gen4+: 逐步开放更多字段
-- [ ] **实现编辑提交流程**
-  - 前端快速预校验（EV 总和 ≤ 510 等）
-  - `PUT /api/pokemon/{id}` 提交
-  - 展示后端返回的合法性报告
-  - 合法 → 绿色成功提示，更新本地状态
-  - 非法 → 红色 Alert 列出违规项
-- [ ] **编辑面板测试**
-  - 修改合法值 → 成功提交
-  - 修改非法值（如不存在的招式）→ 后端拒绝 + 显示报告
-  - 切换编辑目标宝可梦 → 面板内容正确更新
+- [ ] **晃晃斑斑点预览 (Spinda Spots)**
+  - 根据 PID 计算 4 个斑点坐标
+  - 精灵图上叠加斑点位置（Canvas 绘制）
 
 ---
 
-## Phase 8: 存档保存与导出
+### A.8 合法性详情 Tab（Legality Tab）— 从二元升级到三态（全新）
 
-### 8.1 后端 — 导出服务
+- [x] **三态合法性体系**
+  - 后端：`LegalityStatus` 枚举 (Legal/Fishy/Illegal)
+  - 前端 LegalityTab：Legal → 绿色 ✓ | Fishy → 黄色 ⚠️ | Illegal → 红色 ✗
+  - Status Chip + Alert 横幅
 
-- [ ] **实现存档重建**
-  - `SaveFileService.RebuildSaveFile(saveFileId)` → 从 `save_box_pokemon` 数据重建存档二进制
-- [ ] **实现存档下载**
-  - `GET /api/save-file/{id}/download` → 返回 .sav 文件流
-- [ ] **实现单只导出**
-  - `GET /api/pokemon/{id}/download?format=pk4` → 返回 .pk* 文件
-- [ ] **实现存档服务端持久化**
-  - `POST /api/save-file/{id}/save` → 触发重建，更新 `raw_save_data`
-  - 自动保存: 每次拖拽操作后标记 `is_modified = TRUE`，3 分钟无操作自动触发保存
-- [ ] **测试导出功能**
-  - 导出存档 → 用 PKHeX 桌面版打开 → 箱子和宝可梦正确
-  - 导出单只 → 用 PKHeX 打开 → 数据完整
-  - 重新上传导出的存档 → 数据和修改一致
+- [x] **合法性报告详情**
+  - 按检查项列表展示（Identifier + Judgement + Issue/Comment）
+  - 每项显示彩色图标 + 状态标签
+  - CanFix 识别 + FixAction 传递
 
-### 8.2 前端 — 导出按钮
+- [x] **一键修复按钮（UI 框架）**
+  - 可修复的项旁出现「修复」按钮
+  - 后端已返回 CanFix/FixAction
+  - (实际修复逻辑待 LegalizationService 实现)
 
-- [ ] **存档编辑器工具栏**
-  - [保存存档] 按钮 → `POST /save` → 提示保存成功
-  - [导出下载] 按钮 → `GET /download` → 浏览器下载文件
-  - [撤销] / [重做] (本地状态快照实现)
-- [ ] **银行和编辑面板的导出按钮**
-  - 单只宝可梦导出下载
-  - 格式选择: pk3 / pk4 / pk5 / pk6 / pk7
+- [x] **合法性批量扫描**
+  - `POST /api/SaveFile/{id}/legality-report`
+  - 返回 BatchLegalityReportDto (Legal/Fishy/Illegal 计数 + 逐槽位状态)
+  - 前端工具栏「合法性扫描」按钮
 
----
+- [x] **格子合法性指示点**
+  - 箱子里不合法宝可梦显示红色小圆点
 
-## Phase 9: 资源数据 API 补充
+- [x] **合法性独立验证按钮**
+  - LegalityTab 新增「验证合法性」按钮（不保存，仅检查）
+  - 后端 `POST /api/Pokemon/validate-party` 端点
+  - CheckIdentifier → 中文名称映射（30+ 检查项）
 
-- [ ] **实现所有 ResourceController 端点**
-- [ ] **前端创建资源 store** (`src/stores/resourceStore.ts`)
-  - 启动时预加载物种/招式/特性等列表
-  - 缓存策略: 全局不变，仅加载一次
-- [ ] **编辑面板接入动态资源数据**
-  - 所有 Select 下拉列表从 store 获取
-  - 招式搜索支持按名称/属性/类型过滤
+- [x] **QR 码生成**
+  - 合法性 Tab 新增「生成QR码」按钮
+  - 后端 `POST /api/Pokemon/qr` → `QRMessageUtil.GetMessage`
+  - 前端通过 qrserver API 渲染 QR 码图片（240×240）
+  - 供 3DS 实体游戏机扫码注入宝可梦
 
 ---
 
-## Phase 10: 工作台 Dashboard
+## Phase B: 存档编辑器交互优化
 
-- [ ] **创建 Dashboard 页面** (`src/pages/Dashboard.tsx`)
-  - 统计卡片: 存档数、银行宝可梦数、闪光数
-  - 最近使用的存档列表（快捷入口）
-  - 银行最近添加的宝可梦
-  - 快速操作: [上传存档] [打开银行]
+> 目标：提升箱子管理效率 + 视觉品质感
+
+### B.1 箱子管理增强
+
+- [ ] **「全部箱子」弹窗**
+  - 按钮位置：存档编辑器工具栏
+  - Modal/Drawer 中展示响应式箱子网格：
+    - 大屏(≥1200px): 4 列
+    - 中屏(≥768px): 3 列
+    - 小屏(<768px): 1 列
+  - 每个箱子显示：箱子名称 + 精灵网格 (6×5) + 宝可梦数量
+  - 参考 PKMDS-Blazor `BoxListDialog.razor`
+
+- [ ] **箱子 Swap（交换）**
+  - 全部箱子弹窗中每个箱子添加 ⇄ 按钮
+  - 点击与相邻箱子（i+1）交换全部内容
+  - 后端 `POST /api/SaveFile/{id}/swapBoxes` API
+
+- [ ] **箱子排序**
+  - 工具栏添加「排序」下拉按钮
+  - 排序选项：按物种编号 / 等级 / 闪光优先 / 名称
+  - 排序范围：当前箱子 / 全部箱子
+
+- [x] **箱子列表布局优化**
+  - 箱子列表 `maxHeight: 480px` 内部滚动，与 Box 网格等高
+  - Box 网格 `alignSelf: flex-start` 不再拉伸填充
+  - 箱子项紧凑模式（padding 6px / 字号 12px）
+
+- [ ] **箱子快速导航优化**
+  - 当前箱子下拉选择器显示：`Box N: 名称 (已用/容量)`
+  - 前后箱子翻页按钮（◀ ▶）
+  - 支持键盘快捷键 Left/Right 翻箱子
+
+### B.2 宝可梦格子视觉升级
+
+- [ ] **格子精灵叠加图标**
+  - 左下角：合法性状态小圆点（三色）
+  - 右上角：闪光 ✨ 星星图标
+  - 特殊状态：Alpha (LA) / Gigantamax / 对战队伍成员
+  - 参考 PKMDS-Blazor `PokemonSlotComponent.razor`
+
+- [ ] **格子 Hover 信息卡片**
+  - 鼠标悬停弹出小卡片：物种名 + 等级 + 性格 + 特性 + 持有物
+  - 合法性状态 Chip
+
+- [ ] **格子右键菜单**
+  - 复制 / 粘贴 / 删除 / 导出为 .pk* / 导出为 Showdown
+  - 查看详情 / 存入银行
+
+### B.3 合法性批量扫描
+
+- [x] **全存档合法性扫描按钮**
+  - 按钮位置：存档编辑器工具栏「合法性扫描」
+  - 后端 `POST /api/SaveFile/{id}/legality-report`
+  - 返回所有 Party + Box 槽位的合法性状态汇总表
+
+- [ ] **合法性报告浮层**
+  - 表格式展示：物种精灵 + 名称 + 位置 + 状态Chip + 首要问题
+  - 过滤：全部 / Legal / Fishy / Illegal（ToggleGroup）
+  - 点击行跳转到对应箱子/槽位
+  - 批量 Legalize 按钮 + 进度条 + 取消
+
+### B.4 银行面板增强
+
+- [ ] **银行卡片视图升级**
+  - 统一与格子相同的精灵图 + 叠加图标风格
+  - 每个卡片显示：精灵图 / 昵称 / 物种名 / Lv / 闪光标志 / 世代Tag / 来源存档Tag
+
+- [ ] **银行筛选/搜索增强**
+  - 筛选：世代 / 闪光 / 物种类型 / 性格 / 特性
+  - 排序：添加时间 / 等级 / 物种编号
+  - 搜索支持物种名+昵称混合搜索
+
+- [ ] **银行批量操作**
+  - 多选模式（Shift/Ctrl 点选）
+  - 批量删除 / 批量导出为 .zip / 批量移动到存档
 
 ---
 
-## Phase 11: 测试与完善
+## Phase C: 新增功能模块
 
-### 11.1 功能测试
+> 目标：添加 PKHeX 有而 pkmanager 完全缺失的重要存档级功能
 
-- [ ] **用户系统测试**
-  - 注册 → 登录 → Token 过期 → 刷新 → 登出
-  - 未登录访问受保护页面 → 跳转登录
-- [ ] **GBA (Gen3) 存档全流程测试**
-  - 上传红宝石/蓝宝石/绿宝石/火红/叶绿存档
-  - 解析正确 → 显示所有箱子
-  - 编辑宝可梦 → 合法性校验
-  - 拖拽操作 → 银行存取
-  - 导出 → PKHeX 验证
-- [ ] **NDS (Gen4/Gen5) 存档全流程测试**
-  - 珍珠/钻石/白金/心金/魂银
-  - 黑/白/黑2/白2
-- [ ] **3DS (Gen6/Gen7) 存档全流程测试**
-  - X/Y/OR/AS
-  - 太阳/月亮/US/UM
-- [ ] **边界情况测试**
-  - 空存档（无任何宝可梦）
-  - 满箱存档
-  - 含非法宝可梦的存档上传
-  - 网络断开时的前端表现
-  - 同时打开两个存档编辑
+### C.1 背包/道具编辑（Bag Editor）
 
-### 11.2 优化
+- [ ] **后端 Bag API**
+  - `GET /api/SaveFile/{id}/bag` — 返回多 Pouch 道具列表
+  - `PUT /api/SaveFile/{id}/bag` — 保存道具变更
+  - Pouch 类型自动识别 (Items/Medicine/TMs/Berries/Balls/Battle Items/Key Items等)
 
-- [ ] **前端性能**
-  - 箱子网格懒加载（只渲染当前箱子）
-  - 宝可梦精灵图虚拟列表
-  - API 请求去重与缓存
-- [ ] **后端性能**
-  - 存档解析异步化（大文件不阻塞请求线程）
-  - 数据库查询优化（检查慢查询，添加缺失索引）
-- [ ] **错误处理**
-  - 全局 Error Boundary
-  - API 请求失败友好提示
-  - 操作日志记录
+- [ ] **前端 Bag 页面/面板**
+  - 存档编辑器新增「背包」Tab 或独立 Drawer
+  - Pouch 分类 Tab 导航（带精灵图标）
+  - 道具行：图标 + 名称 + 数量输入 + 收藏标记
+  - 排序按钮：按名称 / 按数量 / 按索引
+  - 「显示空格」开关
 
----
+### C.2 训练家信息完善（Trainer Info）
 
-## Phase 12: 部署 (可选)
+- [ ] **后端 Trainer API**
+  - `GET /api/SaveFile/{id}/trainer` — 返回完整训练家信息
+  - `PUT /api/SaveFile/{id}/trainer` — 保存
 
-- [ ] **准备生产环境配置**
-  - 修改 CORS 为生产域名
-  - 使用环境变量管理敏感配置
-  - 配置 Nginx 反向代理
-- [ ] **前端构建**
-  ```bash
-  cd client && npm run build
-  ```
-- [ ] **后端发布**
-  ```bash
-  cd server && dotnet publish -c Release -o ./publish
-  ```
-- [ ] **部署到服务器**
-  - 上传 publish 目录 + client/dist
-  - 配置 Nginx
-  - 配置 systemd 守护进程
+- [ ] **前端训练家面板**
+  - 基本信息区：OT Name / TID / SID (16-bit + 6-digit) / 游戏语言 / 游戏时间
+  - 货币区（条件显示，按世代）：金钱 / Coins / BP / Poké Miles / Watts / Festival Coins / League Points
+  - 徽章区（Gen1-7）：可视化徽章图标，点击切换获得/未获得
+  - 训练家卡片（Gen8 SwSh）：Card Name / Card Number / Trainer ID
+  - Game Sync ID (Gen5-7)：十六进制只读 + 复制
+
+### C.3 图鉴管理（Pokédex Editor）
+
+- [ ] **后端 Pokédex API**
+  - `GET /api/SaveFile/{id}/pokedex` — 按世代返回图鉴数据
+  - `PUT /api/SaveFile/{id}/pokedex` — 批量保存
+  - `POST /api/SaveFile/{id}/pokedex/fill` — Fill/SeenAll/CaughtAll/Clear
+
+- [ ] **前端图鉴页面**
+  - 存档编辑器新增「图鉴」Tab
+  - 顶部：Seen%/Caught% 进度条 + Fill/SeenAll/Clear 按钮
+  - 搜索栏（名称或图鉴编号）
+  - 分页网格：每格显示精灵图 + Seen/Caught 复选框
+  - 世代条件显示（仅展示该存档版本对应的图鉴范围）
+
+### C.4 宝可梦详情页
+
+- [ ] **银行宝可梦详情 Drawer 升级**
+  - 复用编辑面板的 Tab 组件
+  - 所有字段只读展示（非所属存档的宝可梦不可编辑）
+  - 添加「发送到存档」按钮
 
 ---
 
-## 快速参考
+## Phase D: 高级工具
 
-### 启动开发环境
+> 目标：添加差异化功能，发挥 pkmanager 服务端优势
 
-```bash
-# Terminal 1: 启动 PostgreSQL
-sudo systemctl start postgresql
+### D.1 高级搜索（Advanced Search）
 
-# Terminal 2: 启动后端
-cd ~/pkmanager/server/PkManager.Server
-dotnet run
+- [ ] **后端搜索 API**
+  - `POST /api/Search` — 多条件搜索当前存档或全银行
+  - 利用 PostgreSQL JSONB GIN 索引加速
+  - 支持筛选：物种 / 闪光 / 性格 / 特性 / 持有物 / 球种 / 来源版本 / 性别 / 等级范围 / IV/EV 下限 / 招式(Any/All) / OT名称/TID / 合法状态
 
-# Terminal 3: 启动前端
-cd ~/pkmanager/client
-npm run dev
+- [ ] **前端搜索面板**
+  - 存档编辑器新增「搜索」Tab
+  - 折叠式筛选面板（Basic / Filters / Advanced）
+  - 结果表格：精灵图 + 名称 + 位置 + 等级 + 性格 + 特性 + 持有物 + 状态
+  - 点击行跳转到对应箱子/槽位
+  - 保存筛选器（localStorage + 可扩展到服务端）
+  - 搜索结果批量导出为 Showdown 文本
+
+### D.2 Encounter Database（遭遇数据库）
+
+- [ ] **后端 Encounter API**
+  - `POST /api/Encounter/search` — 搜索合法遭遇
+  - 参数：物种(必选) / 游戏版本 / 等级范围 / 遭遇类型
+  - 调用 PKHeX.Core `EncounterMovesetGenerator`
+  - `POST /api/Encounter/generate` — 从遭遇生成合法宝可梦并放入存档指定位置
+
+- [ ] **前端遭遇数据库面板**
+  - 存档编辑器新增「遭遇数据库」Tab
+  - 筛选面板：物种搜索 / 游戏版本 / 等级范围 / 遭遇类型(Wild/Static/Gift/Trade/Egg)
+  - 结果表格：遭遇类型Chip + 地点 + 等级范围 + 闪光锁定状态
+  - 每行「生成」按钮：生成合法宝可梦放入选定槽位
+
+### D.3 批量编辑器（Batch Editor）
+
+- [ ] **后端 Batch API**
+  - `POST /api/SaveFile/{id}/batch/preview` — 预览批量编辑结果
+  - `POST /api/SaveFile/{id}/batch/apply` — 执行批量编辑
+  - 包装 PKHeX.Core `BatchEditing` / `StringInstructionSet`
+  - 支持 Filter (`.Property=Value`) + Mutation (`=Property=Value`) 语法
+
+- [ ] **前端批量编辑面板**
+  - 存档编辑器新增「批量编辑」Tab
+  - 多行脚本输入编辑器
+  - Preset 预设下拉 + 保存/删除预设
+  - 范围选择：Party / 当前箱子 / 所有箱子 / 全部
+  - Dry-Run 预览按钮：表格展示匹配的宝可梦 + 拟变更字段
+  - 确认执行按钮 + 进度条
+
+### D.4 一键进化（One-Touch Evolve）
+
+- [ ] **后端 Evolution API**
+  - `GET /api/Pokemon/{id}/evolutions` — 获取可能的进化路径
+  - `POST /api/Pokemon/{id}/evolve` — 执行进化
+  - 调用 PKHeX.Core `EvolutionTree.GetEvolutionTree()`
+
+- [ ] **前端进化按钮**
+  - 编辑面板 Main Tab 中添加「进化」按钮
+  - 单路径：点击直接进化
+  - 分支路径（伊布/蚊香蝌蚪等）：弹出选择器
+    - 每个选项：精灵图 + 物种名称 + 进化方式标签
+  - 土居忍士→铁面忍者：询问是否同时生成脱壳忍者到空位
+  - 进化后自动同步昵称和等级
+
+### D.5 Showdown / PokePaste 导入导出
+
+- [ ] **后端接口**
+  - `POST /api/Pokemon/export-showdown` — 导出为 Showdown 格式文本
+  - `POST /api/Pokemon/import-showdown` — 从 Showdown 文本生成合法宝可梦
+
+- [ ] **前端集成**
+  - 编辑面板「Showdown」导出按钮：弹出文本框，一键复制
+  - 工具栏「Import from Showdown」按钮：粘贴文本 → 解析 → 放入选定槽位
+  - 批量导出：搜索结果的批量 Showdown 导出
+
+---
+
+## Phase E: 世代专属功能与细节打磨
+
+> 目标：补齐各世代特色功能，提升品质感。目前 pkmanager 覆盖 Gen3-7。
+
+### E.1 世代专属宝可梦字段
+
+- [ ] **Gen-Specific Tab（编辑面板新增）**
+  - 根据宝可梦世代条件显示专属字段：
+    - Gen3 Colo/XD: ShadowID (只读) / Purification / IsShadow
+    - Gen4 HGSS: Shiny Leaves (5叶复选框 + Crown标志) / WalkingMood
+    - Gen5: NSparkle / PokeStarFame (B2W2)
+    - Gen7 LGPE: Spirit / Mood / Received Timestamp
+
+### E.2 存档级世代专属工具（按覆盖范围 Gen3-7 优先）
+
+- [ ] **Gen3 (GBA): RTC 时钟编辑器**
+  - 查看/调整游戏内实时时钟
+  - 电池耗尽时钟修复
+  - 丑丑鱼格子定位器 (Route 119 水格计算)
+
+- [ ] **Gen4 (NDS): Shiny Leaves 编辑器**
+  - 5 种叶子类型复选框 + Crown 标志
+  - 仅在 HGSS 存档时显示
+
+- [ ] **Gen6 (3DS): O-Powers 编辑器**
+  - O-Power 等级和剩余能量查看/编辑
+
+- [ ] **Gen6 (3DS): Super Training 查看**
+  - 超级训练奖章统计（只读）
+
+- [ ] **Gen7 (3DS): Zygarde Cell 查看**
+  - 基格尔德细胞/核心收集进度
+
+### E.3 UI/UX 细节打磨
+
+- [x] **页面导航完善**
+  - 存档管理页 `/saves` 添加返回按钮 → Dashboard
+  - 银行页 `/bank` 添加返回按钮 → Dashboard
+  - 存档编辑页已有返回按钮 → 存档列表
+
+- [ ] **精灵图升级**
+  - 支持 PokeAPI 高清精灵图（Home 风格）
+  - 低分辨率备选：pokesprite spritesheet
+  - 精灵风格切换：Game (像素) / Home (高清)
+
+- [ ] **暗色/亮色主题**
+  - 利用 Ant Design 5 的 ConfigProvider theme 切换
+  - localStorage 持久化用户选择
+  - AppBar 主题切换按钮 (Light / System / Dark)
+
+- [ ] **欢迎空状态**
+  - 首次加载时的品牌展示页
+  - 拖拽 .sav 文件到页面上直接打开
+
+- [ ] **触觉反馈**
+  - 关键交互时 `navigator.vibrate`
+
+- [ ] **键盘快捷键**
+  - Left/Right 箭头：翻箱子
+  - Delete / Ctrl+C/V / Ctrl+S / Ctrl+Z
+
+- [ ] **响应式优化（重要）**
+  - 手机端 / 平板端 / 桌面端适配
+  - 模拟器工具栏在移动端溢出（画面/速度按钮组 + 其他控件太长）
+  - 全局页面无移动端断点适配
+
+- [ ] **加载骨架屏**
+  - 存档加载时的 Skeleton 占位
+
+---
+
+## Phase F: 后端基础设施增强
+
+> 目标：为新增前端功能提供后端支撑，不影响现有架构
+
+### F.1 静态数据缓存与种子数据
+
+- [ ] **物种/招式/特性/道具/球种/性格 数据预加载**
+  - 启动时从 PKHeX.Core 提取全量表数据
+  - 存入 PostgreSQL 静态表（带版本标记）
+  - 前端请求时直接从数据库返回（不走 PKHeX.Core 实时计算）
+  - 已有 `resourceStore.ts` 的基础结构，增强即可
+
+- [ ] **精灵图 URL 映射表**
+  - 物种ID → PokeAPI sprite URL 映射表
+  - 减少前端硬编码，支持切换精灵图源
+
+### F.2 合法性引擎升级
+
+- [ ] **Auto-Legality 后端服务**
+  - 从模板/Showdown 文本生成合法宝可梦
+  - 调用 PKHeX.Core `EncounterMovesetGenerator` + `ClassicEraRNG`
+  - 支持 Gen3-5 Method-1 PID↔IV 关联
+  - 保留原始 OT/Met/Ribbon 信息
+  - Legalization change report（返回变更字段清单）
+
+- [ ] **批量合法性重检**
+  - 后台任务全存档/全银行合法性扫描
+  - 结果缓存，避免每次打开都重新扫描
+
+### F.3 存档架构简化（重要）
+
+- [x] **去除 save_box_pokemon 表**
+  - 上传存档只存 `raw_save_data` 二进制，不拆箱入库
+  - 所有 Box 编辑直接写入 raw_save_data 对应槽位 (`WriteBoxSlot`)
+  - 读取存档时从 raw_save_data 实时解析（ParseService）
+  - Bank 移入移出均直接操作 raw_save_data
+  - 拖拽MoveSlot/SwapBoxes修复（同箱temp变量/跨箱分数组）
+
+- [x] **PokemonController 合并**
+  - `Edit` (Box) 和 `EditParty` 统一为 `PUT /save-slot` 端点
+  - 均直接操作 raw_save_data
+
+### F.4 存档备份管理
+
+- [x] **5槽位自动备份**
+  - `save_backups` 表存储完整 raw_save_data 副本
+  - 每次编辑前自动备份（标签"编辑前自动备份"）
+  - 手动保存时创建备份（标签"手动保存"）
+  - 最多保留5个，旧备份自动清除
+  - 恢复：直接回写 raw_save_data → 页面刷新
+
+- [x] **备份信息展示**
+  - 每份备份解析显示：宝可梦数量、训练家、游玩时间、游戏版本、箱子数
+  - 最新备份绿色高亮卡片
+  - 一键恢复按钮（带确认弹窗）
+
+---
+
+## Phase G: GBA 在线模拟器 (新增)
+
+> 目标: 在网页端运行 GBA 宝可梦游戏，与存档管理深度集成
+
+### G.1 模拟器核心
+
+- [x] **mGBA WASM 选型与封装** — `client/src/lib/mgba.ts` (MGBAEmulator 接口)
+- [ ] **mGBA WASM 文件部署** — 下载 `mgba.wasm` + `mgba.js` 到 `public/emulator/`
+- [x] **软件测试渲染器** — 240×160 Canvas 直写像素，mGBA 到位前可验证页面
+
+### G.2 ROM 管理
+
+- [x] **ROM 数据库** — `rom_files` 表 (game_id, display_name, generation, rom_data)
+- [x] **ROM 上传** — `POST /api/Emulator/roms/upload` 
+- [x] **ROM 下载** — `GET /api/Emulator/roms/{gameId}`
+- [x] **5 个 GBA 宝可梦 ROM 入库** — 红宝石/蓝宝石/绿宝石/火红/叶绿
+
+### G.3 存档联动
+
+- [x] **原始存档下载** — `GET /api/SaveFile/{id}/raw`
+- [x] **存档同步** — `POST /api/Emulator/sync-save` (每30秒自动)
+- [x] **即时存档** — `emulator_save_states` 表 + save/load state 端点
+- [x] **GBA 存档入口** — Saves 页 Gen≤3 显示绿色「游玩」按钮
+
+### G.4 前端模拟器页面
+
+- [x] **EmulatorPage** — `/play/:saveFileId` 路由，React.lazy 懒加载
+- [x] **画面缩放** — 1×/2×/4× 按钮组
+- [x] **速度控制** — 1×/2×/4× `setFastForwardMultiplier`
+- [x] **暂停/继续** — `pauseGame()` / `resumeGame()`
+- [x] **重置** — `quickReload()`
+- [x] **音量滑块** — `setVolume(0-100%)`
+- [x] **FPS 显示** — 独立 rAF 计数器
+- [x] **按键映射设置** — 弹窗逐个按键重绑定，localStorage 持久化
+- [x] **手机触摸手柄** — D-Pad + A/B + L/R + Start/Select 虚拟按钮
+- [x] **存档自动同步** — 每 30 秒 + 页面关闭前 Base64 同步
+- [x] **关闭窗口** — `window.close()` 替代返回
+- [x] **无存档新游戏入口** — Dashboard 5 张 GBA 游戏卡片（红宝石/蓝宝石/火红/叶绿/绿宝石，按发行日期排序）+ Modal 对话框（已有对应游戏存档列表 + 新增空白存档）
+- [x] **存档列表精确显示游戏名** — `SaveFileDto.MapToDto` 补充 `GameVersionName`，Saves 页「游戏」列显示具体游戏名 + 对应颜色 Tag
+- [x] **对话框按游戏过滤存档** — Dashboard Modal 只显示所选游戏版本的存档（不再笼统显示所有 Gen3）
+- [ ] **手机端适配** — 工具栏溢出、页面响应式布局
+- [ ] **手机端模拟器加载** — 移动端 mGBA WASM 兼容
+- [ ] **手柄支持** — Web Gamepad API
+- [ ] **金手指 UI** — CodeBreaker 格式
+
+---
+
+## Phase H: NDS 在线模拟器 (新增)
+
+> 目标: 基于 melonDS WASM 在网页端运行 NDS 宝可梦游戏（Gen4 钻石/珍珠/白金/心金/魂银 + Gen5 黑/白/黑2/白2），复用 GBA 模拟器的 ROM 管理 + 存档联动 + Dashboard 架构
+
+### H.1 melonDS WASM 编译与验证
+
+- [x] **获取 melonDS WASM** — 从 ds-anywhere 演示站下载预构建产物（wasmemulator.wasm 847KB + wasmemulator.js 126KB + webmelon.js 27KB）
+- [x] **`melonds.ts` 封装** — 类比 `mgba.ts` 创建 `NdsEmulator` 接口，支持 loadRom/loadSave/getSave/touch/pause/resume/setSpeed/shutdown
+- [x] **NDS ROM 入库** — 9 个 ROM 元数据导入 `rom_files`（128-306MB 走文件系统 `local_path`，不存 BYTEA）
+- [x] **`CreateNewGame` 扩展** — 支持 Gen4/5 游戏版本号（Diamond=10, Pearl=11, Platinum=12, HG=7, SS=8, Black=20, White=21, B2=22, W2=23）
+- [x] **ROM 下载端点扩展** — 大 ROM 从文件系统 Streaming 服务
+- [ ] **最小测试页验证** — 浏览器访问 `/emulator/nds/test.html`，确认 ROM 加载 + 双屏渲染 + 存档读写
+
+### H.2 TypeScript 封装
+
+- [x] **`melonds.ts`** — 类比 `mgba.ts` 创建 NdsEmulator 接口（loadRom/getSave/buttonPress/touchScreen/runFrame）
+- [x] **双屏渲染** — 两个 Canvas（上屏+下屏触摸）
+- [x] **NDS 按键映射** — 扩展 GBA 映射（新增 X/Y + 触摸屏）
+- [x] **DsInputButton 类型导出** — 供 NdsEmulatorPage 使用
+
+### H.3 前端模拟器页面
+
+- [x] **NdsEmulatorPage** — `/play-nds/:saveFileId` 路由，React.lazy 懒加载
+- [x] **双屏布局** — 上下堆叠，scale 1×/2×
+- [x] **触摸屏覆盖层** — 鼠标点击 + 触屏 → melonDS touch API
+- [x] **画面缩放 + 速度控制 + 存档同步** — 复用 GBA 30s auto-sync + sendBeacon 二进制同步
+- [x] **手机触摸手柄** — 新增 X/Y 按钮、D-Pad、L/R、Start/Select
+
+### H.4 后端扩展
+
+- [ ] **NDS ROM 导入** — `EmulatorController.ImportLocal` 扩展 NDS ROM 模式
+- [ ] **NDS_VERSION_MAP** — gameVersion → gameId 映射（Gen4/5 版本号）
+- [ ] **存档兼容** — 验证 PKHeX.Core 解析 NDS 512KB .sav 文件
+
+### H.5 Dashboard + 存档管理
+
+- [x] **Dashboard 新增 9 张 NDS 卡片** — 钻石/珍珠/白金/心金/魂银/黑/白/黑2/白2（按发行日期排序）
+- [x] **Saves 页扩展** — `GAME_VERSION_DISPLAY` 补充 Gen4/5 版本号 → 名称映射
+- [x] **Modal 支持 NDS** — 按游戏版本过滤存档 + 动态 Gen Tag + 路由到 `/play-nds/`
+- [x] **Saves 页「游玩」按钮** — Gen4/5 显示游玩按钮，路由到 `/play-nds/`
+
+### H.6 世代专属功能
+
+- [ ] **Gen4 专属** — 道具编辑器扩展到 Gen4 背包格式 / 图鉴
+- [ ] **Gen5 专属** — 一同支持 Gen5 特性（隐藏特性、梦境世界等）
+- [ ] **存档跨世代迁移** — Gen4→Gen5 宝可梦迁移（Pal Park / PokéTransfer 模拟）
+
+### H.7 联机对战/交换（远期目标）
+
+> ⚠️ NDS 本地无线协议要求 <1ms 延迟，浏览器 WebRTC 最佳情况 20-50ms。melonDS 桌面版的互联网联机（Netplay）仍在开发中，浏览器端暂无先例。
+
+- [ ] **同浏览器双实例联机** — 同一进程两个 melonDS 实例，理论延迟可忽略（melonDS 1.0 RC 已支持单进程多实例）
+- [ ] **WebRTC 联机实验** — 等待 melonDS Netplay 完成后评估 WebRTC 桥接可行性
+- [ ] **PKHeX 层面数据交换**（替代方案）— 导出 .pk* + 分享 + 对方导入（已实现 QR 码生成）
+
+---
+
+## 实施顺序建议
+
+```
+Week 1-2:  Phase A.1 编辑面板架构重构
+           Phase A.3 相遇信息Tab补全
+           Phase A.2 基本信息Tab补全（形态/语言/EXP/亲密度）
+           
+Week 3-4:  Phase A.5 招式Tab补全（PP/回忆招式/详情展示）
+           Phase A.6 训练家Tab补全（HT/Memory/Affection/Geo）
+           Phase A.8 合法性Tab（三态+逐字段指示器）
+           
+Week 5-6:  Phase A.4 能力值Tab补全（雷达图/世代专属字段）
+           Phase A.7 外观Tab（标记/选美/病毒/来源标记）
+           Phase B.1 箱子管理增强（全部弹窗/Swap/排序）
+           
+Week 7-8:  Phase B.2 格子视觉升级（叠加图标/Hover卡片/右键菜单）
+           Phase B.3 合法性批量扫描
+           Phase B.4 银行面板增强
+           
+Week 9-10: Phase C.1 背包编辑
+           Phase C.2 训练家信息完善
+           Phase C.3 图鉴管理
+           
+Week 11-12: Phase D.1 高级搜索
+            Phase D.2 Encounter Database
+            Phase D.4 一键进化
+            
+Week 13-14: Phase D.3 批量编辑器
+            Phase D.5 Showdown导入导出
+            Phase E.1 世代专属字段
+            
+Week 15-16: Phase E.2 世代专属工具（Gen3 RTC等）
+            Phase E.3 UI/UX细节打磨
+            Phase F 后端基础设施增强
 ```
 
-### 测试存档文件准备
+---
 
-在 `~/pkmanager/test-data/` 目录准备各世代测试存档:
-- `pokemon_emerald.sav` (Gen3)
-- `pokemon_heartgold.sav` (Gen4)
-- `pokemon_black.sav` (Gen5)
-- `pokemon_x.sav` (Gen6)
-- `pokemon_moon.sav` (Gen7)
+## 进度跟踪
+
+| Phase | 总任务数 | 已完成 | 进行中 | 待开始 |
+|-------|---------|--------|--------|--------|
+| A: 编辑面板升级 | 35 | 29 | 0 | 6 |
+| B: 存档编辑器优化 | 14 | 4 | 0 | 10 |
+| C: 新增功能模块 | 12 | 0 | 0 | 12 |
+| D: 高级工具 | 14 | 0 | 0 | 14 |
+| E: 世代专属与打磨 | 17 | 1 | 0 | 16 |
+| F: 后端基础设施 | 8 | 3 | 0 | 5 |
+| G: GBA在线模拟器 | 21 | 17 | 0 | 4 |
+| H: NDS在线模拟器 | 26 | 16 | 0 | 10 |
+| **合计** | **147** | **74** | **0** | **73** |
+
+> **更新 (2026-06-01 深夜)**：
+> - **GBA 存档同步流程修复**（4 项）:
+>   - `CreateNewGame` 改为使用 PKHeX `SaveUtil.GetBlankSAV()` 创建合法空白存档，写入文件系统
+>   - `SyncSave` (JSON) 同步后解析存档并更新 DB 元数据
+>   - 新增 `SyncSaveBinary` 端点 — beforeunload 时 sendBeacon 发送二进制存档
+>   - 前端 `u8b64` chunk 从 32KB→8KB，移除 keepalive，新增 sendBeacon 紧急同步
+> - **NDS 在线模拟器 Dashboard 集成**（10 项完成）:
+>   - Dashboard 新增 9 张 NDS 游戏卡片（钻石/珍珠/白金/心金/魂银/黑/白/黑2/白2）
+>   - Modal 支持 NDS：按版本过滤存档、动态 Gen Tag、路由到 `/play-nds/`
+>   - Saves 页 `GAME_VERSION_DISPLAY` 补充 Gen4/5（14 个版本号→名称+颜色映射）
+>   - Saves 页「游玩」按钮扩展至 Gen4/5
+>   - 创建 `NdsEmulatorPage` 组件：双屏渲染、触摸屏覆盖层、按键映射、30s 同步、sendBeacon 紧急同步
+>   - `melonds.ts` 导出 `DsInputButton` 类型
+>   - `App.tsx` 新增 `/play-nds/:saveFileId` 路由 (React.lazy)
+> - **已知遗留**:
+>   - 最小测试页 `/emulator/nds/test.html` 未经浏览器验证（P0 最高优先级）
+>   - NDS 存档兼容性未验证（PKHeX 解析 512KB .sav）
+>   - beforeunload sendBeacon Token 通过 query string 传递
+>   - emoji 已在全局禁用，无需单独处理
 
 ---
 
-*最后更新: 2026-05-30 — Phase 3-9 后端完成，Phase 2-6 前端完成*
+> **参考文档**:
+> - `docs/PKHeX完整功能对比与缺口分析报告.md` — 逐字段缺口详情
+> - `docs/PKMDS-Blazor分析报告.md` — UI/UX 借鉴参考
+> - `docs/TODOLIST.md` — 原基础设施 TODO
+> - `docs/宝可梦全世代管理端-技术方案设计.md` — 原始技术方案
