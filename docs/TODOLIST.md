@@ -162,19 +162,21 @@
 
 ---
 
-### A.7 外观/装饰 Tab（Cosmetic Tab）— 覆盖率 0% → 80%（全新）
+### A.7 外观/装饰 Tab（Cosmetic Tab）— 覆盖率 0% → 80%（✅ 已完成）
 
-- [ ] **标记编辑器 (Markings)**
+- [x] **标记编辑器 (Markings)**
   - 6 个标记：● ▲ ■ ♥ ★ ♦
   - 每个标记三态：不显示/蓝色/红色
   - 可视化点击切换
+  - Gen3-6 仅支持关/蓝（二进制），Gen7+ 支持关/蓝/红（三态）
 
-- [ ] **选美属性编辑 (Contest Stats)**
+- [x] **选美属性编辑 (Contest Stats)**
   - Cool / Beauty / Cute / Smart / Tough (0-255)
   - Sheen 光泽度 (0-255, Gen3-4)
-  - 雷达图可视化
+  - 条件显示：仅 Gen3-4
+  - (雷达图可视化待后续迭代)
 
-- [ ] **来源标记显示 (Origin Mark, 只读)**
+- [x] **来源标记显示 (Origin Mark, 只读)**
   - 根据来源游戏版本展示对应图标：
     - Gen6 → 五角形 (Pentagon)
     - Gen7 → 三叶草 (Clover)
@@ -184,11 +186,13 @@
     - Gen9 SV → Paldea
     - VC → Game Boy
     - GO → GO
-  - 精灵图展示
+  - 彩色 Tag 展示，条件显示：仅 Gen6+
 
-- [ ] **晃晃斑斑点预览 (Spinda Spots)**
+- [x] **晃晃斑斑点预览 (Spinda Spots)**
   - 根据 PID 计算 4 个斑点坐标
-  - 精灵图上叠加斑点位置（Canvas 绘制）
+  - 精灵图上叠加斑点位置（Canvas 绘制，2× 缩放）
+  - 条件显示：仅晃晃斑(#327)
+  - 显示斑点坐标数值 + PID 十六进制
 
 ---
 
@@ -717,7 +721,7 @@ Week 15-16: Phase E.2 世代专属工具（Gen3 RTC等）
 
 | Phase | 总任务数 | 已完成 | 进行中 | 待开始 |
 |-------|---------|--------|--------|--------|
-| A: 编辑面板升级 | 35 | 29 | 0 | 6 |
+| A: 编辑面板升级 | 35 | 33 | 0 | 2 |
 | B: 存档编辑器优化 | 14 | 4 | 0 | 10 |
 | C: 新增功能模块 | 12 | 0 | 0 | 12 |
 | D: 高级工具 | 14 | 0 | 0 | 14 |
@@ -725,8 +729,20 @@ Week 15-16: Phase E.2 世代专属工具（Gen3 RTC等）
 | F: 后端基础设施 | 8 | 3 | 0 | 5 |
 | G: GBA在线模拟器 | 21 | 17 | 0 | 4 |
 | H: NDS在线模拟器 | 27 | 20 | 0 | 7 |
-| **合计** | **148** | **79** | **0** | **69** |
+| **合计** | **148** | **83** | **0** | **65** |
 
+> **更新 (2026-06-02)**：
+> 
+> ### Phase A.7 外观/装饰 Tab 完成
+> - ✅ 新建 `CosmeticTab.tsx` 组件（327行），EditPanel 注册第7个Tab
+> - ✅ **标记编辑器**: 6符号按钮(●▲■♥★♦)，Gen3-6关↔蓝 / Gen7+关→蓝→红三态循环
+> - ✅ **选美属性**: Cool/Beauty/Cute/Smart/Tough/Sheen，Gen3-4条件显示
+> - ✅ **来源标记**: 只读Tag展示，Gen6+条件显示，预置Gen6-9+VC+GO全套映射
+> - ✅ **晃晃斑斑点**: Canvas加载精灵图+PID计算4斑点叠加绘制，仅晃晃斑(#327)显示
+> - ⚠️ 后端 markings 写入目前只处理第一个标记（`Marking` 属性），后续需补充 `SetMarking(index)` 反射调用
+> - ⚠️ Contest Stats 雷达图、Spinda 精灵图精确映射留待后续打磨
+> - ⚠️ Phase A 剩余2项：闪光类型选择(Gen8+)、能力值雷达图
+> 
 > **更新 (2026-06-01 深夜 / 6月2日凌晨)**：
 > 
 > ### GBA 存档同步流程修复
@@ -761,12 +777,43 @@ Week 15-16: Phase E.2 世代专属工具（Gen3 RTC等）
 > - PKHeX GameVersion 内部值映射: RS(56)→Ruby, RSE(57)→Emerald, FRLG(58)→FireRed
 > - 黑/白版本号修正: PKHeX W=20, B=21 (原映射反了)
 > - `GameVersionNormalizer` 统一前后端版本号
+>
+> **更新 (2026-06-02 下午)**：
+>
+> ### melonDS GPU 加速 (WebGL 2.0)
+> - ✅ 源码修补: GLESCompat.h/cpp 兼容层 (glColorMaski仿真 + GL_BGRA→RGBA + glFramebufferTexture→2D + glDrawBuffer→DrawBuffers + glMapBuffer→MapBufferRange 等 15+ API 映射)
+> - ✅ GLSL 着色器转换: GPU3D_OpenGL_shaders.h + GPU_OpenGL_shaders.h 全部 `#version 140`→`#version 300 es` + `layout(location=N) out` + `precision highp float`
+> - ✅ WebGL 2.0 上下文创建: WasmEmulator::initialize() 中用 emscripten_webgl_create_context + GLRenderer::New()
+> - ✅ 帧缓冲区读回: GLCompositor::RenderFrame 末尾添加 glReadPixels 将合成帧写回 GPU::Framebuffer
+> - ✅ ComputeRenderer 禁用 (需 GL 4.3 计算着色器, WebGL 2.0 不支持)
+> - ✅ 编译成功: wasmemulator.wasm 911KB (原 843KB), Emscripten 5.0.7
+> - ✅ 当前状态: 2D/3D 均可运行，WebGL 2.0 GPU 路径已打通
+> - ⚠️ 实测结论: 3D 场景仍存在明显顿挫与音频卡顿，60FPS 不稳定
+> - ⚠️ 原因判断: 当前浏览器链路仍为 GPU 渲染 + `glReadPixels` 回读 + JS `putImageData`，CPU/GPU 往返成本过高
+> - 🛑 决策: 暂停继续优化 NDS GPU 性能，不再在当前阶段继续修改这条链路
+> - ⚠️ 已知风险: glColorMaski 并集方案可能导致边缘标记/雾通道的细微视觉差异
+> - ⚠️ GL_BGRA→RGBA 映射可能导致 R/B 通道交换 (需实测确认)
+>
+> ### NDS 存档同步链路修正
+> - ✅ `melonds.ts` 调整启动顺序：`setSavePath('/savefiles/game.sav')` 提前到 `loadCart()` 之前，避免已有存档打开时未被加载
+> - ✅ wasmelonDS `writeSave()` 增加 `FileFlush + CloseFile`，避免游戏内保存后 `.sav` 未真正落盘
+> - ✅ NDS `beforeunload` 增加新游戏分支：无 `saveFileId` 时走 `/api/Emulator/sync-save/new/{gameId}`，允许正常退出时自动创建存档记录
+> - ✅ 后端新增二进制新游戏同步入口：接收 `sendBeacon` 的 `.sav`，自动 `CreateNewGame()` + 写文件系统 + 更新 `save_files` 元数据
+> - ⚠️ 以上修正已完成，但“新游戏内保存→直接退出→存档管理出现并可重新加载”仍需最终人工验收
 > 
 > ### 已知遗留
-> - NDS WASM 开启 PThreads 但未充分测试 (SharedArrayBuffer 需要 HTTPS + COOP/COEP)
 > - NDS 存档同步可靠性需实测 (512KB NDS .sav 同步)
 > - OpenGL GPU 渲染器因 WebGL2 API 兼容问题未启用 (glColorMaski/glDrawBuffer/glMapBuffer 缺失)
 > - 存档目录待迁移至项目内 (`data/saves/`)
+> 
+> **更新 (2026-06-02 下午)**：
+> 
+> ### NDS 模拟器 frameUpdate 修复
+> - 🐛 **Bug**: melonDS WASM 加载后 frameUpdate 持续报错 `TypeError: Cannot read properties of undefined (reading 'buffer')`
+>   - 根因: Emscripten 5.0.7 + PThreads 编译后 `Module.HEAPU8` 为 undefined
+>   - `webmelon.js:442` 使用 `Module.HEAPU8.buffer` 但新版 Emscripten 中 HEAPU8 仅为局部 var，未导出到 Module 对象
+>   - 修复: `webmelon.js` 3处 `Module.HEAPU8.buffer` → `Module.wasmMemory.buffer`（wasmMemory 已显式导出）
+> - 🔧 **Program.cs 中间件**: Cross-Origin Isolation 头部从仅 `/play` → `/play` + `/play-nds`（melonDS PThreads 依赖 SharedArrayBuffer）
 
 ---
 

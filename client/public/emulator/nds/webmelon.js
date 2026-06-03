@@ -124,6 +124,16 @@
         topScreen: null,
         bottomScreen: null
       },
+      emulatorIsAccelerated: false,
+      emulatorRenderCache: {
+        gpuCanvas: null,
+        topCanvas: null,
+        bottomCanvas: null,
+        topCtx: null,
+        bottomCtx: null,
+        topImageData: null,
+        bottomImageData: null
+      },
       emulatorScreenTouching: false,
       emulatorButtonInput: 0,
       emulatorFirmwareSettings: null,
@@ -165,6 +175,14 @@
           WebMelon._internal.emulatorFrameInterval = 1000 / 60;
           WebMelon._internal.emulatorAudioQueue.left = new Int16Array(8192);
           WebMelon._internal.emulatorAudioQueue.right = new Int16Array(8192);
+          WebMelon._internal.emulatorIsAccelerated = false;
+          WebMelon._internal.emulatorRenderCache.gpuCanvas = null;
+          WebMelon._internal.emulatorRenderCache.topCanvas = null;
+          WebMelon._internal.emulatorRenderCache.bottomCanvas = null;
+          WebMelon._internal.emulatorRenderCache.topCtx = null;
+          WebMelon._internal.emulatorRenderCache.bottomCtx = null;
+          WebMelon._internal.emulatorRenderCache.topImageData = null;
+          WebMelon._internal.emulatorRenderCache.bottomImageData = null;
           WebMelon._internal.emulator = null;
         },
         onSaveWrite: () => {
@@ -282,8 +300,13 @@
         const audioSource = WebMelon._internal.emulatorAudioCtx.createBufferSource();
         const audioProcessor = WebMelon._internal.emulatorAudioCtx.createScriptProcessor(4096, 0, 2);
         audioProcessor.addEventListener('audioprocess', WebMelon.audio.processAudio);
+        // Insert a GainNode between processor and destination for volume control
+        const gainNode = WebMelon._internal.emulatorAudioCtx.createGain();
+        gainNode.gain.value = 1.0;
+        WebMelon._internal.emulatorAudioGain = gainNode;
         audioSource.connect(audioProcessor);
-        audioProcessor.connect(WebMelon._internal.emulatorAudioCtx.destination);
+        audioProcessor.connect(gainNode);
+        gainNode.connect(WebMelon._internal.emulatorAudioCtx.destination);
         audioSource.start();
       }
     },
@@ -429,26 +452,32 @@
         },
         frameUpdate: () => {
           let emulator = WebMelon._internal.emulator;
-          let topCtx = document.getElementById(WebMelon._internal.emulatorElements.topScreen).getContext('2d');
-          let bottomCtx = document.getElementById(WebMelon._internal.emulatorElements.bottomScreen).getContext('2d');
+          let topCtx = WebMelon._internal.emulatorRenderCache.topCtx;
+          let bottomCtx = WebMelon._internal.emulatorRenderCache.bottomCtx;
+          let gpuCanvas = WebMelon._internal.emulatorRenderCache.gpuCanvas;
           let audioQueue = WebMelon._internal.emulatorAudioQueue;
 
           try {
-            let topScreenPtr = emulator.getTopScreen();
-            let bottomScreenPtr = emulator.getBottomScreen();
             let audioBufferPtr = emulator.getAudioBuffer();
             let audioSamples = emulator.getAudioSamples();
 
-            let spuOutputArray = new Int16Array(Module.HEAPU8.buffer, audioBufferPtr, audioSamples * 2);
-            let topScreenArray = new Uint8Array(Module.HEAPU8.buffer, topScreenPtr, 256 * 192 * 4);
-            let bottomScreenArray = new Uint8Array(Module.HEAPU8.buffer, bottomScreenPtr, 256 * 192 * 4);
-            let topDataImage = topCtx.createImageData(256, 192);
-            let bottomDataImage = bottomCtx.createImageData(256, 192);
+            let spuOutputArray = new Int16Array(HEAPU8.buffer, audioBufferPtr, audioSamples * 2);
+            if (WebMelon._internal.emulatorIsAccelerated && gpuCanvas) {
+              topCtx.drawImage(gpuCanvas, 0, 0, 256, 192, 0, 0, 256, 192);
+              bottomCtx.drawImage(gpuCanvas, 0, 194, 256, 192, 0, 0, 256, 192);
+            } else {
+              let topScreenPtr = emulator.getTopScreen();
+              let bottomScreenPtr = emulator.getBottomScreen();
+              let topScreenArray = new Uint8Array(HEAPU8.buffer, topScreenPtr, 256 * 192 * 4);
+              let bottomScreenArray = new Uint8Array(HEAPU8.buffer, bottomScreenPtr, 256 * 192 * 4);
+              let topDataImage = WebMelon._internal.emulatorRenderCache.topImageData;
+              let bottomDataImage = WebMelon._internal.emulatorRenderCache.bottomImageData;
 
-            topDataImage.data.set(topScreenArray);
-            bottomDataImage.data.set(bottomScreenArray);
-            topCtx.putImageData(topDataImage, 0, 0);
-            bottomCtx.putImageData(bottomDataImage, 0, 0);
+              topDataImage.data.set(topScreenArray);
+              bottomDataImage.data.set(bottomScreenArray);
+              topCtx.putImageData(topDataImage, 0, 0);
+              bottomCtx.putImageData(bottomDataImage, 0, 0);
+            }
 
             if (audioSamples !== 0) {
               for (let i = 0; i < audioSamples; i++) {
@@ -522,7 +551,24 @@
         console.log('emulation started!');
         WebMelon._internal.emulatorElements.topScreen = topScreenCanvasId;
         WebMelon._internal.emulatorElements.bottomScreen = bottomScreenCanvasId;
+        const topCanvas = document.getElementById(topScreenCanvasId);
+        const bottomCanvas = document.getElementById(bottomScreenCanvasId);
+        const topCtx = topCanvas.getContext('2d');
+        const bottomCtx = bottomCanvas.getContext('2d');
+        topCtx.imageSmoothingEnabled = false;
+        bottomCtx.imageSmoothingEnabled = false;
+        WebMelon._internal.emulatorRenderCache.gpuCanvas = document.getElementById('melonDS-gl-canvas');
+        WebMelon._internal.emulatorRenderCache.topCanvas = topCanvas;
+        WebMelon._internal.emulatorRenderCache.bottomCanvas = bottomCanvas;
+        WebMelon._internal.emulatorRenderCache.topCtx = topCtx;
+        WebMelon._internal.emulatorRenderCache.bottomCtx = bottomCtx;
+        WebMelon._internal.emulatorRenderCache.topImageData = topCtx.createImageData(256, 192);
+        WebMelon._internal.emulatorRenderCache.bottomImageData = bottomCtx.createImageData(256, 192);
         WebMelon._internal.emulator.initialize(!WebMelon._internal.firmwareSettings.shouldFirmwareBoot);
+        WebMelon._internal.emulatorIsAccelerated =
+          typeof WebMelon._internal.emulator.isAcceleratedRendering === 'function' &&
+          WebMelon._internal.emulator.isAcceleratedRendering();
+        WebMelon._internal.emulatorRenderCache.gpuCanvas = document.getElementById('melonDS-gl-canvas');
         const touchScreen = document.getElementById(WebMelon._internal.emulatorElements.bottomScreen);
         touchScreen.addEventListener('mousedown', WebMelon.emulator._eventListeners.mouseDown);
         touchScreen.addEventListener('mousemove', WebMelon.emulator._eventListeners.mouseMove);

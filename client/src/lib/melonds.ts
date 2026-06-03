@@ -35,6 +35,7 @@ interface WebMelonEmulator {
   hasEmulator: () => boolean;
   createEmulator: () => void;
   loadFreeBIOS: () => void;
+  loadCart: () => void;
   loadRom: (romPath: string) => void;
   setSavePath: (pathname: string) => void;
   startEmulation: (topScreenId: string, bottomScreenId: string) => void;
@@ -49,6 +50,8 @@ interface WebMelonInput {
   pressButton: (button: DsInputButton) => void;
   releaseButton: (button: DsInputButton) => void;
   touchScreen: (x: number, y: number, pressed: boolean) => void;
+  getInputSettings: () => any;
+  setInputSettings: (settings: any) => void;
 }
 
 interface WebMelonAssembly {
@@ -68,6 +71,8 @@ interface WebMelonInterface {
   storage: WebMelonStorage;
   emulator: WebMelonEmulator;
   input: WebMelonInput;
+  _internal?: any;
+  audio?: any;
 }
 
 // ── 模拟器接口 ──────────────────────────────────────────
@@ -123,6 +128,257 @@ export const NDS_ROM_NAMES: Record<string, string> = {
   pkm_black2: '宝可梦 黑2', pkm_white2: '宝可梦 白2',
 };
 
+// ── WebGL 兼容性 Monkey-Patch ──────────────────────────────
+// melonDS 的 WebGL2 GPU 路径仍带着少量桌面 GL 调用习惯。这里不做“全量降级”，
+// 只修正已经确认会在浏览器里失败的组合：
+//
+//   A. GL_UNSIGNED_SHORT_1_5_5_5_REV → GL_UNSIGNED_SHORT_5_5_5_1（并复制/重排像素位）
+//   B. GL_BGRA → GL_RGBA（读写时做 R/B 通道交换）
+//   C. GL_RGBA_INTEGER → GL_RGBA（当前编译产物里对应的目标纹理是普通 RGBA 纹理）
+//
+// 重点：不要再无差别改写 internalformat。像 GL_R8UI / GL_DEPTH24_STENCIL8
+// 这类 sized internal format 在 WebGL2 中本来就是合法且必须保留的。
+
+const GL_UNSIGNED_SHORT_1_5_5_5_REV = 0x8366; // desktop GL only
+const GL_UNSIGNED_SHORT_5_5_5_1     = 0x8034;
+const GL_UNSIGNED_BYTE              = 0x1401;
+const GL_UNSIGNED_INT_24_8          = 0x84FA;
+const GL_BGRA                       = 0x80E1;
+const GL_RED                        = 0x1903;
+const GL_RGB                        = 0x1907;
+const GL_RGBA                       = 0x1908;
+const GL_DEPTH_STENCIL              = 0x84F9;
+const GL_RED_INTEGER                = 0x8D94;
+const GL_RGBA_INTEGER               = 0x8D99;
+const GL_R8UI                       = 0x8232;
+
+/** 将 A1RGB555 (bit15=A) 像素数据就地转换为 RGB555_A1 (bit0=A) */
+function swapRev555To5551(data: Uint8Array): void {
+  const view = new Uint16Array(data.buffer, data.byteOffset, data.byteLength / 2);
+  for (let i = 0; i < view.length; i++) {
+    const input = view[i];
+    view[i] = ((input & 0x7FFF) << 1) | ((input & 0x8000) >> 15);
+  }
+}
+
+/** 交换 R↔B 通道 (RGBA ↔ BGRA): 就地交换每像素的 R 和 B */
+function swapRB(data: Uint8Array): void {
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    data[i] = data[i + 2];
+    data[i + 2] = r;
+  }
+}
+
+function cloneBytes(data: ArrayBufferView): Uint8Array {
+  const src = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  const copy = new Uint8Array(src.byteLength);
+  copy.set(src);
+  return copy;
+}
+
+function createTypedViewLike(data: ArrayBufferView, buffer: ArrayBufferLike, byteOffset: number, byteLength: number): ArrayBufferView {
+  if (data instanceof Uint8Array) return new Uint8Array(buffer, byteOffset, byteLength);
+  if (data instanceof Uint16Array) return new Uint16Array(buffer, byteOffset, byteLength / 2);
+  if (data instanceof Uint32Array) return new Uint32Array(buffer, byteOffset, byteLength / 4);
+  if (data instanceof Int8Array) return new Int8Array(buffer, byteOffset, byteLength);
+  if (data instanceof Int16Array) return new Int16Array(buffer, byteOffset, byteLength / 2);
+  if (data instanceof Int32Array) return new Int32Array(buffer, byteOffset, byteLength / 4);
+  if (data instanceof Float32Array) return new Float32Array(buffer, byteOffset, byteLength / 4);
+  return new Uint8Array(buffer, byteOffset, byteLength);
+}
+
+function createTypedViewForGLType(type: number, buffer: ArrayBufferLike, byteOffset: number, byteLength: number): ArrayBufferView {
+  if (type === GL_UNSIGNED_SHORT_1_5_5_5_REV || type === GL_UNSIGNED_SHORT_5_5_5_1) {
+    return new Uint16Array(buffer, byteOffset, byteLength / 2);
+  }
+  if (type === GL_UNSIGNED_INT_24_8) {
+    return new Uint32Array(buffer, byteOffset, byteLength / 4);
+  }
+  return new Uint8Array(buffer, byteOffset, byteLength);
+}
+
+function estimatePixelByteLength(width: number, height: number, format: number, type: number): number {
+  let channels = 4;
+  if (format === GL_RED || format === GL_RED_INTEGER) channels = 1;
+  else if (format === GL_RGB) channels = 3;
+  else if (format === GL_DEPTH_STENCIL) channels = 1;
+
+  let bytesPerChannel = 1;
+  if (type === GL_UNSIGNED_INT_24_8) {
+    return width * height * 4;
+  }
+  if (type === GL_UNSIGNED_SHORT_1_5_5_5_REV || type === GL_UNSIGNED_SHORT_5_5_5_1) {
+    return width * height * 2;
+  }
+  if (type !== GL_UNSIGNED_BYTE) {
+    bytesPerChannel = 2;
+  }
+
+  return width * height * channels * bytesPerChannel;
+}
+
+function slicePixelData(
+  data: ArrayBufferView | null,
+  offsetElements: number | undefined,
+  byteLength: number,
+): ArrayBufferView | null {
+  if (!data) {
+    return data;
+  }
+  if (offsetElements == null) {
+    return data;
+  }
+
+  const bytesPerElement = (data as any).BYTES_PER_ELEMENT ?? 1;
+  const start = data.byteOffset + offsetElements * bytesPerElement;
+  return createTypedViewLike(data, data.buffer, start, byteLength);
+}
+
+function prepareUploadData(
+  data: ArrayBufferView | null,
+  needsRev555Swap: boolean,
+  needsBgraSwap: boolean,
+  outputType: number,
+): ArrayBufferView | null {
+  if (!data || (!needsRev555Swap && !needsBgraSwap)) {
+    return data;
+  }
+
+  const copy = cloneBytes(data);
+  if (needsRev555Swap) {
+    swapRev555To5551(copy);
+  }
+  if (needsBgraSwap) {
+    swapRB(copy);
+  }
+  return createTypedViewForGLType(outputType, copy.buffer, copy.byteOffset, copy.byteLength);
+}
+
+// 诊断用：记录已见过的 GL 参数组合（避免刷屏）
+const _seenCombos = new Set<string>();
+
+function installWebGLCompatPatch(): void {
+  const proto = HTMLCanvasElement.prototype as any;
+  if (proto.__melondsWebGLCompatInstalled) {
+    return;
+  }
+
+  // IMPORTANT: 不能 bind 原生 getContext — 原生 DOM 方法必须用实际的 canvas
+  // 元素作为 this 调用，否则会抛出 "Illegal invocation"。
+  const origGetContext = HTMLCanvasElement.prototype.getContext;
+
+  proto.getContext = function (
+    contextType: string,
+    attrs?: any,
+  ): RenderingContext | null {
+    const ctx = origGetContext.call(this, contextType, attrs);
+    if (!ctx || !contextType.includes('webgl')) return ctx;
+
+    const gl = ctx as any;
+    if (gl.__melondsCompatWrapped) {
+      return ctx;
+    }
+    gl.__melondsCompatWrapped = true;
+
+    // ── 1. texImage2D ─────────────────────────────────────
+    const origTexImage2D = gl.texImage2D.bind(gl);
+    gl.texImage2D = function (...rawArgs: any[]): void {
+      let [target, level, internalformat, width, height, border, format, type, data, srcOffset] = rawArgs as [
+        number, number, number, number, number, number, number, number, ArrayBufferView | null, number | undefined
+      ];
+
+      const origInternalformat = internalformat;
+      const origFormat = format;
+      const origType = type;
+
+      data = slicePixelData(data, srcOffset, estimatePixelByteLength(width, height, format, type));
+
+      const needsRev555Swap = type === GL_UNSIGNED_SHORT_1_5_5_5_REV;
+      const needsBgraSwap = format === GL_BGRA;
+
+      if (needsRev555Swap) {
+        type = GL_UNSIGNED_SHORT_5_5_5_1;
+      }
+      if (needsBgraSwap) {
+        format = GL_RGBA;
+        if (internalformat === GL_BGRA) {
+          internalformat = GL_RGBA;
+        }
+      }
+      if (internalformat === GL_R8UI && format === GL_RED) {
+        format = GL_RED_INTEGER;
+      }
+      if (format === GL_RGBA_INTEGER && internalformat === GL_RGBA) {
+        format = GL_RGBA;
+      }
+
+      const uploadData = prepareUploadData(data, needsRev555Swap, needsBgraSwap, type);
+
+      if (origFormat !== format || origInternalformat !== internalformat || origType !== type) {
+        const key = `texImage2D ifmt=${origInternalformat}->${internalformat} fmt=${origFormat}->${format} type=${origType}->${type}`;
+        if (!_seenCombos.has(key)) { _seenCombos.add(key); console.debug('[WebGL compat]', key); }
+      }
+
+      origTexImage2D(target, level, internalformat, width, height, border, format, type, uploadData);
+    } as any;
+
+    // ── 2. texSubImage2D ──────────────────────────────────
+    const origTexSubImage2D = gl.texSubImage2D.bind(gl);
+    gl.texSubImage2D = function (...rawArgs: any[]): void {
+      let [target, level, xoffset, yoffset, width, height, format, type, data, srcOffset] = rawArgs as [
+        number, number, number, number, number, number, number, number, ArrayBufferView | null, number | undefined
+      ];
+
+      const origFormat = format;
+      const origType = type;
+
+      data = slicePixelData(data, srcOffset, estimatePixelByteLength(width, height, format, type));
+
+      const needsRev555Swap = type === GL_UNSIGNED_SHORT_1_5_5_5_REV;
+      const needsBgraSwap = format === GL_BGRA;
+
+      if (needsRev555Swap) {
+        type = GL_UNSIGNED_SHORT_5_5_5_1;
+      }
+      if (needsBgraSwap) {
+        format = GL_RGBA;
+      }
+      if (format === GL_RED && type === GL_UNSIGNED_BYTE) {
+        format = GL_RED_INTEGER;
+      }
+      if (format === GL_RGBA_INTEGER) {
+        format = GL_RGBA;
+      }
+
+      const uploadData = prepareUploadData(data, needsRev555Swap, needsBgraSwap, type);
+
+      if (origFormat !== format || origType !== type) {
+        const key = `texSubImage2D fmt=${origFormat}->${format} type=${origType}->${type}`;
+        if (!_seenCombos.has(key)) { _seenCombos.add(key); console.debug('[WebGL compat]', key); }
+      }
+
+      origTexSubImage2D(target, level, xoffset, yoffset, width, height, format, type, uploadData);
+    } as any;
+
+    // ── 3. readPixels ─────────────────────────────────────
+    const origReadPixels = gl.readPixels.bind(gl);
+    gl.readPixels = function (...rawArgs: any[]): void {
+      const [x, y, width, height, format, type, pixels, dstOffset] = rawArgs as [
+        number, number, number, number, number, number, ArrayBufferView | null, number | undefined
+      ];
+
+      const pixelLength = estimatePixelByteLength(width, height, format, type);
+      const outputPixels = slicePixelData(pixels, dstOffset, pixelLength);
+      origReadPixels(...rawArgs);
+    } as any;
+
+    return ctx;
+  };
+
+  proto.__melondsWebGLCompatInstalled = true;
+}
+
 // ── 创建模拟器 ──────────────────────────────────────────
 
 const SAVE_FILE_PATH = '/savefiles/game.sav';
@@ -136,6 +392,38 @@ export async function createNdsEmulator(
   if (!topCanvas.id) topCanvas.id = 'nds-top-screen';
   if (!bottomCanvas.id) bottomCanvas.id = 'nds-bottom-screen';
 
+  // ── 抑制 Emscripten 控制台日志 + WebGL Monkey-Patch ──
+  // wasmemulator.js 默认把所有 WASM printf 输出绑定到 console.log，
+  // melonDS 运行时会疯狂刷屏（107 个 out() 调用点），拖垮浏览器和 API。
+  const mod = (window as any).Module || {};
+  (window as any).Module = mod;
+  mod.print = mod.print || (() => {});
+  mod.printErr = mod.printErr || (() => {});
+
+  // ── WebGL 兼容性 Monkey-Patch ───────────────────────────
+  // melonDS 的 OpenGL 渲染器使用桌面 OpenGL 3.2 API，编译为 WASM 后通过
+  // Emscripten 映射到 WebGL/GLES。但 melonDS 用了一些桌面 GL 独有的
+  // type/format（如 GL_UNSIGNED_SHORT_1_5_5_5_REV），这些在 WebGL 2.0 /
+  // GLES 3.0 中不存在，导致 glTexImage2D 失败 → FBO 不完整 → 黑屏。
+  //
+  // 此处拦截 HTMLCanvasElement.getContext 来包装 WebGL 上下文，
+  // 修复不兼容的 GL 调用。
+  installWebGLCompatPatch();
+
+  // melonDS 3D GPU 需要一个 DOM Canvas 承载 WebGL 上下文。
+  // melonDS 内部 ASM_CONSTS 会动态创建 #melonDS-gl-canvas，
+  // 但提前创建可避免 document.body 未就绪的时序问题。
+  let glCanvas = document.getElementById('melonDS-gl-canvas') as HTMLCanvasElement | null;
+  if (!glCanvas) {
+    glCanvas = document.createElement('canvas');
+    glCanvas.id = 'melonDS-gl-canvas';
+    glCanvas.width = 256;
+    glCanvas.height = 192;
+    glCanvas.style.display = 'none';
+    document.body.appendChild(glCanvas);
+  }
+  mod.canvas = glCanvas;
+
   // 加载 Emscripten 胶水代码
   await loadScript('/emulator/nds/wasmemulator.js');
   // 加载 webmelon SDK
@@ -144,18 +432,16 @@ export async function createNdsEmulator(
   return new Promise((resolve) => {
     window.WebMelon.assembly.addLoadListener(() => {
       // 初始化虚拟文件系统 — 使用 MEMFS（内存文件系统），写入极快不卡帧
+      // Emscripten 5.0.7 + pthreads 不导出 HEAPU8 到 Module；
+      // 确保 Module.HEAPU8 可用（webmelon.js frameUpdate 需要）
+      const w = window as any;
+      if (!w.Module.HEAPU8 && w.HEAPU8) {
+        w.Module.HEAPU8 = w.HEAPU8;
+      }
+
       const { storage, emulator } = window.WebMelon;
       storage.createDirectory('/roms');
       storage.createDirectory('/savefiles');
-
-      // ── 音量控制 ──────────────────────────────────
-      let masterGain: GainNode | null = null;
-      try {
-        const audioCtx = window.WebMelon.audio.getAudioContext();
-        masterGain = audioCtx.createGain();
-        masterGain.gain.value = 1.0;
-        masterGain.connect(audioCtx.destination);
-      } catch { /* audio not available */ }
 
       // ── 麦克风噪声模拟 ────────────────────────────
       let micNoiseActive = false;
@@ -172,19 +458,12 @@ export async function createNdsEmulator(
           const { cart } = window.WebMelon;
           cart.createCart();
           cart.loadFileIntoCart(ROM_FILE_PATH);
-          emulator.loadCart();
-          // 4. 设置存档路径 + 启动模拟
+          // 4. 先设置存档路径，再 loadCart。
+          // wasm 侧会在 loadCart/loadRom 过程中检查该路径并加载现有存档。
           emulator.setSavePath(SAVE_FILE_PATH);
+          // 5. 加载卡带并启动模拟
+          emulator.loadCart();
           emulator.startEmulation(topCanvas.id, bottomCanvas.id);
-
-          // 5. 音频路由通过 GainNode（音量控制）
-          try {
-            const audioCtx = window.WebMelon.audio.getAudioContext();
-            if (masterGain) {
-              try { masterGain.disconnect(); } catch {}
-              masterGain.connect(audioCtx.destination);
-            }
-          } catch { /* audio routing best-effort */ }
         },
 
         loadSave(saveData: Uint8Array): void {
@@ -216,9 +495,13 @@ export async function createNdsEmulator(
         },
 
         setVolume(pct: number): void {
-          if (masterGain) {
-            masterGain.gain.value = Math.max(0, Math.min(1, pct / 100));
-          }
+          // webmelon 内部 GainNode（createAudioProcessor 创建，已插入音频链路）
+          try {
+            const gain: GainNode | undefined = window.WebMelon?._internal?.emulatorAudioGain;
+            if (gain) {
+              gain.gain.value = Math.max(0, Math.min(1, pct / 100));
+            }
+          } catch {}
           // 静音时暂停 AudioContext 省 CPU
           try {
             const ctx = window.WebMelon?.audio?.getAudioContext();

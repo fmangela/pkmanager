@@ -187,9 +187,11 @@ const NdsEmulatorPage: React.FC = () => {
       const token = localStorage.getItem('access_token');
       if (!token) return;
       const id = effectiveSaveId.current;
+      const blob = new Blob([sd], { type: 'application/octet-stream' });
       if (id) {
-        const blob = new Blob([sd], { type: 'application/octet-stream' });
         navigator.sendBeacon(`/api/Emulator/sync-save/${id}?token=${encodeURIComponent(token)}`, blob);
+      } else if (isNewGame && gameId) {
+        navigator.sendBeacon(`/api/Emulator/sync-save/new/${gameId}?token=${encodeURIComponent(token)}`, blob);
       }
     };
     window.addEventListener('beforeunload', unload);

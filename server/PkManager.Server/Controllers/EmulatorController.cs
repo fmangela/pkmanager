@@ -294,6 +294,89 @@ public class EmulatorController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { }, "存档已同步"));
     }
 
+    /// <summary>
+    /// 同步存档（二进制，新游戏首次同步）— beforeunload + sendBeacon 使用
+    /// </summary>
+    [HttpPost("sync-save/new/{gameId}")]
+    [RequestSizeLimit(16 * 1024 * 1024)]
+    public async Task<ActionResult<ApiResponse<object>>> SyncSaveBinaryNew(
+        string gameId, [FromQuery] string token)
+    {
+        if (string.IsNullOrEmpty(token)) return Unauthorized(ApiResponse<object>.Error(401, "未登录"));
+
+        var userId = _userContext.UserId;
+        if (userId == null)
+        {
+            try
+            {
+                var handler = new JwtSecurityTokenHandler();
+                var jwt = handler.ReadJwtToken(token);
+                var uidClaim = jwt.Claims.FirstOrDefault(c => c.Type == "sub" || c.Type == "userId");
+                if (uidClaim == null || !Guid.TryParse(uidClaim.Value, out var uid))
+                    return Unauthorized(ApiResponse<object>.Error(401, "Token 无效"));
+                userId = uid;
+            }
+            catch { return Unauthorized(ApiResponse<object>.Error(401, "Token 无效")); }
+        }
+
+        byte[] data;
+        using (var ms = new MemoryStream())
+        {
+            await Request.Body.CopyToAsync(ms);
+            data = ms.ToArray();
+        }
+        if (data.Length == 0) return BadRequest(ApiResponse<object>.Error(400, "存档数据为空"));
+
+        var created = await _saveFileService.CreateNewGame(userId.Value, gameId);
+        var saveFileId = created.SaveFileId;
+
+        var saveFile = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
+            "SELECT * FROM save_files WHERE id=@Id AND user_id=@Uid",
+            new { Id = saveFileId, Uid = userId.Value });
+        if (saveFile == null) return NotFound();
+
+        var savePath = saveFile.SavePath;
+        if (string.IsNullOrEmpty(savePath))
+        {
+            savePath = Path.Combine(BaseSaveDir, userId.Value.ToString(), saveFileId.ToString(), "save.sav");
+            Directory.CreateDirectory(Path.GetDirectoryName(savePath)!);
+            await _db.ExecuteAsync("UPDATE save_files SET save_path=@P WHERE id=@Id",
+                new { P = savePath, Id = saveFileId });
+        }
+        await System.IO.File.WriteAllBytesAsync(savePath, data);
+
+        string? trainerName = null;
+        int? pokemonCount = null;
+        try
+        {
+            var parsed = _parseService.ParseSaveFile(data, $"{gameId}.sav");
+            trainerName = parsed.TrainerName;
+            pokemonCount = parsed.PokemonCount;
+            await _db.ExecuteAsync(@"
+                UPDATE save_files SET
+                    file_size = @Size, is_modified = TRUE, updated_at = NOW(),
+                    trainer_name = @TN, trainer_id = @TID, secret_id = @SID,
+                    play_time = @PT, box_count = @BC, pokemon_count = @PC,
+                    generation = @G, game_version = @GV
+                WHERE id = @Id",
+                new
+                {
+                    Id = saveFileId, Size = (long)data.Length,
+                    TN = parsed.TrainerName, TID = parsed.TrainerId, SID = parsed.SecretId,
+                    PT = parsed.PlayTime, BC = parsed.BoxCount, PC = parsed.PokemonCount,
+                    G = parsed.Generation, GV = GameVersionNormalizer.Normalize(parsed.GameVersion)
+                });
+        }
+        catch
+        {
+            await _db.ExecuteAsync(
+                "UPDATE save_files SET file_size=@Size, is_modified=TRUE, updated_at=NOW() WHERE id=@Id",
+                new { Id = saveFileId, Size = (long)data.Length });
+        }
+
+        return Ok(ApiResponse<object>.Ok(new { saveFileId, trainerName, pokemonCount }, "存档已同步"));
+    }
+
     /// <summary>读取当前存档二进制（仅检查是否存在，供同步流程使用）</summary>
     private static byte[]? ReadSaveBytesSafe(Models.Entity.SaveFile entity)
     {
