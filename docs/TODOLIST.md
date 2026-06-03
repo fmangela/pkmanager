@@ -842,6 +842,15 @@ Week 15-16: Phase E.2 世代专属工具（Gen3 RTC等）
 > - ✅ **TypeScript 0 错误**: 修复 `BlobPart` 类型错误 (Emulator.tsx + NdsEmulator.tsx 的 `Uint8Array<ArrayBufferLike>` 不兼容) + `melonds.ts` WebGL readPixels 未用变量 + `Dashboard.tsx` 未用 `message` 变量
 > - ℹ️ **存档目录**: 当前 `/home/fmangela/pkmanager-saves` 工作正常，暂不迁移至项目内 `data/saves/`
 >
+> **更新 (2026-06-03 下午，第三轮)**：
+>
+> ### 存档目录迁移至项目内部
+> - ✅ **存档路径迁移**: `/home/fmangela/pkmanager-saves` → `server/PkManager.Server/data/saves/`
+>   - `SaveFileService` + `EmulatorController` 注入 `IWebHostEnvironment`，使用 `ContentRootPath` 相对定位
+>   - 路径格式: `{ContentRoot}/data/saves/{userId}/{saveFileId}/save.sav`
+>   - 备份路径: `{ContentRoot}/data/saves/{userId}/{saveFileId}/backups/`
+>   - `.gitignore`: 新增 `server/PkManager.Server/data/` 忽略规则
+>
 > ### 已知遗留
 > - OpenGL GPU 渲染器因 WebGL2 API 兼容问题未启用 (glColorMaski/glDrawBuffer/glMapBuffer 缺失)
 > 
