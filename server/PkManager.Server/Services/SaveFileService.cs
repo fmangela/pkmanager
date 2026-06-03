@@ -90,6 +90,13 @@ public class SaveFileService
         try
         {
             parsed = _parseService.ParseSaveFile(rawData, saveFile.Filename);
+            // 优先使用 DB 中已归一化的具体版本号（SyncSave 时通过 NormalizeOrKeepExisting 存入），
+            // PKHeX 重新解析可能再次返回复合版本（如 DP=62）
+            if (saveFile.GameVersion != null)
+            {
+                parsed.GameVersion = saveFile.GameVersion.Value;
+                parsed.GameVersionName = GetVersionNameSafe(saveFile.GameVersion);
+            }
         }
         catch (BusinessException)
         {
@@ -134,8 +141,8 @@ public class SaveFileService
             "pkm_soulsilver" => (generation: 4, version: 8, name: "宝可梦 魂银"),
             "pkm_white" => (generation: 5, version: 20, name: "宝可梦 白"),
             "pkm_black" => (generation: 5, version: 21, name: "宝可梦 黑"),
-            "pkm_black2" => (generation: 5, version: 22, name: "宝可梦 黑2"),
-            "pkm_white2" => (generation: 5, version: 23, name: "宝可梦 白2"),
+            "pkm_white2" => (generation: 5, version: 22, name: "宝可梦 白2"),
+            "pkm_black2" => (generation: 5, version: 23, name: "宝可梦 黑2"),
             _ => throw new BusinessException($"未知的游戏: {gameId}")
         };
 
@@ -187,6 +194,9 @@ public class SaveFileService
         Directory.CreateDirectory(Path.GetDirectoryName(savePath)!);
         await File.WriteAllBytesAsync(savePath, rawData);
 
+        // 归一化游戏版本号（PKHeX 可能返回复合版本如 DP=62）
+        var normalizedVersion = Helpers.GameVersionNormalizer.Normalize(parsed.GameVersion);
+
         await _db.ExecuteAsync(@"
             INSERT INTO save_files (id, user_id, filename, file_size, generation, game_version,
                 trainer_name, trainer_id, secret_id, play_time, box_count, pokemon_count,
@@ -195,7 +205,7 @@ public class SaveFileService
                 @TrainerName, @TrainerId, @SecretId, @PlayTime, @BoxCount, @PokemonCount,
                 @IsValidSave, @RawSaveData, @SavePath)",
             new { Id = saveFileId, UserId = userId, parsed.Filename, parsed.FileSize, parsed.Generation,
-                parsed.GameVersion, parsed.TrainerName, parsed.TrainerId, parsed.SecretId,
+                GameVersion = normalizedVersion, parsed.TrainerName, parsed.TrainerId, parsed.SecretId,
                 parsed.PlayTime, parsed.BoxCount, parsed.PokemonCount,
                 IsValidSave = true, RawSaveData = Array.Empty<byte>(), SavePath = savePath });
 

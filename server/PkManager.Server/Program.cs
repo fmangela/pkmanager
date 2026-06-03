@@ -124,10 +124,11 @@ var app = builder.Build();
 
 // ── 中间件管道 ───────────────────────────────────────────
 
-// Cross-Origin Isolation — only for emulator page (mGBA WASM needs SharedArrayBuffer)
+// Cross-Origin Isolation — emulator pages need SharedArrayBuffer (mGBA + melonDS pthreads)
 app.Use(async (context, next) =>
 {
-    if (context.Request.Path.StartsWithSegments("/play"))
+    var path = context.Request.Path;
+    if (path.StartsWithSegments("/play") || path.StartsWithSegments("/play-nds"))
     {
         context.Response.Headers["Cross-Origin-Opener-Policy"] = "same-origin";
         context.Response.Headers["Cross-Origin-Embedder-Policy"] = "credentialless";

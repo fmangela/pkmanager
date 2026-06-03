@@ -130,7 +130,7 @@ const NdsEmulatorPage: React.FC = () => {
     const emu = emuRef.current;
     if (!emu) return false;
     const sd = emu.getSave();
-    if (!sd?.length) return false;
+    if (!sd?.length) { setStatus('尚未在游戏中存档，无法同步'); setTimeout(() => { if (ready) setStatus('就绪'); }, 2500); return false; }
     const token = localStorage.getItem('access_token');
     if (!token) return false;
     setSyncing(true); setSynced(false);

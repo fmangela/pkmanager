@@ -16,6 +16,10 @@ declare global {
   }
 }
 
+// Emscripten 5.0.7 将 FS 导出为全局 var，而非 Module.FS。
+// webmelon.js 已使用裸 FS，此处统一。
+declare const FS: any;
+
 export type DsInputButton = 'A' | 'B' | 'SELECT' | 'START' | 'DPAD_RIGHT' | 'DPAD_LEFT' | 'DPAD_UP' | 'DPAD_DOWN' | 'R' | 'L' | 'X' | 'Y';
 
 interface WebMelonCart {
@@ -118,6 +122,12 @@ export const NDS_VERSION_MAP: Record<number, string> = {
   7: 'pkm_heartgold', 8: 'pkm_soulsilver',
   // Gen5 (PKHeX: W=20, B=21, W2=22, B2=23)
   20: 'pkm_white', 21: 'pkm_black', 22: 'pkm_white2', 23: 'pkm_black2',
+  // PKHeX 复合版本 → 默认具体游戏（兜底，NormalizeOrKeepExisting 应已避免走到这里）
+  62: 'pkm_diamond',    // DP → 钻石（无法区分时默认）
+  63: 'pkm_platinum',   // DPPt → 白金
+  64: 'pkm_heartgold',  // HGSS → 心金
+  66: 'pkm_black',      // BW → 黑
+  67: 'pkm_black2',     // B2W2 → 黑2
 };
 
 export const NDS_ROM_NAMES: Record<string, string> = {
@@ -468,15 +478,15 @@ export async function createNdsEmulator(
 
         loadSave(saveData: Uint8Array): void {
           try {
-            window.Module.FS.writeFile(SAVE_FILE_PATH, saveData);
+            FS.writeFile(SAVE_FILE_PATH, saveData);
           } catch {
-            window.Module.FS.createDataFile('/savefiles', 'game.sav', saveData, true, true);
+            FS.createDataFile('/savefiles', 'game.sav', saveData, true, true);
           }
         },
 
         getSave(): Uint8Array | null {
           try {
-            return window.Module.FS.readFile(SAVE_FILE_PATH);
+            return FS.readFile(SAVE_FILE_PATH);
           } catch {
             return null;
           }

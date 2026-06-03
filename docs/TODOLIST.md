@@ -799,10 +799,44 @@ Week 15-16: Phase E.2 世代专属工具（Gen3 RTC等）
 > - ✅ wasmelonDS `writeSave()` 增加 `FileFlush + CloseFile`，避免游戏内保存后 `.sav` 未真正落盘
 > - ✅ NDS `beforeunload` 增加新游戏分支：无 `saveFileId` 时走 `/api/Emulator/sync-save/new/{gameId}`，允许正常退出时自动创建存档记录
 > - ✅ 后端新增二进制新游戏同步入口：接收 `sendBeacon` 的 `.sav`，自动 `CreateNewGame()` + 写文件系统 + 更新 `save_files` 元数据
-> - ⚠️ 以上修正已完成，但“新游戏内保存→直接退出→存档管理出现并可重新加载”仍需最终人工验收
+> - ⚠️ 以上修正已完成，但”新游戏内保存→直接退出→存档管理出现并可重新加载”仍需最终人工验收
 > 
+> **更新 (2026-06-03 下午)**：
+> 
+> ### NDS 存档同步 Bug 修复 — Module.FS 未定义导致 getSave() 永远返回 null
+> - 🐛 **Bug**: 游戏内保存后点击”同步存档”，存档管理页面无新存档出现
+>   - **根因**: Emscripten 5.0.7 编译产物中 `FS` 仅作为全局 `var FS` 导出，**未**赋值到 `Module.FS`
+>   - `melonds.ts` 中 `loadSave()` 和 `getSave()` 使用 `window.Module.FS.readFile/writeFile/createDataFile`，全部因 `Module.FS === undefined` 而抛出异常
+>   - `getSave()` 的 catch 块返回 `null` → `syncSaveNow()` 检查 `!sd?.length` 直接 `return false` → 静默失败
+>   - 修复: `melonds.ts` 中 `window.Module.FS.*` → 裸 `FS.*`（全局变量，webmelon.js 已正确使用）
+> - 🔧 **前端改进**: `syncSaveNow()` 在 `getSave()` 返回空数据时显示”尚未在游戏中存档”状态提示，不再静默失败
+>
+> ### NDS 存档游戏版本显示修复
+> - 🐛 **Bug**: 存档管理页面 NDS 存档显示 “Gen62” 而非正确游戏名（如”钻石”）
+>   - **根因**: PKHeX.Core 解析 NDS 存档时可能返回**复合版本**（DP=62 / DPPt=63 / HGSS=64 / BW=66 / B2W2=67），而非具体版本（D=10 / P=11 等）
+>   - `SyncSave` 中用 `parsed.GameVersion`(62) 覆盖了 `CreateNewGame` 存入的正确版本(10)
+>   - `GameVersionNormalizer` 缺少 62-67 的复合版本映射
+>   - 前端 `GAME_VERSION_DISPLAY` 没有 62+ 的条目，fallback 到 `` Gen${ver} `` 模板
+> - 🔧 **修复**:
+>   - `GameVersionNormalizer` 新增 `IsCompositeVersion()` 检测 + `NormalizeOrKeepExisting()` 方法 — 解析版本为复合版本时回退到 `CreateNewGame` 存储的具体版本
+>   - 三个同步端点 (`SyncSave`/`SyncSaveBinary`/`SyncSaveBinaryNew`) 统一使用 `NormalizeOrKeepExisting`
+>   - `Map` 补充 62→10, 63→12, 64→7, 66→21, 67→22 的兜底映射
+>   - 前端 `GAME_VERSION_DISPLAY` 补充复合版本兜底条目（如 62: '珍珠/钻石'）
+> - ✅ 所有 NDS 世代游戏（Gen4: 钻/珍/白/心/魂 + Gen5: 黑/白/黑2/白2）版本映射已验证一致性
+> - 🔧 `GameVersionNormalizer` 提取为独立 Helper 文件，供 `SaveFileService.UploadSave` 和 `GetSaveDetail` 共用
+> - 🔧 `UploadSave` 增加版本归一化；`GetSaveDetail` 优先使用 DB 中已归一化的版本号
+>
+> ### 全世代版本号显示补齐（Gen6-9 / 3DS / Switch）
+> - 🐛 **Bug**: 3DS/Switch 存档显示 "Gen33"（究极月）、"Gen44"（剑）等
+>   - **根因**: `GAME_VERSION_DISPLAY` 仅覆盖到 Gen5，Gen6+ 版本号无对应条目
+>   - PKHeX 返回具体版本（如 UM=33, SW=44），但因不在映射表而 fallback 到 `` Gen${ver} ``
+> - 🔧 **修复**:
+>   - 前端 `GAME_VERSION_DISPLAY` 补齐全部世代：Gen6 (X/Y/OR/AS)、Gen7 (S/M/US/UM/GO + Let's Go)、Gen8 (Sw/Sh/BDSP/PLA)、Gen9 (S/V)
+>   - 后端 `GameVersionNormalizer.Map` 补全 Gen1-9 所有复合版本 → 具体版本默认映射（68=XY→24=X, 71=SM→30=SN, 72=USUM→32=US, 73=GG→42=GP, 74=SWSH→44=SW, 75=BDSP→48=BD, 76=SV→50=SL）
+>   - `IsCompositeVersion` 范围从 62-67 扩大为 52-76（覆盖全部世代复合版本）
+>
 > ### 已知遗留
-> - NDS 存档同步可靠性需实测 (512KB NDS .sav 同步)
+> - NDS 存档同步端到端流程需人工验收（游戏内保存 → 同步按钮 → 存档管理列表出现并可以正常打开编辑）
 > - OpenGL GPU 渲染器因 WebGL2 API 兼容问题未启用 (glColorMaski/glDrawBuffer/glMapBuffer 缺失)
 > - 存档目录待迁移至项目内 (`data/saves/`)
 > 

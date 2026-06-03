@@ -6,6 +6,32 @@ import { saveFileApi, type SaveFileInfo } from '../api/saveFile';
 
 const { Title, Text } = Typography;
 
+// ── Game cover image with icon fallback ──
+const GameCover: React.FC<{ gameId: string; color: string }> = ({ gameId, color }) => {
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError) {
+    return <PlayCircleOutlined style={{ fontSize: 48, color, marginBottom: 16 }} />;
+  }
+
+  return (
+    <img
+      src={`/covers/${gameId}.png`}
+      alt=""
+      onError={() => setHasError(true)}
+      style={{
+        height: 140,
+        width: 'auto',
+        maxWidth: '100%',
+        objectFit: 'contain',
+        borderRadius: 6,
+        marginBottom: 12,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+      }}
+    />
+  );
+};
+
 // gameId → gameVersion 映射（GBA Gen3 + NDS Gen4/5）
 const GAME_VERSION_MAP: Record<string, number> = {
   // GBA Gen3
@@ -109,8 +135,8 @@ const DashboardPage: React.FC = () => {
         {GAMES.map(game => (
           <Col key={game.gameId} xs={24} sm={12} md={8} lg={6}>
             <Card hoverable onClick={() => setSelectedGame(game)}
-              style={{ textAlign: 'center', minHeight: 200, borderColor: game.color }}>
-              <PlayCircleOutlined style={{ fontSize: 48, color: game.color, marginBottom: 16 }} />
+              style={{ textAlign: 'center', minHeight: 300, borderColor: game.color }}>
+              <GameCover gameId={game.gameId} color={game.color} />
               <Title level={4}>游玩{game.displayName.replace('宝可梦 ', '')}</Title>
               <p>在线{game.displayName}</p>
               <Button type="primary" style={{ background: game.color, borderColor: game.color }}>
@@ -124,8 +150,8 @@ const DashboardPage: React.FC = () => {
         {NDS_GAMES.map(game => (
           <Col key={game.gameId} xs={24} sm={12} md={8} lg={6}>
             <Card hoverable onClick={() => setSelectedGame(game)}
-              style={{ textAlign: 'center', minHeight: 200, borderColor: game.color }}>
-              <PlayCircleOutlined style={{ fontSize: 48, color: game.color, marginBottom: 16 }} />
+              style={{ textAlign: 'center', minHeight: 300, borderColor: game.color }}>
+              <GameCover gameId={game.gameId} color={game.color} />
               <Title level={4}>游玩{game.displayName.replace('宝可梦 ', '')}</Title>
               <p>在线{game.displayName}</p>
               <Button type="primary" style={{ background: game.color, borderColor: game.color }}>

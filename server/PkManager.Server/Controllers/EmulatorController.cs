@@ -193,7 +193,7 @@ public class EmulatorController : ControllerBase
                     Id = saveFileId, Size = (long)data.Length,
                     TN = parsed.TrainerName, TID = parsed.TrainerId, SID = parsed.SecretId,
                     PT = parsed.PlayTime, BC = parsed.BoxCount, PC = parsed.PokemonCount,
-                    G = parsed.Generation, GV = GameVersionNormalizer.Normalize(parsed.GameVersion)
+                    G = parsed.Generation, GV = GameVersionNormalizer.NormalizeOrKeepExisting(parsed.GameVersion, saveFile.GameVersion)
                 });
         }
         catch
@@ -281,7 +281,7 @@ public class EmulatorController : ControllerBase
                     Id = saveFileId, Size = (long)data.Length,
                     TN = parsed.TrainerName, TID = parsed.TrainerId, SID = parsed.SecretId,
                     PT = parsed.PlayTime, BC = parsed.BoxCount, PC = parsed.PokemonCount,
-                    G = parsed.Generation, GV = GameVersionNormalizer.Normalize(parsed.GameVersion)
+                    G = parsed.Generation, GV = GameVersionNormalizer.NormalizeOrKeepExisting(parsed.GameVersion, saveFile.GameVersion)
                 });
         }
         catch
@@ -364,7 +364,7 @@ public class EmulatorController : ControllerBase
                     Id = saveFileId, Size = (long)data.Length,
                     TN = parsed.TrainerName, TID = parsed.TrainerId, SID = parsed.SecretId,
                     PT = parsed.PlayTime, BC = parsed.BoxCount, PC = parsed.PokemonCount,
-                    G = parsed.Generation, GV = GameVersionNormalizer.Normalize(parsed.GameVersion)
+                    G = parsed.Generation, GV = GameVersionNormalizer.NormalizeOrKeepExisting(parsed.GameVersion, saveFile.GameVersion)
                 });
         }
         catch
@@ -413,24 +413,3 @@ public class EmulatorController : ControllerBase
 
 public class SyncSaveRequest { public Guid SaveFileId { get; set; } public string? GameId { get; set; } public string? SaveDataBase64 { get; set; } }
 public class RomDto { public Guid Id { get; set; } public string GameId { get; set; } = ""; public string DisplayName { get; set; } = ""; public int Generation { get; set; } public long FileSize { get; set; } }
-
-/// <summary>将 PKHeX 内部版本号（如 RS=56, RSE=57）归一化为我们的简化版本号</summary>
-public static class GameVersionNormalizer
-{
-    private static readonly Dictionary<int, int> Map = new()
-    {
-        // GBA Gen3
-        { 56, 2 },  // RS → 红宝石
-        { 57, 3 },  // RSE → 绿宝石
-        { 58, 4 },  // FRLG → 火红
-        // NDS Gen4
-        { 7, 7 }, { 8, 8 }, { 10, 10 }, { 11, 11 }, { 12, 12 },
-        // NDS Gen5
-        { 20, 20 }, { 21, 21 }, { 22, 22 }, { 23, 23 },
-    };
-
-    public static int Normalize(int pkhexVersion) =>
-        Map.TryGetValue(pkhexVersion, out var normalized) ? normalized : pkhexVersion;
-    public static int? Normalize(int? pkhexVersion) =>
-        pkhexVersion.HasValue ? Normalize(pkhexVersion.Value) : null;
-}

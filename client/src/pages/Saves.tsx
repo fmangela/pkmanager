@@ -46,6 +46,40 @@ const GAME_VERSION_DISPLAY: Record<number, { name: string; color: string }> = {
   21: { name: '黑',     color: '#1a1a1a' },
   22: { name: '白2',    color: '#f0e6d3' },
   23: { name: '黑2',    color: '#0d2137' },
+  // 3DS Gen6 (PKHeX: X=24, Y=25, AS=26, OR=27)
+  24: { name: 'X',      color: '#e84855' },
+  25: { name: 'Y',      color: '#3b5ba5' },
+  26: { name: 'α蓝宝石', color: '#d43f3f' },
+  27: { name: 'Ω红宝石', color: '#c73e3e' },
+  // 3DS Gen7 (PKHeX: SN=30, MN=31, US=32, UM=33)
+  30: { name: '太阳',   color: '#f5a623' },
+  31: { name: '月亮',   color: '#4a5ab9' },
+  32: { name: '究极日', color: '#e8870a' },
+  33: { name: '究极月', color: '#1e2d8a' },
+  34: { name: 'GO',     color: '#50c8e8' },
+  // Let's Go (PKHeX: GP=42, GE=43, Gen7)
+  42: { name: 'Let\'s Go 皮卡丘', color: '#f7c744' },
+  43: { name: 'Let\'s Go 伊布',   color: '#b58e5c' },
+  // Gen8 Switch (PKHeX: SW=44, SH=45, BD=48, SP=49, PLA=47)
+  44: { name: '剑',     color: '#4db8ff' },
+  45: { name: '盾',     color: '#e84855' },
+  48: { name: '晶灿钻石', color: '#5b8bd4' },
+  49: { name: '明亮珍珠', color: '#e799b0' },
+  47: { name: '阿尔宙斯', color: '#8bc34a' },
+  // Gen9 Switch (PKHeX: SL=50, VL=51)
+  50: { name: '朱',     color: '#f77e24' },
+  51: { name: '紫',     color: '#9b59b6' },
+  // PKHeX 复合版本（兜底）
+  62: { name: '珍珠/钻石', color: '#5b8bd4' },
+  63: { name: '珍珠/钻石/白金', color: '#b8b8b8' },
+  64: { name: '心金/魂银', color: '#d4a017' },
+  66: { name: '黑/白',   color: '#1a1a1a' },
+  67: { name: '黑2/白2', color: '#0d2137' },
+  68: { name: 'X/Y',    color: '#e84855' },
+  70: { name: 'OR/AS',  color: '#c73e3e' },
+  71: { name: '太阳/月亮', color: '#f5a623' },
+  72: { name: '究极日/究极月', color: '#e8870a' },
+  73: { name: 'Let\'s Go 皮卡丘/伊布', color: '#f7c744' },
 };
 
 const SavesPage: React.FC = () => {
