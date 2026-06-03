@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Card, Row, Col, Typography, Button, Modal, List, Tag, App, Spin } from 'antd';
+import { Card, Row, Col, Typography, Button, Modal, List, Tag, Spin } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { BankOutlined, SaveOutlined, PlayCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import { saveFileApi, type SaveFileInfo } from '../api/saveFile';
@@ -69,7 +69,6 @@ const NDS_GAMES: { gameId: string; displayName: string; color: string; gameVersi
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { message } = App.useApp();
 
   // Modal state — selectedGame is null when closed
   const [selectedGame, setSelectedGame] = useState<{ gameId: string; displayName: string; generation: number } | null>(null);

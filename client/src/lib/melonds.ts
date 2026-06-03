@@ -374,12 +374,7 @@ function installWebGLCompatPatch(): void {
     // ── 3. readPixels ─────────────────────────────────────
     const origReadPixels = gl.readPixels.bind(gl);
     gl.readPixels = function (...rawArgs: any[]): void {
-      const [x, y, width, height, format, type, pixels, dstOffset] = rawArgs as [
-        number, number, number, number, number, number, ArrayBufferView | null, number | undefined
-      ];
-
-      const pixelLength = estimatePixelByteLength(width, height, format, type);
-      const outputPixels = slicePixelData(pixels, dstOffset, pixelLength);
+      // 直接透传；若后续需要处理 GL_BGRA→RGBA 读回，在此扩展
       origReadPixels(...rawArgs);
     } as any;
 

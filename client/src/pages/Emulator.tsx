@@ -159,7 +159,7 @@ const EmulatorPage: React.FC = () => {
       if (!token) return;
       const id = effectiveSaveId.current;
       if (id) {
-        const blob = new Blob([sd], { type: 'application/octet-stream' });
+        const blob = new Blob([sd] as any, { type: 'application/octet-stream' });
         navigator.sendBeacon(`/api/Emulator/sync-save/${id}?token=${encodeURIComponent(token)}`, blob);
       }
     };

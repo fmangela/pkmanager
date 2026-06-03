@@ -835,10 +835,15 @@ Week 15-16: Phase E.2 世代专属工具（Gen3 RTC等）
 >   - 后端 `GameVersionNormalizer.Map` 补全 Gen1-9 所有复合版本 → 具体版本默认映射（68=XY→24=X, 71=SM→30=SN, 72=USUM→32=US, 73=GG→42=GP, 74=SWSH→44=SW, 75=BDSP→48=BD, 76=SV→50=SL）
 >   - `IsCompositeVersion` 范围从 62-67 扩大为 52-76（覆盖全部世代复合版本）
 >
+> **更新 (2026-06-03 下午，第二轮)**：
+>
+> ### TypeScript 编译清零 + 已知遗留清理
+> - ✅ **NDS 存档同步端到端**: 人工验收通过 — 游戏内保存 → 同步按钮 → 存档管理列表出现并可正常编辑
+> - ✅ **TypeScript 0 错误**: 修复 `BlobPart` 类型错误 (Emulator.tsx + NdsEmulator.tsx 的 `Uint8Array<ArrayBufferLike>` 不兼容) + `melonds.ts` WebGL readPixels 未用变量 + `Dashboard.tsx` 未用 `message` 变量
+> - ℹ️ **存档目录**: 当前 `/home/fmangela/pkmanager-saves` 工作正常，暂不迁移至项目内 `data/saves/`
+>
 > ### 已知遗留
-> - NDS 存档同步端到端流程需人工验收（游戏内保存 → 同步按钮 → 存档管理列表出现并可以正常打开编辑）
 > - OpenGL GPU 渲染器因 WebGL2 API 兼容问题未启用 (glColorMaski/glDrawBuffer/glMapBuffer 缺失)
-> - 存档目录待迁移至项目内 (`data/saves/`)
 > 
 > **更新 (2026-06-02 下午)**：
 > 
