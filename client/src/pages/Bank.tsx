@@ -290,6 +290,19 @@ const BankPage: React.FC = () => {
         size="large"
       >
         {selectedPokemon && (
+          <>
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <img
+                src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${selectedPokemon.species}.png`}
+                alt={selectedPokemon.speciesName}
+                style={{ width: 160, height: 160, objectFit: 'contain' }}
+                onError={(e) => {
+                  // Fallback to standard sprite
+                  (e.target as HTMLImageElement).src =
+                    `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${selectedPokemon.species}.png`;
+                }}
+              />
+            </div>
           <Descriptions column={2} bordered size="small">
             <Descriptions.Item label="物种">{selectedPokemon.speciesName}</Descriptions.Item>
             <Descriptions.Item label="等级">Lv.{selectedPokemon.level}</Descriptions.Item>
@@ -308,6 +321,7 @@ const BankPage: React.FC = () => {
               {new Date(selectedPokemon.createdAt).toLocaleString('zh-CN')}
             </Descriptions.Item>
           </Descriptions>
+          </>
         )}
       </Drawer>
     </div>

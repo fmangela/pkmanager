@@ -264,6 +264,40 @@ export const saveFileApi = {
     apiClient.post<SaveFileDetail>('/SaveFile/new-game', { gameId }),
 };
 
+// ── 本地模拟器 API ──────────────────────────────────────
+
+export interface CheckLocalRequest {
+  generation: number;
+  gameVersion?: number;
+  gameId?: string;
+}
+
+export interface LaunchLocalResult {
+  pid: number;
+  status: string;
+  type: 'azahar' | 'desmume';
+  backedUp: boolean;
+  isFirstLaunch: boolean;
+  backupPath?: string;
+}
+
+export const emulatorApi = {
+  checkLocal: (data: CheckLocalRequest) =>
+    apiClient.post<Record<string, any>>('/Emulator/check-local', data),
+
+  launchLocal: (saveFileId: string) =>
+    apiClient.post<LaunchLocalResult>(`/Emulator/launch-local/${saveFileId}`),
+
+  localStatus: (saveFileId: string) =>
+    apiClient.get<{ running: boolean; pid?: number; stuck?: boolean }>(`/Emulator/local-status/${saveFileId}`),
+
+  syncFromLocal: (saveFileId: string) =>
+    apiClient.post<{ synced: boolean; restored: boolean }>(`/Emulator/sync-from-local/${saveFileId}`),
+
+  emergencyRestore: (saveFileId: string) =>
+    apiClient.post<{ restored: boolean }>(`/Emulator/emergency-restore/${saveFileId}`),
+};
+
 export interface SaveBackupDto {
   id: string;
   saveFileId: string;

@@ -677,11 +677,342 @@
 - [ ] **WebRTC 联机实验** — 等待 melonDS Netplay 完成后评估 WebRTC 桥接可行性
 - [ ] **PKHeX 层面数据交换**（替代方案）— 导出 .pk* + 分享 + 对方导入（已实现 QR 码生成）
 
+### H.8 本地 DeSmuME 启动（备选方案）
+
+> melonDS WASM 在老机器上 3D 场景顿挫明显，提供本地 DeSmuME 作为备选方案。DeSmuME 是最成熟的 NDS 开源模拟器（GPLv2），宝可梦全系列完美兼容，CPU/GPU 开销远低于 melonDS，老机器亦可流畅运行。作者强烈推荐。
+> 复用 Phase I（Azahar）的配置存储 + Process.Start + 进程监控基础设施。
+
+- [ ] **DeSmuME 可执行文件路径配置**
+  - 复用 Phase I.1 的 `user_settings` 表和后端配置端点
+  - 扩展 `GET/PUT /api/Settings/emulators` 端点，同时管理 Azahar + DeSmuME 路径
+  - Linux: `desmume` / flatpak；Windows: `DeSmuME.exe`；macOS: `DeSmuME.app`
+
+- [ ] **DeSmuME 存档目录配置**
+  - DeSmuME 存档格式：`.dsv`（DeSmuME Save），本质就是原始 NDS save 二进制，PKHeX.Core 可直接解析
+  - 默认存档路径：ROM 同目录下的 `.dsv` 文件，或 `~/.config/desmume/`（取决于 DeSmuME 配置）
+  - pkmanager 将存档写入 DeSmuME 期望的位置，关闭后从 `.dsv` 读回
+
+- [ ] **后端 Launch DeSmuME API**
+  - `POST /api/Emulator/launch-desmume/{saveFileId}`
+  - 流程（复用 Phase I.3 模式）：
+    1. 查 ROM `local_path` + DeSmuME 配置
+    2. pkmanager `save.sav` → 复制为 DeSmuME 期望的 `.dsv` 文件
+    3. 自动备份（标签 "DeSmuME启动前自动备份"）
+    4. `Process.Start(desmumePath, $"\"{romPath}\"")`
+  - 返回：`{ pid, status }`
+
+- [ ] **存档双向同步（.sav ↔ .dsv）**
+  - 启动前：`save.sav` → 复制为 ROM 同目录下的 `.dsv`（DeSmuME 自动识别加载）
+  - 关闭后：`.dsv` → 读回写入 `save_files.raw_save_data` + 文件系统
+  - 首次启动 vs 再次启动冲突处理（复用 Phase I.3 弹窗逻辑）
+
+- [ ] **Saves 页 NDS 双入口**
+  - Gen4-5 存档行显示两个按钮：
+    - 「WASM 游玩」（现有，路由 `/play-nds/`）— 浏览器内 melonDS
+    - 「本机启动」（新增）— 后端调起本地 DeSmuME
+  - 未配置 DeSmuME 时「本机启动」按钮置灰 + 提示配置
+
+- [ ] **进程监控与生命周期**
+  - 复用 Phase I.3 进程监控机制（前端 3s 轮询 + 状态指示器）
+  - Azahar 关闭后自动同步弹窗逻辑同样适用于 DeSmuME
+
+---
+
+## Phase I: 3DS 模拟器集成（Azahar 本地启动）
+
+> 目标: 3DS 不采用 WASM 方案 — Citra 核心远比 melonDS 重，浏览器端性能无法流畅运行宝可梦 3DS 游戏。改为绑定本地 Azahar 模拟器，Web 端点击启动，后端通过 `Process.Start` 调起原生模拟器。
+> **Azahar** 是作者强烈推荐的 3DS 模拟器。它是 Citra 的继承者（PabloMK7's Citra fork + Lime3DS 合并），GPLv2 开源，目前唯一持续活跃且能完美模拟 3DS 宝可梦全系列的模拟器。其他 Citra 分支（Mandarine-Neo、Borked3DS）已不再维护或兼容性不足。
+> 
+> **覆盖游戏**: Gen6 X/Y/OR/AS + Gen7 S/M/US/UM，共 8 款。
+
+### I.1 Azahar 配置管理
+
+- [ ] **Azahar 可执行文件路径配置**
+  - 用户在前端设置页指定 Azahar 可执行文件路径
+  - Linux: `azahar` / `azahar-emu` / AppImage 路径
+  - Windows: `azahar.exe` 路径
+  - macOS: `Azahar.app` 路径
+  - 配置按用户级别持久化到数据库
+
+- [ ] **Azahar 用户数据目录配置**
+  - 配置 Azahar 的 user data 目录（包含 `sdmc/` 模拟 SD 卡，游戏存档即在此处）
+  - 自动检测默认路径：
+    - Linux: `~/.local/share/azahar-emu/`
+    - Windows: `%APPDATA%/azahar-emu/`
+    - macOS: `~/Library/Application Support/azahar-emu/`
+  - 支持手动覆盖（如使用 portable 模式）
+
+- [ ] **后端 Azahar 配置端点**
+  - `GET /api/Settings/azahar` — 获取当前用户 Azahar 配置
+  - `PUT /api/Settings/azahar` — 保存/更新可执行文件路径 + 用户数据目录
+  - `POST /api/Settings/azahar/test` — 测试路径有效性（启动 Azahar 获取版本号，验证后立即退出）
+  - 配置存储：新增 `user_settings` 表（`user_id` + `key` + `value`，支持 JSON value）
+
+- [ ] **前端 Azahar 设置页面**
+  - 路由：`/settings/azahar`
+  - 两个输入框：可执行文件路径 + 用户数据目录
+  - 「自动检测」按钮 → 调用后端遍历默认路径检测是否存在
+  - 「测试连接」按钮 → 后端启动 Azahar 验证 + 显示版本信息（如 `Azahar 2125.1.1`）
+  - 未配置时 Dashboard 3DS 游戏卡片显示「需要先配置 Azahar」引导提示
+
+### I.2 3DS ROM 管理
+
+- [ ] **3DS ROM 导入（文件系统路径模式）**
+  - 3DS ROM 体积 1–4 GB，不入库 BYTEA，只存 `local_path`
+  - 支持格式：`.3ds`（Cartridge dump）/ `.cci`（CTR Cart Image）/ `.cxi`（CTR Executable Image）
+  - `POST /api/Emulator/roms/import-local` 扩展支持 3DS ROM 识别
+  - 从 ROM Header 自动提取：Title ID / Game Serial / 游戏名称 / Region
+
+- [ ] **3DS 游戏版本 → Title ID 映射表**
+  - 后端维护 8 款宝可梦 3DS 游戏的 Title ID 映射（用于定位 Azahar 存档路径）：
+
+  | 游戏 | PKHeX 版本号 | Title ID |
+  |------|-------------|----------|
+  | X | 24 | `0004000000055D00` |
+  | Y | 25 | `0004000000055E00` |
+  | Omega Ruby | 26 | `000400000011C400` |
+  | Alpha Sapphire | 27 | `000400000011C500` |
+  | Sun | 30 | `0004000000164800` |
+  | Moon | 31 | `0004000000175E00` |
+  | Ultra Sun | 32 | `00040000001B5000` |
+  | Ultra Moon | 33 | `00040000001B5100` |
+
+  - Azahar 存档路径：`{sdmc}/Nintendo 3DS/<ID0>/<ID1>/title/<high_tid>/<low_tid>/data/00000001.sav`
+  - （ID0/ID1 为 32-char hex，Azahar 默认固定值，可自动探测或手动配置）
+
+- [ ] **Dashboard 3DS 游戏卡片**
+  - 新增 8 张 3DS 游戏卡片，按发行日期排序：
+    - Gen6: X(2013.10) / Y(2013.10) / OR(2014.11) / AS(2014.11)
+    - Gen7: S(2016.11) / M(2016.11) / US(2017.11) / UM(2017.11)
+  - 每张卡片：游戏封面/图标 + 版本名称 + 世代 Tag（3DS）
+  - 未配置 Azahar 时卡片置灰 + 显示「配置 Azahar」引导链接
+
+- [ ] **Saves 页 3DS 存档入口**
+  - `GAME_VERSION_DISPLAY` 已覆盖 Gen6-7 所有版本 ✅
+  - Gen6-7 存档行显示「启动 Azahar」按钮（替代 WASM 的「游玩」按钮）
+  - 按钮携带 Azahar 配置状态：未配置 → 跳转到设置页；已配置 → 调起启动
+
+### I.3 启动集成
+
+- [ ] **后端 Launch Azahar API**
+  - `POST /api/Emulator/launch-azahar/{saveFileId}`
+  - 完整流程：
+    1. 从 `save_files` 获取存档的游戏版本 → 查 ROM `local_path` + Title ID
+    2. 检查 Azahar 配置是否存在（否则返回 400 + "请先配置 Azahar"）
+    3. 将 pkmanager 管理的 `save.sav` 复制到 Azahar 存档目录对应 Title ID 路径
+    4. 自动创建备份（标签"Azahar启动前自动备份"）
+    5. `System.Diagnostics.Process.Start(azaharPath, $"--fullscreen \"{romPath}\"")` 
+    6. 记录 PID 到内存（ConcurrentDictionary）
+  - 返回：`{ pid, status: "launched" | "error", message }`
+  - 安全措施：验证 ROM 路径存在，Azahar 路径来自数据库（防止路径注入）
+
+- [ ] **存档 → Azahar save 目录双向写入**
+  - 首次启动（Azahar 无该游戏存档）：pkmanager 存档直接写入 Azahar 目录作为初始存档
+  - 再次启动（Azahar 已有存档）：弹窗提示用户选择：
+    - 「使用 pkmanager 存档」（覆盖 Azahar 存档）
+    - 「使用 Azahar 已有存档」（跳过写入，后续从 Azahar 同步回 pkmanager）
+  - 需创建中间目录：`{userDataDir}/sdmc/Nintendo 3DS/00000000000000000000000000000000/00000000000000000000000000000000/title/{high}/00000000/`
+
+- [ ] **启动前存档自动备份**
+  - 每次向 Azahar 写入存档前，自动在 pkmanager `save_backups` 创建备份
+  - 标签：`"Azahar启动前自动备份 (写入Azahar)"`
+  - 确保任何情况下都可恢复被覆盖的存档
+
+- [ ] **进程监控与生命周期**
+  - 前端：启动后显示「Azahar 运行中」状态指示器（绿色脉冲点）
+  - 前端轮询 `GET /api/Emulator/azahar-status?pid={pid}`（间隔 3 秒）
+  - Azahar 进程退出 → 前端收到通知 + Toast 提示「Azahar 已关闭」
+  - 用户可主动关闭：前端「终止 Azahar」按钮 → `POST /api/Emulator/stop-azahar?pid={pid}` → `Process.Kill()`
+  - 页面 `beforeunload` 时提醒「Azahar 仍在运行，关闭页面不会终止模拟器」
+
+### I.4 存档联动
+
+- [ ] **Azahar 保存后存档回传**
+  - `POST /api/Emulator/sync-from-azahar/{saveFileId}`
+  - 从 Azahar 存档目录读取 `00000001.sav`
+  - 写入 pkmanager `save_files.raw_save_data`（BYTEA）+ 文件系统 `data/saves/`
+  - PKHeX.Core 解析存档 → 更新 `save_files` 元数据（宝可梦数量 / 训练家名 / 游戏时间等）
+  - 创建备份（标签 `"从Azahar同步"`）
+
+- [ ] **手动同步按钮**
+  - Saves 页 3DS 存档行添加「同步存档」按钮（Azahar 关闭后可用）
+  - 点击 → 调用 `sync-from-azahar` → 成功后 Toast + 刷新存档列表
+  - 按钮旁显示「上次同步时间」
+
+- [ ] **Azahar 关闭后自动同步**
+  - 进程监控检测到 Azahar 退出 → 前端弹窗：
+    - 「检测到 Azahar 已关闭。是否将存档同步回 pkmanager？」
+    - 按钮：`[同步存档] [忽略] [始终自动同步]`
+  - 「始终自动同步」选项持久化到 `user_settings`
+
+- [ ] **存档冲突检测与处理**
+  - 同步前比较双方存档修改时间：
+    - Azahar 存档更新 + pkmanager 存档未变 → 直接同步回
+    - pkmanager 存档更新（用户编辑过）→ 提示「pkmanager 存档有未同步的编辑，覆盖将丢失」
+    - 双方都更新 → 展示时间戳对比 + 让用户选择保留哪个版本
+  - 冲突解决后创建备份保留被覆盖的版本
+
+### I.5 3DS 世代专属存档功能
+
+- [ ] **Gen6 3DS 特有字段支持**
+  - O-Powers 等级和能量（已在 Phase E.2 规划，移至此处）
+  - Super Training 奖章统计（只读）
+  - PokéMiles / BP 货币显示（C.2 训练家面板货币区）
+  - Holo Caster 状态（只读）
+
+- [ ] **Gen7 3DS 特有字段支持**
+  - Festival Coins / Battle Points 货币
+  - Zygarde Cell / Core 收集进度（Phase E.2 移至此处）
+  - Poké Pelago 状态（只读）
+  - 霸主宝可梦（Totem）标记
+  - 洛托姆图鉴状态
+
+- [ ] **3DS 跨版本存档迁移**
+  - Gen6 → Gen7 Poké Transporter 模拟（PKHeX.Core 支持）
+  - 银行→HOME 迁移路径记录
+  - 版本升级后自动更新 `game_version` 字段
+
+---
+
+## Phase J: 前端错误诊断与自检查机制
+
+> 目标: 解决当前「出错了用户只能截图发给我」的痛点。建立全局错误捕获 → 持久化存储 → 诊断面板展示 → 一键导出的完整链路，让用户可以在诊断面板中直接看到所有错误日志并复制给你，无需手动截图描述。
+> 同时修复当前代码中 6+ 处静默吞错、无 ErrorBoundary 白屏、无全局 Promise 异常捕获等结构性问题。
+
+### J.1 全局错误捕获层
+
+- [ ] **React ErrorBoundary 组件**
+  - 创建 `src/components/ErrorBoundary.tsx`（Class Component，`componentDidCatch` + `getDerivedStateFromError`）
+  - 包裹整个 `<App />`（最外层），同时为每个懒加载路由单独包裹（`EmulatorPage` / `NdsEmulatorPage`）
+  - Fallback UI：Ant Design `Result` 组件（`status="error"`）+ 错误摘要 + 「刷新页面」按钮 + 「查看诊断」按钮
+  - 崩溃后不卸载整个 React 树，仅渲染 Fallback UI
+
+- [ ] **全局 window 异常监听**
+  - `window.addEventListener('error', ...)` — 捕获未被 ErrorBoundary 覆盖的 JS 运行时错误
+  - `window.addEventListener('unhandledrejection', ...)` — 捕获未处理的 Promise 拒绝（当前此类异常完全静默丢失）
+  - 所有捕获异常写入诊断 Store
+
+- [ ] **WASM/模拟器专用错误捕获**
+  - mGBA 和 melonDS 的 `console.error` / 异常 → 写入诊断 Store（当前仅 `console.error`，刷新后丢失）
+  - WASM 加载失败（`.wasm` 404 / 内存不足 / SharedArrayBuffer 不可用）→ 诊断面板显示具体原因 + 解决建议
+
+### J.2 诊断 Store + 持久化
+
+- [ ] **诊断 Store（Zustand）**
+  - 创建 `src/stores/diagnosticStore.ts`
+  - 内存中维护环形缓冲区（最近 200 条，防止内存泄漏）
+  - 每条日志结构：`{ id, timestamp, category: 'api'|'render'|'wasm'|'network'|'auth'|'unknown', level: 'error'|'warn'|'info', message, stack?, context? }`
+  - Actions: `log(entry)`, `clear()`, `export()`
+
+- [ ] **localStorage 持久化**
+  - 每次写入 Store 时同步持久化到 `localStorage`（key: `pkmanager_error_log`）
+  - 页面刷新后自动恢复历史日志（`diagnosticStore` 初始化时从 localStorage 读取）
+  - 总容量限制 500KB (~最近 300-500 条错误)，超出后裁剪旧条目
+
+### J.3 诊断面板 UI
+
+- [ ] **诊断面板组件**
+  - 创建 `src/components/DiagnosticPanel.tsx`（Ant Design Drawer）
+  - 入口：页面右下角浮动按钮（Ant Design `FloatButton`，仅在 `NODE_ENV !== 'production'` 时显示；生产环境通过键盘快捷键 Ctrl+Shift+D 打开）
+  - 顶部：彩色统计条（🔴 错误 N / 🟡 警告 N / 🔵 信息 N）+ 「健康检查」按钮
+  - 中间：日志时间线列表，每条显示：
+    - 时间戳（`HH:mm:ss`）
+    - 分类彩色 Tag（API=红色 / Render=紫色 / WASM=绿色 / Network=橙色 / Auth=黄色）
+    - 错误消息摘要（展开查看完整 stack + context）
+  - 底部工具栏：
+    - 📋 **「复制全部日志」** — 格式化为纯文本，包含时间戳+分类+消息+堆栈
+    - 🗑️ **「清空日志」** — 二次确认
+    - ❌ 关闭按钮
+
+- [ ] **诊断面板可访问性**
+  - 登录页也可打开（Auth 错误也能看到）
+  - 键盘快捷键 `Ctrl+Shift+D` 全局切换
+  - 白屏时（ErrorBoundary Fallback UI）自动显示「查看诊断」按钮 → 打开诊断面板
+  - Toast 通知：「检测到 N 个新错误，Ctrl+Shift+D 查看」（可关闭，避免骚扰）
+
+### J.4 Axios 拦截器增强
+
+- [ ] **请求/响应错误日志化**
+  - `axios.ts` 响应错误拦截器中，每条失败请求自动调用 `diagnosticStore.log()`
+  - 记录：URL、HTTP 方法、状态码、请求体（截断 500 字符）、响应体（截断 500 字符）、耗时
+  - 分类为 `api`，级别根据状态码：4xx→warn, 5xx→error, timeout→error
+
+- [ ] **401 软重定向**
+  - 当前：`window.location.href = '/login'`（硬跳转，丢失一切状态）
+  - 改进：先 `message.warning('登录已过期，即将跳转...')` → 延迟 1.5 秒 → 清除 Token → React Router `navigate('/login')`
+  - 跳转前将当前页面 URL 写入 `sessionStorage`，登录成功后自动跳回
+
+### J.5 页面加载健康检查
+
+- [ ] **启动时自检**
+  - App 挂载后自动运行 3 项检查：
+    1. **API 可达性**：`GET /api/health`（5 秒超时）
+    2. **Auth Token 有效性**：调用一个轻量端点验证（如 `GET /api/Auth/me`）
+    3. **ResourceStore 加载**：检查 `resourceStore.loaded` + 各项数组长度 > 0
+  - 结果写入诊断 Store（category: `health`, level: pass=info / fail=error）
+  - 诊断面板顶部显示健康状态指示灯：🟢 全部正常 / 🟡 部分异常 / 🔴 服务不可用
+
+### J.6 静默失败修复
+
+- [ ] **消灭空 catch 块**
+  - 修复 `resourceStore.loadAll()`：失败时设置 `error` 状态 + 写入诊断 Store（当前空 catch）
+  - 修复 `Dashboard.tsx`：静默失败 → 至少写入诊断 Store
+  - 修复 `OTMiscTab.tsx` / `MovesTab.tsx` / `MainTab.tsx`：`.catch(() => {})` → 写入诊断 Store
+  - 修复 `melonds.ts` 多处空 catch → 写入诊断 Store（WASM 调用失败，分类为 `wasm`）
+  - 原则：**禁止空 catch 块**，至少 `diagnosticStore.log()`。ESLint 规则 `no-empty` 扩展到 catch 块
+
+### J.7 日志回传后端（客户端 → 服务端）
+
+- [ ] **客户端错误日志回传端点**
+  - `POST /api/diagnostics/client-error` — 接收单条客户端错误
+  - 使用 `navigator.sendBeacon` 发送（页面崩溃/关闭时也能发出，不阻塞主线程）
+  - 存储方式：文件系统 `data/logs/client-errors.jsonl`（每行一条 JSON），不入库，保持轻量
+  - 每条日志：`{ timestamp, category, level, message, stack, url, userAgent, userId }`
+
+- [ ] **错误报告查询端点**
+  - `GET /api/diagnostics/report?hours=24` — 返回最近 N 小时错误汇总
+  - 返回：`{ totalErrors, byCategory, byLevel, recentItems[] }`
+  - `DELETE /api/diagnostics/clear` — 清空日志文件（需确认）
+
+- [ ] **diagnosticStore 自动上报**
+  - 每条新日志自动调用 `navigator.sendBeacon('/api/diagnostics/client-error', JSON.stringify(entry))`
+  - 去重：同一错误类型+URL 在 5 秒内不重复上报
+  - 降级：`sendBeacon` 不可用时回退到 `fetch`（带 `keepalive: true`）
+
+### J.8 无头浏览器冒烟测试
+
+- [ ] **Playwright 测试环境搭建**
+  - `client/` 下新建 `tests/` 目录
+  - 安装 `@playwright/test` + `playwright`（`npx playwright install chromium`）
+  - `playwright.config.ts`：baseURL `https://localhost:5173`，ignoreHTTPSErrors（自签证书）
+  - 3 个冒烟测试用例：
+    1. **`smoke.spec.ts`** — 首页加载、登录页渲染、无 console error
+    2. **`saves.spec.ts`** — 登录后存档列表、箱子网格、合法性扫描按钮
+    3. **`emulator.spec.ts`** — GBA/NDS 模拟器 Canvas 渲染、FPS 计数器
+
+- [ ] **npm 脚本集成**
+  - `npm run test:smoke` → `npx playwright test --reporter=html`
+  - `npm run test:smoke:head` → 同上 + `--headed`（调试用）
+
+### J.9 一键健康检查脚本
+
+- [ ] **`check-health.sh` 脚本**
+  - 位于项目根目录
+  - 检查项：
+    1. API 可达性：`curl -s http://localhost:5000/api/health | jq .`
+    2. 最近客户端错误：`curl -s http://localhost:5000/api/diagnostics/report | jq .`
+    3. PostgreSQL 连接：`psql -h ~/pgdata/run -U pkadmin -c "SELECT 1"` （或后端 health 端点已包含 DB 检查）
+    4. Playwright 冒烟测试：`cd client && npx playwright test --reporter=line`
+  - 彩色输出（绿色 PASS / 红色 FAIL）
+  - 用法：`./check-health.sh`（全部检查）/ `./check-health.sh --quick`（仅 API+错误，跳过 Playwright）
+
 ---
 
 ## 实施顺序建议
 
 ```
+Week 0:    Phase J 前端错误诊断与自检查机制（最高优先级 — 赋能所有后续调试）
+
 Week 1-2:  Phase A.1 编辑面板架构重构
            Phase A.3 相遇信息Tab补全
            Phase A.2 基本信息Tab补全（形态/语言/EXP/亲密度）
@@ -713,6 +1044,14 @@ Week 13-14: Phase D.3 批量编辑器
 Week 15-16: Phase E.2 世代专属工具（Gen3 RTC等）
             Phase E.3 UI/UX细节打磨
             Phase F 后端基础设施增强
+
+Week 17-18: Phase I.1 Azahar配置管理
+            Phase I.2 3DS ROM管理
+            Phase I.3 启动集成（Launch API + 存档双向写入）
+
+Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
+            Phase I.5 3DS世代专属功能
+            Phase H.8 本地DeSmuME启动（复用Phase I基础设施）
 ```
 
 ---
@@ -722,15 +1061,97 @@ Week 15-16: Phase E.2 世代专属工具（Gen3 RTC等）
 | Phase | 总任务数 | 已完成 | 进行中 | 待开始 |
 |-------|---------|--------|--------|--------|
 | A: 编辑面板升级 | 35 | 33 | 0 | 2 |
-| B: 存档编辑器优化 | 14 | 4 | 0 | 10 |
+| B: 存档编辑器优化 | 14 | 8 | 0 | 6 |
 | C: 新增功能模块 | 12 | 0 | 0 | 12 |
 | D: 高级工具 | 14 | 0 | 0 | 14 |
-| E: 世代专属与打磨 | 17 | 1 | 0 | 16 |
+| E: 世代专属与打磨 | 17 | 5 | 0 | 12 |
 | F: 后端基础设施 | 8 | 3 | 0 | 5 |
-| G: GBA在线模拟器 | 21 | 17 | 0 | 4 |
-| H: NDS在线模拟器 | 27 | 20 | 0 | 7 |
-| **合计** | **148** | **83** | **0** | **65** |
+| G: GBA在线模拟器 | 21 | 19 | 0 | 2 |
+| H: NDS在线模拟器 | 33 | 25 | 0 | 8 |
+| I: 3DS Azahar集成 | 19 | 14 | 0 | 5 |
+| J: 前端错误诊断 | 17 | 10 | 0 | 7 |
+| **合计** | **190** | **118** | **0** | **72** |
 
+> **更新 (2026-06-06)**：
+> 
+> ### GBA 模拟器 AI 控制接口
+> - ✅ **设计文档** — `docs/GBA模拟器AI控制接口设计.md`（架构、命令列表、HTTP API、Python 示例）
+> - ✅ **浏览器端控制器** — `client/src/lib/gbaControl.ts`（GBAController 类，封装按键/截图/存档/速度/命令执行器）
+> - ✅ **后端命令桥接** — 4 个端点：`send` / `poll` / `result` / `execute`（同步阻塞）
+> - ✅ 支持按键注入、截图(PNG/raw)、像素读取、即时存档、速度控制、命令序列
+> - ⚠️ GBA 内存读写需要重编译 mGBA WASM（待后续）
+> - TypeScript 0 错误 + .NET 0 错误 + Vite 构建通过
+> - Phase G: 21/19 (+2)
+> 
+> ### 本地模拟器启动完整链路
+> - ✅ **DeSmuME + Azahar 源码分析** — `sdk/desmume/` + `sdk/azahar/`，分析 CLI 参数、存档路径、配置目录
+> - ✅ **设计文档更新** — `本地模拟器关联设计.md`（NDS/3DS 存档路径修正 + CLI 启动方式）+ `本地模拟器异常处理设计.md`（26 种异常场景 + 备份恢复 + 急救）
+> - ✅ **预校验端点** — `POST /api/Emulator/check-local`（验证 exe + CIA/ROM 就绪）
+> - ✅ **备份恢复机制** — 启动前备份本地存档 → 注入 pkmanager 存档 → 关闭后同步 → 恢复本地备份
+> - ✅ **应急恢复** — `POST /api/Emulator/emergency-restore/{id}`
+> - ✅ **pid.lock** — 防并发启动
+> - ✅ **前端轮询自动同步** — 每 2 秒检测进程状态，退出自动 sync-from-local
+> - ✅ **Dashboard 3DS 预校验** — 点击 3DS 卡片先验证 Azahar 配置
+> - ✅ **Saves 页状态指示** — 「启动中...」→「运行中」→「同步中」→ 恢复按钮
+> - ✅ **PostgreSQL 迁移** — `~/pgdata` → `data/pgdata/`（项目内部，WAL 限制 128MB）
+> - TypeScript 0 错误 + .NET 0 错误 + Vite 构建通过
+> - Phase H: 33/25 (+2), Phase I: 19/14 (+6), 总计 190/116/0/74
+> 
+> **更新 (2026-06-04)**：
+> 
+> ### 3DS 游戏卡片 + Dashboard 适配
+> - ✅ **8 款 3DS 宝可梦游戏** — GAME_META + VERSION_TO_GAME_ID + PLAYABLE_GAMES（X/Y/ΩR/αS/S/M/US/UM，按发行日期排列）
+> - ✅ **Dashboard** — 22 张游戏卡片（5 GBA + 9 NDS + 8 3DS），3DS 卡片路由到 `/saves`（无 WASM）
+> - ✅ **Saves 页** — 3DS 存档仅显示「本机」按钮（自动路由到 Azahar），无 WASM 按钮
+> - TypeScript 0 错误 + Vite 构建通过
+> - Phase I: 19/8 (+3)
+> 
+> ### I.1+H.8 本地模拟器配置框架完成
+> - ✅ **设计文档** — `docs/emulator-local-launch-design.md`
+> - ✅ **DB** — `user_settings` 表 (user_id + device_id + key → value)，已执行
+> - ✅ **后端** — `SettingsService` + `SettingsController` (`GET/PUT /api/settings/emulators`) + `EmulatorController.LaunchLocal` / `SyncFromLocal` / `LocalStatus`
+> - ✅ **前端** — `main.tsx` device_id 生成 + `axios.ts` X-Device-Id 请求头 + `settingsStore` + `SettingsPage` (`/settings`) + Saves 页「本机」启动按钮
+> - 🔑 **device_id 机制**: localStorage UUID → 每个请求自动带 X-Device-Id → 后端按 (user_id, device_id) 隔离配置。换电脑自动重新生成
+> - TypeScript 0 错误 + .NET Build 0 错误 + Vite 构建通过
+> - Phase H: 33/23 (+3), Phase I: 19/5 (+5), 总计 190/109/0/81
+> 
+> ### 工作台卡片封面化完成
+> - ✅ **统一游戏元数据** — `src/constants/games.ts`（唯一数据源，GAME_META + VERSION_TO_GAME_ID + GAME_VERSION_DISPLAY + GENERATION_MAP）
+> - ✅ **GameCover 组件** — `src/components/GameCover.tsx`（有封面图用图，无图用彩色占位卡片：Pokeball SVG + 游戏简称 + 平台 Tag + 主题色）
+> - ✅ **Dashboard** — 14 张卡片全部从 PlayCircle 图标升级为彩色占位封面
+> - ✅ **Saves 表格** — 游戏列加 28px 封面缩略图
+> - ✅ **SaveEditor 工具栏** — 游戏名旁加封面缩略图
+> - ✅ **Bank 详情抽屉** — 顶部加 PokeAPI official-artwork 精灵图(160px)
+> - TypeScript 0 错误 + Vite 构建通过
+> - 消除 3 处重复映射（Dashboard GAME_VERSION_MAP/GAMES/NDS_GAMES + Saves GAME_VERSION_DISPLAY/GENERATION_MAP/GENERATION_COLORS → 统一 constants/games.ts）
+> 
+> ### B.1+B.2 箱子管理交互升级完成
+> - ✅ **B.2 格子叠加图标** — 合法性三色圆点 + Alpha α 徽章(左上) + Gmax G 徽章(右下) + StarFilled 闪光星标(右上)
+> - ✅ **B.1 全部箱子弹窗** — `AllBoxesModal.tsx` 响应式网格(4/3/1列) + 6×5 迷你精灵图 + Swap ⇄ 按钮
+> - ✅ **B.1 箱子快速导航** — ◀ ▶ 翻页按钮 + 键盘 Left/Right 方向键
+> - ✅ **B.1 Swap** — 调用已有 `swapBoxes` API，交换相邻箱子全部内容
+> - ✅ B.2 合法性扫描结果持久化 — `legalityMap` state + 每格子三色圆点
+> - TypeScript 0 错误 + Vite 生产构建通过
+> - Phase B: 14 项 / 已完成 8 / 剩余 6
+> 
+> ### Phase J 实施完成（核心链路）
+> - ✅ **J.1** ErrorBoundary.tsx + main.tsx 全局 window.onerror / unhandledrejection 监听
+> - ✅ **J.2** diagnosticStore.ts — Zustand 环形缓冲(200条) + localStorage 持久化(500KB) + sendBeacon 自动上报
+> - ✅ **J.3** DiagnosticPanel.tsx — FloatButton(dev) + Ctrl+Shift+D 全局快捷键 + Drawer 面板（统计条+筛选+时间线+复制全部+清空）
+> - ✅ **J.4** axios.ts 增强 — 所有错误日志写入 diagnosticStore + 401 软重定向(sessionStorage保存URL + 1.5s延迟)
+> - ✅ **J.5** App.tsx HealthChecker — 启动时自检 API 可达性 + Auth Token 有效性
+> - ✅ **J.6** 6 处静默失败修复 — resourceStore(用 Promise.allSettled) / Dashboard / SaveEditor / OTMiscTab / MainTab / MovesTab
+> - ✅ **J.7** 后端 DiagnosticsController + HealthController + check-health.sh（5项检查）
+> - ✅ **后端诊断补齐** ExceptionLoggingMiddleware → 所有未处理异常自动写入 `data/logs/backend-errors.jsonl` + `GET /api/diagnostics/backend-errors` 查询端点
+> - ⚠️ **J.8** Playwright 冒烟测试待实施
+> - TypeScript 0 错误 + .NET Build 0 错误（仅 1 个预存 CS1998 warning）+ Vite 生产构建通过
+> - Phase J: 17 项 / 已完成 10 / 剩余 7
+> 
+> ### Phase I + H.8 本地模拟器规划
+> - Phase I 新增 19 项（3DS Azahar）；Phase H.8 新增 6 项（NDS DeSmuME 备选方案）
+> 
+> - 总计 190 项，已完成 93 项，剩余 97 项
+> 
 > **更新 (2026-06-02)**：
 > 
 > ### Phase A.7 外观/装饰 Tab 完成

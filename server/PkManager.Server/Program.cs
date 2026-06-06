@@ -64,6 +64,7 @@ builder.Services.AddScoped<ParseService>();
 builder.Services.AddScoped<SaveFileService>();
 builder.Services.AddScoped<BankService>();
 builder.Services.AddScoped<PokemonEditService>();
+builder.Services.AddScoped<SettingsService>();
 
 // ── 控制器 & Swagger ────────────────────────────────────
 builder.Services.AddControllers()
@@ -123,6 +124,9 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // ── 中间件管道 ───────────────────────────────────────────
+
+// Exception logging — must be first to catch all unhandled exceptions
+app.UseMiddleware<PkManager.Server.Middleware.ExceptionLoggingMiddleware>();
 
 // Cross-Origin Isolation — emulator pages need SharedArrayBuffer (mGBA + melonDS pthreads)
 app.Use(async (context, next) =>

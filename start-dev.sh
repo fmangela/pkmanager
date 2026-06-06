@@ -6,7 +6,7 @@
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PGDATA="$HOME/pgdata"
+PGDATA="$PROJECT_DIR/data/pgdata"
 PG_LOG="$PGDATA/logfile"
 SERVER_DIR="$PROJECT_DIR/server/PkManager.Server"
 CLIENT_DIR="$PROJECT_DIR/client"
@@ -162,7 +162,7 @@ echo -e "${GREEN}╠════════════════════
 echo -e "${GREEN}║  📦 前端:   http://${LAN_IP}:5173                ║${NC}"
 echo -e "${GREEN}║  🔧 后端:   http://${LAN_IP}:5000                ║${NC}"
 echo -e "${GREEN}║  📖 API文档: http://${LAN_IP}:5000/swagger        ║${NC}"
-echo -e "${GREEN}║  🗄️  PG:     psql -h ~/pgdata/run -U pkadmin    ║${NC}"
+echo -e "${GREEN}║  🗄️  PG:     psql -h $PGDATA/run -U pkadmin       ║${NC}"
 echo -e "${GREEN}╠══════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║  局域网内其他设备可通过上方地址访问              ║${NC}"
 echo -e "${GREEN}║  按 Ctrl+C 停止所有服务                          ║${NC}"

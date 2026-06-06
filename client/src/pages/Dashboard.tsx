@@ -1,71 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, Row, Col, Typography, Button, Modal, List, Tag, Spin } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { BankOutlined, SaveOutlined, PlayCircleOutlined, PlusOutlined } from '@ant-design/icons';
+import { BankOutlined, SaveOutlined, PlusOutlined } from '@ant-design/icons';
 import { saveFileApi, type SaveFileInfo } from '../api/saveFile';
+import { useDiagnosticStore } from '../stores/diagnosticStore';
+import { PLAYABLE_GAMES, GAME_META } from '../constants/games';
+import { emulatorApi } from '../api/saveFile';
+import GameCover from '../components/GameCover';
 
 const { Title, Text } = Typography;
-
-// ── Game cover image with icon fallback ──
-const GameCover: React.FC<{ gameId: string; color: string }> = ({ gameId, color }) => {
-  const [hasError, setHasError] = useState(false);
-
-  if (hasError) {
-    return <PlayCircleOutlined style={{ fontSize: 48, color, marginBottom: 16 }} />;
-  }
-
-  return (
-    <img
-      src={`/covers/${gameId}.png`}
-      alt=""
-      onError={() => setHasError(true)}
-      style={{
-        height: 140,
-        width: 'auto',
-        maxWidth: '100%',
-        objectFit: 'contain',
-        borderRadius: 6,
-        marginBottom: 12,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-      }}
-    />
-  );
-};
-
-// gameId → gameVersion 映射（GBA Gen3 + NDS Gen4/5）
-const GAME_VERSION_MAP: Record<string, number> = {
-  // GBA Gen3
-  pkm_sapphire: 1, pkm_ruby: 2, pkm_emerald: 3,
-  pkm_firered: 4, pkm_leafgreen: 5,
-  // NDS Gen4
-  pkm_diamond: 10, pkm_pearl: 11, pkm_platinum: 12,
-  pkm_heartgold: 7, pkm_soulsilver: 8,
-  // NDS Gen5 (PKHeX: W=20, B=21, W2=22, B2=23)
-  pkm_white: 20, pkm_black: 21, pkm_white2: 22, pkm_black2: 23,
-};
-
-// 按真实发行日期排序（日本首发日）
-const GAMES: { gameId: string; displayName: string; color: string; gameVersion: number; generation: number }[] = [
-  { gameId: 'pkm_ruby', displayName: '宝可梦 红宝石', color: '#cf1322', gameVersion: 2, generation: 3 },
-  { gameId: 'pkm_sapphire', displayName: '宝可梦 蓝宝石', color: '#0958d9', gameVersion: 1, generation: 3 },
-  { gameId: 'pkm_firered', displayName: '宝可梦 火红', color: '#d4380d', gameVersion: 4, generation: 3 },
-  { gameId: 'pkm_leafgreen', displayName: '宝可梦 叶绿', color: '#389e0d', gameVersion: 5, generation: 3 },
-  { gameId: 'pkm_emerald', displayName: '宝可梦 绿宝石', color: '#08979c', gameVersion: 3, generation: 3 },
-];
-
-const NDS_GAMES: { gameId: string; displayName: string; color: string; gameVersion: number; generation: number }[] = [
-  // Gen4 — 按发行日期排序
-  { gameId: 'pkm_diamond', displayName: '宝可梦 钻石', color: '#5b8bd4', gameVersion: 10, generation: 4 },
-  { gameId: 'pkm_pearl', displayName: '宝可梦 珍珠', color: '#e799b0', gameVersion: 11, generation: 4 },
-  { gameId: 'pkm_platinum', displayName: '宝可梦 白金', color: '#b8b8b8', gameVersion: 12, generation: 4 },
-  { gameId: 'pkm_heartgold', displayName: '宝可梦 心金', color: '#d4a017', gameVersion: 7, generation: 4 },
-  { gameId: 'pkm_soulsilver', displayName: '宝可梦 魂银', color: '#8b9dc3', gameVersion: 8, generation: 4 },
-  // Gen5 (PKHeX: White=20, Black=21, White2=22, Black2=23)
-  { gameId: 'pkm_white', displayName: '宝可梦 白', color: '#e8e8e8', gameVersion: 20, generation: 5 },
-  { gameId: 'pkm_black', displayName: '宝可梦 黑', color: '#1a1a1a', gameVersion: 21, generation: 5 },
-  { gameId: 'pkm_white2', displayName: '宝可梦 白2', color: '#f0e6d3', gameVersion: 22, generation: 5 },
-  { gameId: 'pkm_black2', displayName: '宝可梦 黑2', color: '#0d2137', gameVersion: 23, generation: 5 },
-];
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -79,8 +22,13 @@ const DashboardPage: React.FC = () => {
     try {
       const res = await saveFileApi.list();
       setSaves(res.data || []);
-    } catch {
-      // 静默失败
+    } catch (err: any) {
+      useDiagnosticStore.getState().log({
+        category: 'api',
+        level: 'error',
+        message: '加载存档列表失败',
+        stack: err?.message,
+      });
     } finally {
       setLoadingSaves(false);
     }
@@ -90,20 +38,46 @@ const DashboardPage: React.FC = () => {
     if (selectedGame) fetchSaves();
   }, [selectedGame, fetchSaves]);
 
-  const gameVersion = selectedGame ? GAME_VERSION_MAP[selectedGame.gameId] : undefined;
+  const gameVersion = selectedGame ? GAME_META[selectedGame.gameId]?.gameVersion : undefined;
   const matchingSaves = saves.filter(s => s.gameVersion === gameVersion);
-  const isNds = selectedGame ? selectedGame.generation >= 4 : false;
+  const isNds = selectedGame ? (selectedGame.generation >= 4 && selectedGame.generation <= 5) : false;
+  const is3ds = selectedGame ? selectedGame.generation >= 6 : false;
+  const [checkState, setCheckState] = useState<{ loading: boolean; ready?: boolean; error?: string }>({ loading: false });
+
+  // 3DS 游戏：打开 Modal 时预校验 Azahar
+  useEffect(() => {
+    if (!selectedGame || !is3ds) { setCheckState({ loading: false }); return; }
+    setCheckState({ loading: true });
+    emulatorApi.checkLocal({ generation: selectedGame.generation, gameVersion: gameVersion, gameId: selectedGame.gameId })
+      .then((res: any) => {
+        const d = res.data || res;
+        const ready = d.azaharReady || d.desmumeReady;
+        setCheckState({ loading: false, ready, error: ready ? undefined : (d.error || '模拟器未就绪') });
+      })
+      .catch((err: any) => {
+        setCheckState({ loading: false, ready: false, error: err.response?.data?.message || err.message || '校验失败' });
+      });
+  }, [selectedGame?.gameId, is3ds]);
 
   const handleSelectSave = (saveFileId: string) => {
     setSelectedGame(null);
-    window.open(`/play${isNds ? '-nds' : ''}/${saveFileId}`, '_blank');
+    if (is3ds) {
+      // 3DS: no WASM — navigate to save editor instead
+      window.open(`/saves/${saveFileId}`, '_blank');
+    } else {
+      window.open(`/play${isNds ? '-nds' : ''}/${saveFileId}`, '_blank');
+    }
   };
 
   const handleNewGame = () => {
     if (!selectedGame) return;
     setSelectedGame(null);
-    // 不预建 DB 记录，直接打开模拟器。首次同步时服务器自动创建存档。
-    window.open(`/play${isNds ? '-nds' : ''}/new/${selectedGame.gameId}`, '_blank');
+    if (is3ds) {
+      // 3DS: navigate to saves page to create new game from there
+      window.open(`/saves`, '_blank');
+    } else {
+      window.open(`/play${isNds ? '-nds' : ''}/new/${selectedGame.gameId}`, '_blank');
+    }
   };
 
   return (
@@ -130,29 +104,14 @@ const DashboardPage: React.FC = () => {
           </Card>
         </Col>
 
-        {/* GBA 游戏卡片 (Gen3) — 按发行日期排序 */}
-        {GAMES.map(game => (
+        {/* 可玩游戏卡片 (Gen3 GBA + Gen4/5 NDS + Gen6/7 3DS) — 按发行日期排序 */}
+        {PLAYABLE_GAMES.map(game => (
           <Col key={game.gameId} xs={24} sm={12} md={8} lg={6}>
-            <Card hoverable onClick={() => setSelectedGame(game)}
+            <Card hoverable onClick={() => setSelectedGame({ gameId: game.gameId, displayName: game.displayName, generation: game.generation })}
               style={{ textAlign: 'center', minHeight: 300, borderColor: game.color }}>
-              <GameCover gameId={game.gameId} color={game.color} />
-              <Title level={4}>游玩{game.displayName.replace('宝可梦 ', '')}</Title>
-              <p>在线{game.displayName}</p>
-              <Button type="primary" style={{ background: game.color, borderColor: game.color }}>
-                开始游戏
-              </Button>
-            </Card>
-          </Col>
-        ))}
-
-        {/* NDS 游戏卡片 (Gen4/5) — 按发行日期排序 */}
-        {NDS_GAMES.map(game => (
-          <Col key={game.gameId} xs={24} sm={12} md={8} lg={6}>
-            <Card hoverable onClick={() => setSelectedGame(game)}
-              style={{ textAlign: 'center', minHeight: 300, borderColor: game.color }}>
-              <GameCover gameId={game.gameId} color={game.color} />
-              <Title level={4}>游玩{game.displayName.replace('宝可梦 ', '')}</Title>
-              <p>在线{game.displayName}</p>
+              <GameCover gameId={game.gameId} />
+              <Title level={4} style={{ marginTop: 8 }}>游玩{game.shortName}</Title>
+              <p>{game.displayName}</p>
               <Button type="primary" style={{ background: game.color, borderColor: game.color }}>
                 开始游戏
               </Button>
@@ -169,6 +128,22 @@ const DashboardPage: React.FC = () => {
         footer={null}
         width={520}
       >
+        {/* 3DS: 预校验状态 */}
+        {is3ds && checkState.loading && (
+          <div style={{ textAlign: 'center', padding: 16, background: '#e6f4ff', borderRadius: 6, marginBottom: 12 }}>
+            <Spin size="small" /> 正在检查 Azahar 配置...
+          </div>
+        )}
+        {is3ds && !checkState.loading && checkState.error && (
+          <div style={{ padding: 12, background: '#fff2f0', borderRadius: 6, marginBottom: 12, border: '1px solid #ffccc7' }}>
+            <Text type="danger">{checkState.error}</Text>
+            <br />
+            <Button type="link" size="small" onClick={() => { setSelectedGame(null); window.open('/settings', '_blank'); }}>
+              前往设置页配置
+            </Button>
+          </div>
+        )}
+
         {loadingSaves ? (
           <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div>
         ) : matchingSaves.length > 0 ? (

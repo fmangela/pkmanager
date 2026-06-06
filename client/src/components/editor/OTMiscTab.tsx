@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Input, InputNumber, Select, Space } from 'antd';
 import type { PokemonDto } from '../../api/saveFile';
 import { resourceApi, type ResourceItem } from '../../api/resource';
+import { useDiagnosticStore } from '../../stores/diagnosticStore';
 
 interface Props {
   pokemon: PokemonDto;
@@ -32,13 +33,18 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
   const [regions, setRegions] = useState<ResourceItem[]>([]);
 
   useEffect(() => {
-    resourceApi.geoCountries().then(r => setCountries(r.data || [])).catch(() => {});
+    resourceApi.geoCountries().then(r => setCountries(r.data || [])).catch((err: any) => {
+      useDiagnosticStore.getState().log({ category: 'api', level: 'error', message: '加载国家列表失败', stack: err?.message });
+    });
   }, []);
 
   useEffect(() => {
     const cid = pokemon.country || 0;
     if (cid > 0) {
-      resourceApi.geoRegions(cid).then(r => setRegions(r.data || [])).catch(() => setRegions([]));
+      resourceApi.geoRegions(cid).then(r => setRegions(r.data || [])).catch((err: any) => {
+        setRegions([]);
+        useDiagnosticStore.getState().log({ category: 'api', level: 'error', message: `加载地区列表失败 (country=${cid})`, stack: err?.message });
+      });
     } else {
       setRegions([]);
     }

@@ -3,6 +3,7 @@ import { Select, InputNumber, Tag, Space } from 'antd';
 import type { PokemonDto } from '../../api/saveFile';
 import { useResourceStore } from '../../stores/resourceStore';
 import { resourceApi, type ResourceItem } from '../../api/resource';
+import { useDiagnosticStore } from '../../stores/diagnosticStore';
 
 interface Props {
   pokemon: PokemonDto;
@@ -23,7 +24,14 @@ const MovesTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
     if (pokemon.species > 0) {
       resourceApi.speciesMoves(pokemon.species, generation).then(res => {
         setSpeciesMoves(res.data || []);
-      }).catch(() => setSpeciesMoves([]));
+      }).catch((err: any) => {
+        setSpeciesMoves([]);
+        useDiagnosticStore.getState().log({
+          category: 'api', level: 'error',
+          message: `加载招式列表失败 (species=${pokemon.species})`,
+          stack: err?.message,
+        });
+      });
     }
   }, [pokemon.species, generation]);
 

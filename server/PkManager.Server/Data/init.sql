@@ -137,3 +137,18 @@ COMMENT ON TABLE save_box_pokemon IS '存档文件箱子内宝可梦 - 展开存
 CREATE INDEX IF NOT EXISTS idx_box_save_id      ON save_box_pokemon (save_file_id);
 CREATE INDEX IF NOT EXISTS idx_box_save_box     ON save_box_pokemon (save_file_id, box_index);
 CREATE INDEX IF NOT EXISTS idx_box_pokemon_json ON save_box_pokemon USING GIN (pokemon_json);
+
+-- ── 用户设置表 (key-value + device_id) ─────────────────
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id     UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_id   UUID         NOT NULL,
+    key         VARCHAR(64)  NOT NULL,
+    value       TEXT         NOT NULL,
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, device_id, key)
+);
+
+COMMENT ON TABLE user_settings IS '用户设置 - key-value 模式，按设备隔离';
+COMMENT ON COLUMN user_settings.device_id IS '前端生成的设备指纹 UUID';
+
+CREATE INDEX IF NOT EXISTS idx_user_settings_user_device ON user_settings (user_id, device_id);

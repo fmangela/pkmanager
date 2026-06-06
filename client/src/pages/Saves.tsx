@@ -2,92 +2,77 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography, Table, Button, Upload, Popconfirm, App, Tag, Space, Card,
 } from 'antd';
-import { UploadOutlined, DeleteOutlined, EyeOutlined, FileAddOutlined, ArrowLeftOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { UploadOutlined, DeleteOutlined, EyeOutlined, FileAddOutlined, ArrowLeftOutlined, PlayCircleOutlined, DesktopOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate } from 'react-router-dom';
-import { saveFileApi, type SaveFileInfo } from '../api/saveFile';
+import { saveFileApi, emulatorApi, type SaveFileInfo } from '../api/saveFile';
+import { GAME_VERSION_DISPLAY, GENERATION_MAP } from '../constants/games';
+import GameCover from '../components/GameCover';
 
 const { Title } = Typography;
-
-const GENERATION_MAP: Record<number, string> = {
-  1: 'Gen1 (GB)',
-  2: 'Gen2 (GBC)',
-  3: 'Gen3 (GBA)',
-  4: 'Gen4 (NDS)',
-  5: 'Gen5 (NDS)',
-  6: 'Gen6 (3DS)',
-  7: 'Gen7 (3DS)',
-  8: 'Gen8 (Switch)',
-  9: 'Gen9 (Switch)',
-};
-
-const GENERATION_COLORS: Record<number, string> = {
-  1: 'default', 2: 'default',
-  3: 'green', 4: 'blue', 5: 'cyan',
-  6: 'orange', 7: 'purple', 8: 'red', 9: 'volcano',
-};
-
-// 游戏版本号 → 显示名称 & 颜色（用于存档列表精确显示）
-const GAME_VERSION_DISPLAY: Record<number, { name: string; color: string }> = {
-  // GBA Gen3
-  1:  { name: '蓝宝石', color: '#0958d9' },
-  2:  { name: '红宝石', color: '#cf1322' },
-  3:  { name: '绿宝石', color: '#08979c' },
-  4:  { name: '火红',   color: '#d4380d' },
-  5:  { name: '叶绿',   color: '#389e0d' },
-  // NDS Gen4
-  10: { name: '钻石',   color: '#5b8bd4' },
-  11: { name: '珍珠',   color: '#e799b0' },
-  12: { name: '白金',   color: '#b8b8b8' },
-  7:  { name: '心金',   color: '#d4a017' },
-  8:  { name: '魂银',   color: '#8b9dc3' },
-  // NDS Gen5 (PKHeX: W=20, B=21, W2=22, B2=23)
-  20: { name: '白',     color: '#e8e8e8' },
-  21: { name: '黑',     color: '#1a1a1a' },
-  22: { name: '白2',    color: '#f0e6d3' },
-  23: { name: '黑2',    color: '#0d2137' },
-  // 3DS Gen6 (PKHeX: X=24, Y=25, AS=26, OR=27)
-  24: { name: 'X',      color: '#e84855' },
-  25: { name: 'Y',      color: '#3b5ba5' },
-  26: { name: 'α蓝宝石', color: '#d43f3f' },
-  27: { name: 'Ω红宝石', color: '#c73e3e' },
-  // 3DS Gen7 (PKHeX: SN=30, MN=31, US=32, UM=33)
-  30: { name: '太阳',   color: '#f5a623' },
-  31: { name: '月亮',   color: '#4a5ab9' },
-  32: { name: '究极日', color: '#e8870a' },
-  33: { name: '究极月', color: '#1e2d8a' },
-  34: { name: 'GO',     color: '#50c8e8' },
-  // Let's Go (PKHeX: GP=42, GE=43, Gen7)
-  42: { name: 'Let\'s Go 皮卡丘', color: '#f7c744' },
-  43: { name: 'Let\'s Go 伊布',   color: '#b58e5c' },
-  // Gen8 Switch (PKHeX: SW=44, SH=45, BD=48, SP=49, PLA=47)
-  44: { name: '剑',     color: '#4db8ff' },
-  45: { name: '盾',     color: '#e84855' },
-  48: { name: '晶灿钻石', color: '#5b8bd4' },
-  49: { name: '明亮珍珠', color: '#e799b0' },
-  47: { name: '阿尔宙斯', color: '#8bc34a' },
-  // Gen9 Switch (PKHeX: SL=50, VL=51)
-  50: { name: '朱',     color: '#f77e24' },
-  51: { name: '紫',     color: '#9b59b6' },
-  // PKHeX 复合版本（兜底）
-  62: { name: '珍珠/钻石', color: '#5b8bd4' },
-  63: { name: '珍珠/钻石/白金', color: '#b8b8b8' },
-  64: { name: '心金/魂银', color: '#d4a017' },
-  66: { name: '黑/白',   color: '#1a1a1a' },
-  67: { name: '黑2/白2', color: '#0d2137' },
-  68: { name: 'X/Y',    color: '#e84855' },
-  70: { name: 'OR/AS',  color: '#c73e3e' },
-  71: { name: '太阳/月亮', color: '#f5a623' },
-  72: { name: '究极日/究极月', color: '#e8870a' },
-  73: { name: 'Let\'s Go 皮卡丘/伊布', color: '#f7c744' },
-};
 
 const SavesPage: React.FC = () => {
   const [saves, setSaves] = useState<SaveFileInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [launchStates, setLaunchStates] = useState<Record<string, { pid: number; type: string; status: string }>>({});
   const navigate = useNavigate();
   const { message } = App.useApp();
+
+  // ── 轮询本地模拟器状态 ────────────────────────────────
+  useEffect(() => {
+    const activeIds = Object.keys(launchStates).filter(id => launchStates[id]?.status === 'running');
+    if (activeIds.length === 0) return;
+
+    const timer = setInterval(async () => {
+      for (const saveFileId of activeIds) {
+        try {
+          const res = await emulatorApi.localStatus(saveFileId);
+          if (!res.data.running) {
+            // 模拟器已关闭 → 自动同步
+            setLaunchStates(prev => ({ ...prev, [saveFileId]: { ...prev[saveFileId], status: 'syncing' } }));
+            try {
+              await emulatorApi.syncFromLocal(saveFileId);
+              message.success('存档已自动同步');
+            } catch (e: any) {
+              message.warning('模拟器已关闭，但自动同步失败。请手动点击「本机」按钮重试');
+            }
+            setLaunchStates(prev => {
+              const next = { ...prev };
+              delete next[saveFileId];
+              return next;
+            });
+          }
+        } catch {
+          // 网络错误，忽略本次轮询
+        }
+      }
+    }, 2000);
+
+    return () => clearInterval(timer);
+  }, [launchStates, message]);
+
+  // ── 启动本地模拟器 ────────────────────────────────────
+  const handleLaunchLocal = async (record: SaveFileInfo) => {
+    if (launchStates[record.saveFileId]) {
+      message.warning('该存档的模拟器已在运行中');
+      return;
+    }
+    const saveFileId = record.saveFileId;
+    setLaunchStates(prev => ({ ...prev, [saveFileId]: { pid: 0, type: '', status: 'launching' } }));
+    try {
+      const res = await emulatorApi.launchLocal(saveFileId);
+      message.success(`模拟器已启动 (PID: ${res.data.pid})`);
+      setLaunchStates(prev => ({ ...prev, [saveFileId]: { pid: res.data.pid, type: res.data.type, status: 'running' } }));
+    } catch (err: any) {
+      message.error(err.response?.data?.message || '启动失败');
+      setLaunchStates(prev => {
+        const next = { ...prev };
+        delete next[saveFileId];
+        return next;
+      });
+    }
+  };
 
   const fetchSaves = useCallback(async () => {
     setLoading(true);
@@ -149,9 +134,16 @@ const SavesPage: React.FC = () => {
       width: 110,
       render: (ver: number) => {
         const info = GAME_VERSION_DISPLAY[ver];
-        return info
-          ? <Tag color={info.color}>{info.name}</Tag>
-          : <Tag color={GENERATION_COLORS[ver] || 'default'}>{GENERATION_MAP[ver] || `Gen${ver}`}</Tag>;
+        return (
+          <Space size={8}>
+            <GameCover gameVersion={ver} size="small" showPlatform={false}
+              style={{ minWidth: 0, minHeight: 0, padding: 0 }} />
+            {info
+              ? <Tag color={info.color}>{info.name}</Tag>
+              : <Tag>{GENERATION_MAP[ver] || `Gen${ver}`}</Tag>
+            }
+          </Space>
+        );
       },
     },
     {
@@ -198,7 +190,23 @@ const SavesPage: React.FC = () => {
           {(record.generation === 3 || record.generation === 4 || record.generation === 5) && (
             <Button type="link" size="small" icon={<PlayCircleOutlined />}
               onClick={() => window.open(`/play${record.generation >= 4 ? '-nds' : ''}/${record.saveFileId}`, '_blank')}
-              style={{ color: '#52c41a' }}>游玩</Button>
+              style={{ color: '#52c41a' }}>WASM</Button>
+          )}
+          {(record.generation >= 4) && (
+            (() => {
+              const ls = launchStates[record.saveFileId];
+              if (ls?.status === 'launching') return <Button type="link" size="small" loading>启动中</Button>;
+              if (ls?.status === 'running') return (
+                <Button type="link" size="small" icon={<DesktopOutlined />} style={{ color: '#52c41a' }}>
+                  {ls.type === 'azahar' ? '3DS' : 'NDS'} 运行中
+                </Button>
+              );
+              if (ls?.status === 'syncing') return <Button type="link" size="small" loading>同步中</Button>;
+              return (
+                <Button type="link" size="small" icon={<DesktopOutlined />}
+                  onClick={() => handleLaunchLocal(record)}>本机</Button>
+              );
+            })()
           )}
           <Button
             type="link"

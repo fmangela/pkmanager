@@ -3,6 +3,7 @@ import { Select, Input, InputNumber, Switch, Space, Tag } from 'antd';
 import type { PokemonDto } from '../../api/saveFile';
 import { useResourceStore } from '../../stores/resourceStore';
 import { resourceApi, type ResourceItem } from '../../api/resource';
+import { useDiagnosticStore } from '../../stores/diagnosticStore';
 
 interface Props {
   pokemon: PokemonDto;
@@ -31,7 +32,14 @@ const MainTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
     if (pokemon.species > 0) {
       resourceApi.speciesAbilities(pokemon.species, generation).then(res => {
         setSpeciesAbilities(res.data || []);
-      }).catch(() => setSpeciesAbilities([]));
+      }).catch((err: any) => {
+        setSpeciesAbilities([]);
+        useDiagnosticStore.getState().log({
+          category: 'api', level: 'error',
+          message: `加载物种特性失败 (species=${pokemon.species})`,
+          stack: err?.message,
+        });
+      });
     }
   }, [pokemon.species, generation]);
 

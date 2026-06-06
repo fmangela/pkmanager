@@ -5,17 +5,21 @@ import {
 } from 'antd';
 import {
   SaveOutlined, DownloadOutlined, ArrowLeftOutlined, BankOutlined,
-  SafetyCertificateOutlined,
+  SafetyCertificateOutlined, AppstoreOutlined, LeftOutlined, RightOutlined,
+  StarFilled,
 } from '@ant-design/icons';
 import {
   DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors,
   useDraggable, useDroppable,
   type DragStartEvent, type DragEndEvent,
 } from '@dnd-kit/core';
-import { saveFileApi, type SaveFileDetail, type BoxSlotDto, type PokemonDto, type SaveBackupDto } from '../api/saveFile';
+import { saveFileApi, type SaveFileDetail, type BoxSlotDto, type PokemonDto, type SaveBackupDto, type LegalityStatus } from '../api/saveFile';
+import { useDiagnosticStore } from '../stores/diagnosticStore';
 import { bankApi, type BankPokemon } from '../api/bank';
 import EditPanel from '../components/editor/EditPanel';
+import AllBoxesModal from '../components/AllBoxesModal';
 import { useAuthStore } from '../stores/authStore';
+import GameCover from '../components/GameCover';
 
 const { Title, Text } = Typography;
 
@@ -26,13 +30,23 @@ const bankDropId = 'bank-drop-zone';
 const parseSaveSlot = (id: string) => ({ boxIndex: +id.split(':')[1], slotIndex: +id.split(':')[2] });
 
 // ── Draggable Slot Component ─────────────────────────
-const DraggableSlot: React.FC<{ boxIndex: number; slot: BoxSlotDto; onPokemonClick?: (p: PokemonDto) => void }> = ({ boxIndex, slot, onPokemonClick }) => {
+const DraggableSlot: React.FC<{
+  boxIndex: number; slot: BoxSlotDto; onPokemonClick?: (p: PokemonDto) => void;
+  legalityStatus?: LegalityStatus;
+}> = ({ boxIndex, slot, onPokemonClick, legalityStatus }) => {
   const slotId = saveSlotId(boxIndex, slot.slotIndex);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: slotId, disabled: slot.isEmpty });
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: slotId });
 
   const p = slot.pokemon;
   const isEmpty = slot.isEmpty;
+
+  // Legality dot color
+  const legalityColor =
+    legalityStatus === 'Legal' ? '#52c41a' :
+    legalityStatus === 'Fishy' ? '#faad14' :
+    legalityStatus === 'Illegal' ? '#ff4d4f' :
+    undefined;
 
   return (
     <div
@@ -61,17 +75,42 @@ const DraggableSlot: React.FC<{ boxIndex: number; slot: BoxSlotDto; onPokemonCli
               style={{ width: 32, height: 32, imageRendering: 'pixelated' }}
               onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect fill="%23f0f0f0" width="32" height="32"/><text x="16" y="16" text-anchor="middle" dy=".3em" fill="%23999" font-size="7">PK</text></svg>'); }}
             />
-            {p!.isShiny && (
-              <span style={{ position: 'absolute', top: -2, right: -2, fontSize: 10, color: '#faad14', lineHeight: 1 }}>✨</span>
+            {/* Alpha badge — top-left */}
+            {p!.isAlpha && (
+              <span style={{
+                position: 'absolute', top: -4, left: -4,
+                background: '#ff4d4f', color: '#fff', borderRadius: '50%',
+                width: 14, height: 14, fontSize: 9, lineHeight: '14px', textAlign: 'center',
+                border: '1px solid #fff',
+              }} title="头目 (Alpha)">α</span>
             )}
-            {/* Legality indicator dot — green if valid */}
-            {!p!.isValid && (
+            {/* Shiny star — top-right */}
+            {p!.isShiny && (
+              <StarFilled style={{
+                position: 'absolute', top: -4, right: -4,
+                fontSize: 12, color: '#faad14', filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.3))',
+              }} title="闪光" />
+            )}
+            {/* Gmax badge — bottom-right */}
+            {p!.canGigantamax && (
+              <span style={{
+                position: 'absolute', bottom: -4, right: -4,
+                background: '#fa541c', color: '#fff', borderRadius: '50%',
+                width: 14, height: 14, fontSize: 10, lineHeight: '14px', textAlign: 'center',
+                border: '1px solid #fff',
+              }} title="超极巨化">G</span>
+            )}
+            {/* Legality indicator dot — bottom-left (tri-color) */}
+            {legalityColor && (
               <span style={{
                 position: 'absolute', bottom: -2, left: -2,
                 width: 8, height: 8, borderRadius: '50%',
-                background: '#ff4d4f',
+                background: legalityColor,
                 border: '1px solid #fff',
-              }} title="不合法" />
+              }} title={
+                legalityStatus === 'Legal' ? '合法' :
+                legalityStatus === 'Fishy' ? '可疑' : '不合法'
+              } />
             )}
           </div>
           <div style={{ fontSize: 10, lineHeight: 1.2, textAlign: 'center', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -147,6 +186,8 @@ const SaveEditor: React.FC = () => {
   const [editingIsParty, setEditingIsParty] = useState(false);
   const [editPanelOpen, setEditPanelOpen] = useState(false);
   const [legalityScanning, setLegalityScanning] = useState(false);
+  const [legalityMap, setLegalityMap] = useState<Record<string, LegalityStatus>>({});
+  const [allBoxesOpen, setAllBoxesOpen] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -168,6 +209,18 @@ const SaveEditor: React.FC = () => {
   }, [id, message]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Keyboard: Left/Right arrow keys to navigate boxes
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (editPanelOpen) return; // Don't navigate while editing
+      if (e.key === 'ArrowLeft') setActiveBox(a => Math.max(0, a - 1));
+      else if (e.key === 'ArrowRight') setActiveBox(a => Math.min((saveData?.boxes.length || 1) - 1, a + 1));
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [saveData?.boxes.length, editPanelOpen]);
 
   // After saveData refreshes, update editingPokemon if the panel is open
   useEffect(() => {
@@ -258,6 +311,13 @@ const SaveEditor: React.FC = () => {
     setLegalityScanning(true);
     try {
       const res = await saveFileApi.batchLegalityReport(id);
+      // Build legality map: slotId → status
+      const map: Record<string, LegalityStatus> = {};
+      for (const s of res.data.slots) {
+        const slotKey = s.isParty ? `party-${s.slotIndex}` : `box-${s.boxIndex}-${s.slotIndex}`;
+        map[slotKey] = s.status;
+      }
+      setLegalityMap(map);
       message.success(`扫描完成: ${res.data.total}只, ${res.data.legalCount}合法, ${res.data.fishyCount}可疑, ${res.data.illegalCount}不合法`);
     } catch { message.error('扫描失败'); }
     finally { setLegalityScanning(false); }
@@ -279,7 +339,11 @@ const SaveEditor: React.FC = () => {
             {saveData.filename}
             {saveData.isModified && <Tag color="orange" style={{ marginLeft: 8 }}>已修改</Tag>}
           </Title>
-          <Text type="secondary">Gen{saveData.generation} | {saveData.gameVersionName}</Text>
+          <Space>
+            <GameCover gameVersion={saveData.gameVersion} size="small" showPlatform={false}
+              style={{ minWidth: 0, minHeight: 0, padding: 0 }} />
+            <Text type="secondary">Gen{saveData.generation} | {saveData.gameVersionName}</Text>
+          </Space>
           <Space>
             <Tooltip title="合法性批量扫描">
               <Button icon={<SafetyCertificateOutlined />} onClick={handleBatchLegalityScan}
@@ -298,7 +362,17 @@ const SaveEditor: React.FC = () => {
               border: '1px solid #e8e8e8', alignSelf: 'flex-start',
               display: 'flex', flexDirection: 'column',
             }}>
-              <Text strong style={{ display: 'block', marginBottom: 6, flexShrink: 0 }}>箱子列表</Text>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexShrink: 0 }}>
+                <Text strong>箱子列表</Text>
+                <Space size={2}>
+                  <Button size="small" type="text" icon={<LeftOutlined />}
+                    disabled={activeBox === 0}
+                    onClick={() => setActiveBox(a => Math.max(0, a - 1))} />
+                  <Button size="small" type="text" icon={<RightOutlined />}
+                    disabled={activeBox >= boxList.length - 1}
+                    onClick={() => setActiveBox(a => Math.min(boxList.length - 1, a + 1))} />
+                </Space>
+              </div>
               <div style={{ overflow: 'auto', maxHeight: 480 }}>
                 {boxList.map(box => {
                   const count = box.slots.filter(s => !s.isEmpty).length;
@@ -307,12 +381,17 @@ const SaveEditor: React.FC = () => {
                       style={{ padding: '6px 10px', borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                         background: activeBox === box.boxIndex ? '#e6f4ff' : 'transparent',
                         border: activeBox === box.boxIndex ? '1px solid #1677ff' : '1px solid transparent' }}>
-                      <Text style={{ fontSize: 12 }}>{box.boxName}</Text>
+                      <Text style={{ fontSize: 12 }}>Box {box.boxIndex + 1}: {box.boxName}</Text>
                       <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>{count}/{box.capacity}</Text>
                     </div>
                   );
                 })}
               </div>
+              <Button size="small" type="dashed" icon={<AppstoreOutlined />}
+                style={{ marginTop: 8, flexShrink: 0 }}
+                onClick={() => setAllBoxesOpen(true)}>
+                全部箱子
+              </Button>
             </div>
 
             {/* Box Grid */}
@@ -320,10 +399,14 @@ const SaveEditor: React.FC = () => {
               <Text strong style={{ display: 'block', marginBottom: 12 }}>{currentBox?.boxName || `Box ${activeBox + 1}`}</Text>
               {currentBox && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, maxWidth: 600 }}>
-                  {currentBox.slots.map(slot => (
-                    <DraggableSlot key={slot.slotIndex} boxIndex={activeBox} slot={slot}
-                      onPokemonClick={(p) => { setEditingPokemon(p); setEditingBoxIndex(activeBox); setEditingSlotIndex(slot.slotIndex); setEditingIsParty(false); setEditPanelOpen(true); }} />
-                  ))}
+                  {currentBox.slots.map(slot => {
+                    const slotKey = `box-${activeBox}-${slot.slotIndex}`;
+                    return (
+                      <DraggableSlot key={slot.slotIndex} boxIndex={activeBox} slot={slot}
+                        legalityStatus={legalityMap[slotKey]}
+                        onPokemonClick={(p) => { setEditingPokemon(p); setEditingBoxIndex(activeBox); setEditingSlotIndex(slot.slotIndex); setEditingIsParty(false); setEditPanelOpen(true); }} />
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -402,6 +485,17 @@ const SaveEditor: React.FC = () => {
         onClose={() => { setEditPanelOpen(false); setEditingPokemon(null); setEditingBoxIndex(undefined); setEditingSlotIndex(undefined); }}
         onSaved={fetchData}
       />
+
+      <AllBoxesModal
+        open={allBoxesOpen}
+        onClose={() => setAllBoxesOpen(false)}
+        boxes={saveData.boxes}
+        legalityMap={legalityMap}
+        activeBox={activeBox}
+        saveFileId={id!}
+        onSelectBox={(boxIdx) => setActiveBox(boxIdx)}
+        onSwapped={fetchData}
+      />
     </DndContext>
   );
 };
@@ -413,7 +507,16 @@ const BackupSection: React.FC<{ saveFileId: string }> = ({ saveFileId }) => {
   const { message } = App.useApp();
 
   const loadBackups = async () => {
-    try { const r = await saveFileApi.listBackups(saveFileId); setBackups(r.data || []); } catch {}
+    try {
+      const r = await saveFileApi.listBackups(saveFileId);
+      setBackups(r.data || []);
+    } catch (err: any) {
+      useDiagnosticStore.getState().log({
+        category: 'api', level: 'error',
+        message: '加载备份列表失败',
+        stack: err?.message,
+      });
+    }
   };
   useEffect(() => { loadBackups(); }, [saveFileId]);
 
