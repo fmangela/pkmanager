@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Text;
 using PKHeX.Core;
 using PkManager.Server.Models.Response;
 
@@ -9,6 +10,48 @@ namespace PkManager.Server.Services;
 /// </summary>
 public class ParseService
 {
+    private const int DeSmuMEFooterSize = 0x7A;
+    private const int NdsRawSaveSize = SaveUtil.SIZE_G4RAW;
+    private static readonly byte[] DeSmuMEMarker = Encoding.ASCII.GetBytes("|-DESMUME SAVE-|");
+
+    private static bool IsDeSmuMESave(byte[] saveData)
+    {
+        if (saveData.Length != NdsRawSaveSize + DeSmuMEFooterSize)
+            return false;
+
+        var tail = saveData.AsSpan(saveData.Length - DeSmuMEMarker.Length, DeSmuMEMarker.Length);
+        return tail.SequenceEqual(DeSmuMEMarker);
+    }
+
+    private static byte[] GetCoreSaveBytes(byte[] saveData)
+    {
+        if (IsDeSmuMESave(saveData))
+            return saveData[..NdsRawSaveSize];
+        return (byte[])saveData.Clone();
+    }
+
+    public static PKHeX.Core.SaveFile OpenSaveFile(byte[] saveData, string? fileName = null)
+    {
+        var parseBuffer = GetCoreSaveBytes(saveData);
+        var sav = SaveUtil.GetVariantSAV(parseBuffer);
+        if (sav == null)
+            throw new BusinessException("不支持的存档格式或文件已损坏");
+        return sav;
+    }
+
+    public static byte[] FinalizeSaveBytes(PKHeX.Core.SaveFile sav, byte[] originalBytes)
+    {
+        var coreBytes = sav.Write().ToArray();
+        if (!IsDeSmuMESave(originalBytes))
+            return coreBytes;
+
+        var footer = originalBytes[NdsRawSaveSize..];
+        var result = new byte[coreBytes.Length + footer.Length];
+        Buffer.BlockCopy(coreBytes, 0, result, 0, coreBytes.Length);
+        Buffer.BlockCopy(footer, 0, result, coreBytes.Length, footer.Length);
+        return result;
+    }
+
     /// <summary>
     /// 解析存档文件，返回所有箱子及内部宝可梦的结构化数据
     /// </summary>
@@ -26,15 +69,18 @@ public class ParseService
             ? $"（识别为 {knownSizes[saveData.Length]} 存档）"
             : $"（文件大小 {saveData.Length} 字节，常见大小: {string.Join(", ", knownSizes.Select(k => $"{k.Key}"))}）";
 
-        // PKHeX 解析期间可能会触碰传入缓冲区；用副本隔离，避免上传原始字节被污染。
-        var parseBuffer = (byte[])saveData.Clone();
-
-        // PKHeX.Core 自动识别存档格式
-        var sav = SaveUtil.GetVariantSAV(parseBuffer);
-        if (sav == null)
+        PKHeX.Core.SaveFile sav;
+        try
+        {
+            // DeSmuME .dsv 带 footer，解析前需要剥离外层包装。
+            sav = OpenSaveFile(saveData, fileName);
+        }
+        catch (BusinessException)
+        {
             throw new BusinessException(
                 $"不支持的存档格式或文件已损坏 {sizeHint}。" +
                 " 请确认：1) 存档来自宝可梦主系列游戏 2) 文件未损坏 3) 文件大小正确");
+        }
 
         var boxes = new List<BoxDto>();
 

@@ -445,6 +445,7 @@ public class EmulatorController : ControllerBase
         var deviceId = GetDeviceId();
         var emuSettings = await _settingsService.GetEmulatorSettings(userId.Value, deviceId);
         var gen = req.Generation;
+        var gameVersion = req.GameVersion ?? 0;
 
         var result = new Dictionary<string, object> { ["generation"] = gen };
 
@@ -480,8 +481,7 @@ public class EmulatorController : ControllerBase
             result["exePath"] = exe;
             result["exeConfigured"] = true;
 
-            var rom = await _db.QueryFirstOrDefaultAsync<Models.Entity.RomFileEntity>(
-                "SELECT * FROM rom_files WHERE generation=@Gen AND local_path IS NOT NULL LIMIT 1", new { Gen = gen });
+            var rom = await GetPreferredNdsRom(gen, gameVersion);
             result["romFound"] = rom != null;
             result["romPath"] = rom?.LocalPath ?? "";
             if (rom == null)
@@ -560,9 +560,7 @@ public class EmulatorController : ControllerBase
             if (string.IsNullOrWhiteSpace(saveDir))
                 saveDir = GetDefaultDeSmuMESaveDir();
 
-            var rom = await _db.QueryFirstOrDefaultAsync<Models.Entity.RomFileEntity>(
-                "SELECT * FROM rom_files WHERE generation=@Gen AND local_path IS NOT NULL LIMIT 1",
-                new { Gen = gen });
+            var rom = await GetPreferredNdsRom(gen, gameVersion);
             if (rom == null) return BadRequest(ApiResponse<object>.Error(400, "未找到对应 NDS ROM，请先导入"));
             romPath = rom.LocalPath ?? rom.GameId;
 
@@ -649,8 +647,7 @@ public class EmulatorController : ControllerBase
             exePath = NormalizeExePath(dsExeRaw);
             saveDir = NormalizeDirPath(emuSettings.GetValueOrDefault("desmume.save_dir") ?? "");
             if (string.IsNullOrWhiteSpace(saveDir)) saveDir = GetDefaultDeSmuMESaveDir();
-            var rom = await _db.QueryFirstOrDefaultAsync<Models.Entity.RomFileEntity>(
-                "SELECT * FROM rom_files WHERE generation=@Gen AND local_path IS NOT NULL LIMIT 1", new { Gen = gen });
+            var rom = await GetPreferredNdsRom(gen, gameVersion);
             if (rom == null) return BadRequest(ApiResponse<object>.Error(400, "未找到 ROM"));
             romPath = rom.LocalPath ?? rom.GameId;
             var romFileName = Path.GetFileNameWithoutExtension(romPath);
@@ -664,7 +661,7 @@ public class EmulatorController : ControllerBase
             ExePath = exePath, SaveDir = saveDir, RomPath = romPath,
             EmuSavePath = emuSavePath, LaunchArgs = launchArgs, Type = emulatorType,
             SaveDataBase64 = saveDataBase64, Generation = gen, GameVersion = gameVersion,
-            TitleIdLow = GetTitleIdLow(gameVersion), FileName = save.Filename,
+            TitleIdLow = gen >= 6 ? GetTitleIdLow(gameVersion) : string.Empty, FileName = save.Filename,
             SaveFileId = saveFileId, SyncToken = syncToken,
         }, DateTime.UtcNow.AddMinutes(5));
 
@@ -769,9 +766,7 @@ public class EmulatorController : ControllerBase
         else
         {
             // NDS DeSmuME: need ROM filename for .dsv
-            var rom = await _db.QueryFirstOrDefaultAsync<Models.Entity.RomFileEntity>(
-                "SELECT * FROM rom_files WHERE generation=@Gen LIMIT 1",
-                new { Gen = gen });
+            var rom = await GetPreferredNdsRom(gen, gameVersion);
             var romFileName = Path.GetFileNameWithoutExtension(rom?.LocalPath ?? rom?.GameId ?? "");
             emuSavePath = Path.Combine(saveDir, $"{romFileName}.dsv");
         }
@@ -874,9 +869,17 @@ public class EmulatorController : ControllerBase
             return NotFound(ApiResponse<object>.Error(404, "没有找到备份文件。可能尚未启动过本地模拟器"));
 
         // 恢复
-        var emuSavePath = gen >= 6
-            ? GetAzaharSavePath(saveDir, gameVersion)
-            : Path.Combine(saveDir, $"{Path.GetFileNameWithoutExtension(save.Filename)}.dsv");
+        string emuSavePath;
+        if (gen >= 6)
+        {
+            emuSavePath = GetAzaharSavePath(saveDir, gameVersion);
+        }
+        else
+        {
+            var rom = await GetPreferredNdsRom(gen, gameVersion);
+            var romFileName = Path.GetFileNameWithoutExtension(rom?.LocalPath ?? rom?.GameId ?? "");
+            emuSavePath = Path.Combine(saveDir, $"{romFileName}.dsv");
+        }
 
         System.IO.File.Copy(backupPath, emuSavePath, overwrite: true);
 
@@ -969,6 +972,37 @@ public class EmulatorController : ControllerBase
     // ── Helpers ──────────────────────────────────────────
 
     private static readonly ConcurrentDictionary<int, (Guid SaveFileId, Guid UserId, string EmuSavePath)> _runningProcesses = new();
+
+    private async Task<Models.Entity.RomFileEntity?> GetPreferredNdsRom(int generation, int gameVersion)
+    {
+        var gameId = GetNdsGameId(gameVersion);
+        if (!string.IsNullOrWhiteSpace(gameId))
+        {
+            var exact = await _db.QueryFirstOrDefaultAsync<Models.Entity.RomFileEntity>(
+                "SELECT * FROM rom_files WHERE game_id=@GameId AND local_path IS NOT NULL LIMIT 1",
+                new { GameId = gameId });
+            if (exact != null)
+                return exact;
+        }
+
+        return await _db.QueryFirstOrDefaultAsync<Models.Entity.RomFileEntity>(
+            "SELECT * FROM rom_files WHERE generation=@Gen AND local_path IS NOT NULL ORDER BY display_name LIMIT 1",
+            new { Gen = generation });
+    }
+
+    private static string? GetNdsGameId(int gameVersion) => gameVersion switch
+    {
+        10 or 62 => "pkm_diamond",
+        11 => "pkm_pearl",
+        12 or 63 => "pkm_platinum",
+        7 or 64 => "pkm_heartgold",
+        8 => "pkm_soulsilver",
+        20 => "pkm_white",
+        21 or 66 => "pkm_black",
+        22 => "pkm_white2",
+        23 or 67 => "pkm_black2",
+        _ => null,
+    };
 
     /// <summary>检测当前操作系统是否为 Windows</summary>
     private static bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);

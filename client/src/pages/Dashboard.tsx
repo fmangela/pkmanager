@@ -61,21 +61,22 @@ const DashboardPage: React.FC = () => {
       });
   }, [selectedGame?.gameId, is3ds]);
 
-  const handleSelectSave = async (saveFileId: string, filename?: string) => {
+  const handleLocalPlay = async (saveFileId: string, filename?: string) => {
     if (is3ds && !checkState.ready) {
       message.warning(checkState.error || '本地模拟器未就绪');
       return;
     }
     setSelectedGame(null);
-    if (is3ds) {
-      try {
-        await launchLocalSave(saveFileId, message, filename);
-      } catch (err: any) {
-        message.error(err?.message || err?.response?.data?.message || '本机启动失败');
-      }
-    } else {
-      window.open(`/play${isNds ? '-nds' : ''}/${saveFileId}`, '_blank');
+    try {
+      await launchLocalSave(saveFileId, message, filename);
+    } catch (err: any) {
+      message.error(err?.message || err?.response?.data?.message || '本机启动失败');
     }
+  };
+
+  const handleWebPlay = (saveFileId: string) => {
+    setSelectedGame(null);
+    window.open(`/play${isNds ? '-nds' : ''}/${saveFileId}`, '_blank');
   };
 
   const handleNewGame = () => {
@@ -166,16 +167,28 @@ const DashboardPage: React.FC = () => {
         ) : matchingSaves.length > 0 ? (
           <>
             <Text type="secondary" style={{ marginBottom: 12, display: 'block' }}>
-              {is3ds ? '选择已有存档后将直接本机游玩' : '选择已有存档继续游戏'}
+              {is3ds ? '选择已有存档后将直接本机游玩' : isNds ? '选择已有存档后可在 Web 或本地继续游戏' : '选择已有存档继续游戏'}
             </Text>
             <List
               dataSource={matchingSaves}
               renderItem={(save) => (
                 <List.Item
-                  onClick={() => handleSelectSave(save.saveFileId, save.filename)}
-                  style={{ cursor: 'pointer', padding: '10px 12px', borderRadius: 6 }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#f6ffed'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ''; }}
+                  onClick={isNds ? undefined : () => (is3ds ? handleLocalPlay(save.saveFileId, save.filename) : handleWebPlay(save.saveFileId))}
+                  style={{ cursor: isNds ? 'default' : 'pointer', padding: '10px 12px', borderRadius: 6 }}
+                  onMouseEnter={(e) => {
+                    if (!isNds) (e.currentTarget as HTMLElement).style.background = '#f6ffed';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isNds) (e.currentTarget as HTMLElement).style.background = '';
+                  }}
+                  actions={isNds ? [
+                    <Button key="web" type="primary" size="small" onClick={() => handleWebPlay(save.saveFileId)}>
+                      Web 游玩
+                    </Button>,
+                    <Button key="local" size="small" onClick={() => handleLocalPlay(save.saveFileId, save.filename)}>
+                      本地游玩
+                    </Button>,
+                  ] : undefined}
                 >
                   <List.Item.Meta
                     title={save.filename}

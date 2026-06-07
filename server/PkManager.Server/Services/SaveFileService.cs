@@ -37,13 +37,16 @@ public class SaveFileService
     private string GetBackupDir(Guid userId, Guid saveFileId) =>
         Path.Combine(GetSaveDir(userId, saveFileId), "backups");
 
-    private static PKHeX.Core.SaveFile ValidateWrittenSave(byte[] data)
+    private static PKHeX.Core.SaveFile ValidateWrittenSave(byte[] data, string? fileName = null)
     {
-        var parseBuffer = (byte[])data.Clone();
-        var reparsed = SaveUtil.GetVariantSAV(parseBuffer);
-        if (reparsed == null)
+        try
+        {
+            return ParseService.OpenSaveFile(data, fileName);
+        }
+        catch (BusinessException)
+        {
             throw new BusinessException("保存后的存档无法重新解析，已中止写入");
-        return reparsed;
+        }
     }
 
     /// <summary>读取存档二进制：优先文件系统，回退 DB（旧数据兼容）</summary>
@@ -321,8 +324,15 @@ public class SaveFileService
     {
         var saveFile = LoadSaveFileEntityAsync(saveFileId, userId).Result;
         var rawData = ReadSaveBytes(saveFile);
-        var sav = SaveUtil.GetVariantSAV((byte[])rawData.Clone());
-        if (sav == null) return null;
+        PKHeX.Core.SaveFile sav;
+        try
+        {
+            sav = ParseService.OpenSaveFile(rawData, saveFile.Filename);
+        }
+        catch (BusinessException)
+        {
+            return null;
+        }
         var boxData = sav.GetBoxData(boxIndex);
         if (slotIndex >= boxData.Length) return null;
         var pkm = boxData[slotIndex];
@@ -333,8 +343,15 @@ public class SaveFileService
     {
         var saveFile = LoadSaveFileEntityAsync(saveFileId, userId).Result;
         var rawData = ReadSaveBytes(saveFile);
-        var sav = SaveUtil.GetVariantSAV((byte[])rawData.Clone());
-        if (sav == null) return null;
+        PKHeX.Core.SaveFile sav;
+        try
+        {
+            sav = ParseService.OpenSaveFile(rawData, saveFile.Filename);
+        }
+        catch (BusinessException)
+        {
+            return null;
+        }
         if (slotIndex < 0 || slotIndex >= 6) return null;
         var pkm = sav.GetPartySlotAtIndex(slotIndex);
         return pkm != null && pkm.Species > 0 && pkm.Valid ? pkm : null;
@@ -359,19 +376,16 @@ public class SaveFileService
                 var data = ReadBackupBytes(b);
                 if (data.Length > 0)
                 {
-                    var sav = SaveUtil.GetVariantSAV(data);
-                    if (sav != null)
-                    {
-                        dto.TrainerName = sav.OT;
-                        dto.PokemonCount = sav.BoxCount > 0
-                            ? Enumerable.Range(0, sav.BoxCount).Sum(box =>
-                                sav.GetBoxData(box).Count(pkm => pkm.Species > 0 && pkm.Valid))
-                                + Enumerable.Range(0, 6).Count(i => { var p = sav.GetPartySlotAtIndex(i); return p != null && p.Species > 0; })
-                            : 0;
-                        dto.PlayTime = $"{(int)sav.PlayedHours}h {(int)sav.PlayedMinutes}m";
-                        dto.GameVersion = GameInfo.GetVersionName(sav.Version);
-                        dto.BoxCount = sav.BoxCount;
-                    }
+                    var sav = ParseService.OpenSaveFile(data, b.BackupPath ?? b.Label);
+                    dto.TrainerName = sav.OT;
+                    dto.PokemonCount = sav.BoxCount > 0
+                        ? Enumerable.Range(0, sav.BoxCount).Sum(box =>
+                            sav.GetBoxData(box).Count(pkm => pkm.Species > 0 && pkm.Valid))
+                            + Enumerable.Range(0, 6).Count(i => { var p = sav.GetPartySlotAtIndex(i); return p != null && p.Species > 0; })
+                        : 0;
+                    dto.PlayTime = $"{(int)sav.PlayedHours}h {(int)sav.PlayedMinutes}m";
+                    dto.GameVersion = GameInfo.GetVersionName(sav.Version);
+                    dto.BoxCount = sav.BoxCount;
                 }
             }
             catch { /* keep defaults */ }
@@ -439,8 +453,7 @@ public class SaveFileService
     {
         var saveFile = await LoadSaveFileEntity(saveFileId, userId);
         var rawData = ReadSaveBytes(saveFile);
-        var sav = SaveUtil.GetVariantSAV(rawData)
-            ?? throw new BusinessException("无法解析存档格式");
+        var sav = ParseService.OpenSaveFile(rawData, saveFile.Filename);
         return pokemonEditService.BatchScan(sav);
     }
 
@@ -459,8 +472,7 @@ public class SaveFileService
     {
         var sf = await LoadSaveFileEntity(saveFileId, userId);
         var rawData = ReadSaveBytes(sf);
-        var sav = SaveUtil.GetVariantSAV((byte[])rawData.Clone())
-            ?? throw new BusinessException("无法解析存档格式");
+        var sav = ParseService.OpenSaveFile(rawData, sf.Filename);
         return (sf, sav);
     }
 
@@ -469,8 +481,9 @@ public class SaveFileService
     {
         // 写入前自动备份
         await CreateBackup(sf.Id, userId, "编辑前自动备份");
-        var data = sav.Write();
-        ValidateWrittenSave(data);
+        var originalData = ReadSaveBytes(sf);
+        var data = ParseService.FinalizeSaveBytes(sav, originalData);
+        ValidateWrittenSave(data, sf.Filename);
         await WriteSaveBytes(sf, userId, data);
     }
 

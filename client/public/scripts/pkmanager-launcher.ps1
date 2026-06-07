@@ -54,6 +54,64 @@ function Get-BytesSha256Hex([byte[]]$bytes) {
     }
 }
 
+function Get-DesmumeRomSearchTerms([int]$gameVersion) {
+    switch ($gameVersion) {
+        10 { return @("钻石", "diamond") }
+        11 { return @("珍珠", "pearl") }
+        12 { return @("白金", "platinum") }
+        7  { return @("心金", "heartgold") }
+        8  { return @("魂银", "soulsilver") }
+        20 { return @("白", "white") }
+        21 { return @("黑", "black") }
+        22 { return @("白2", "white2") }
+        23 { return @("黑2", "black2") }
+        default { return @() }
+    }
+}
+
+function Resolve-DesmumeRomPath([string]$fallbackPath, [string]$saveDir, [string]$exePath, [int]$gameVersion) {
+    if ($fallbackPath -and (Test-Path $fallbackPath -ErrorAction SilentlyContinue)) {
+        return $fallbackPath
+    }
+
+    $terms = Get-DesmumeRomSearchTerms $gameVersion
+    $roots = New-Object System.Collections.Generic.List[string]
+
+    $exeDir = Split-Path $exePath -Parent
+    if ($exeDir) { $roots.Add($exeDir) }
+    if ($saveDir) { $roots.Add($saveDir) }
+    $saveParent = if ($saveDir) { Split-Path $saveDir -Parent } else { $null }
+    if ($saveParent) { $roots.Add($saveParent) }
+    $fallbackParent = if ($fallbackPath) { Split-Path $fallbackPath -Parent } else { $null }
+    if ($fallbackParent) { $roots.Add($fallbackParent) }
+
+    $searchRoots = $roots |
+        Where-Object { $_ -and (Test-Path $_ -ErrorAction SilentlyContinue) } |
+        Select-Object -Unique
+
+    foreach ($root in $searchRoots) {
+        try {
+            $files = Get-ChildItem -LiteralPath $root -Filter *.nds -File -Recurse -ErrorAction Stop
+            foreach ($term in $terms) {
+                $match = $files | Where-Object {
+                    $_.BaseName.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+                } | Sort-Object FullName | Select-Object -First 1
+                if ($match) {
+                    Write-Host "[pkmanager] Resolved local DeSmuME ROM by search term '$term': $($match.FullName)" -ForegroundColor Green
+                    return $match.FullName
+                }
+            }
+        } catch {
+            # ignore search failures on inaccessible roots
+        }
+    }
+
+    if ($fallbackPath) {
+        return $fallbackPath
+    }
+    throw "Unable to resolve a local NDS ROM path for gameVersion=$gameVersion"
+}
+
 function Get-BigEndianUInt32([byte[]]$bytes, [int]$offset) {
     return [uint32]((([uint32]$bytes[$offset]) -shl 24) -bor (([uint32]$bytes[$offset + 1]) -shl 16) -bor (([uint32]$bytes[$offset + 2]) -shl 8) -bor ([uint32]$bytes[$offset + 3]))
 }
@@ -202,7 +260,13 @@ $titleIdLow = Resolve-AzaharTitleIdLow $pkg.titleIdLow $pkg.romPath
 $romPath = if ($pkg.type -eq "azahar") {
     Normalize-WindowsPath (Resolve-AzaharContentPath $pkg.saveDir $titleIdLow $pkg.romPath)
 } else {
-    Normalize-WindowsPath $pkg.romPath
+    Normalize-WindowsPath (Resolve-DesmumeRomPath $pkg.romPath $pkg.saveDir $pkg.exePath $pkg.gameVersion)
+}
+$pkg.emuSavePath = if ($pkg.type -eq "desmume") {
+    $romFileName = [IO.Path]::GetFileNameWithoutExtension($romPath)
+    Normalize-WindowsPath (Join-Path $pkg.saveDir "$romFileName.dsv")
+} else {
+    Normalize-WindowsPath $pkg.emuSavePath
 }
 $launchArgs = if ($romPath) { @(Quote-ProcessArgument $romPath) } else { @() }
 

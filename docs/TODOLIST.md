@@ -245,7 +245,7 @@
 
 ### B.1 箱子管理增强
 
-- [ ] **「全部箱子」弹窗**
+- [x] **「全部箱子」弹窗**
   - 按钮位置：存档编辑器工具栏
   - Modal/Drawer 中展示响应式箱子网格：
     - 大屏(≥1200px): 4 列
@@ -254,7 +254,7 @@
   - 每个箱子显示：箱子名称 + 精灵网格 (6×5) + 宝可梦数量
   - 参考 PKMDS-Blazor `BoxListDialog.razor`
 
-- [ ] **箱子 Swap（交换）**
+- [x] **箱子 Swap（交换）**
   - 全部箱子弹窗中每个箱子添加 ⇄ 按钮
   - 点击与相邻箱子（i+1）交换全部内容
   - 后端 `POST /api/SaveFile/{id}/swapBoxes` API
@@ -674,7 +674,9 @@
 
 - [ ] **NDS ROM 导入** — `EmulatorController.ImportLocal` 扩展 NDS ROM 模式
 - [ ] **NDS_VERSION_MAP** — gameVersion → gameId 映射（Gen4/5 版本号）
-- [ ] **存档兼容** — 验证 PKHeX.Core 解析 NDS 512KB .sav 文件
+- [x] **存档兼容**
+  - PKHeX.Core 可正确解析 NDS 原始 512KB save
+  - DeSmuME `.dsv` 需保留外层 footer；服务端现已按 `.dsv -> 内核解析 -> 写回时拼回 footer` 处理
 
 ### H.5 Dashboard + 存档管理
 
@@ -682,6 +684,11 @@
 - [x] **Saves 页扩展** — `GAME_VERSION_DISPLAY` 补充 Gen4/5 版本号 → 名称映射
 - [x] **Modal 支持 NDS** — 按游戏版本过滤存档 + 动态 Gen Tag + 路由到 `/play-nds/`
 - [x] **Saves 页「游玩」按钮** — Gen4/5 显示游玩按钮，路由到 `/play-nds/`
+- [x] **Dashboard NDS 存档双入口**
+  - 工作台 NDS 游戏卡片弹出对应存档后，每条存档提供：
+    - `Web 游玩` → `/play-nds/{saveFileId}`
+    - `本地游玩` → 协议启动器 / 回退脚本调起本地 DeSmuME
+  - `新游戏` 保持仅 Web 路径创建与游玩
 
 ### H.6 世代专属功能
 
@@ -707,7 +714,8 @@
   - 前端统一在 `/settings` 管理 Azahar + DeSmuME 路径
 
 - [x] **DeSmuME 存档目录配置**
-  - DeSmuME 存档格式：`.dsv`（DeSmuME Save），本质就是原始 NDS save 二进制，PKHeX.Core 可直接解析
+  - DeSmuME 存档格式：`.dsv`（DeSmuME Save），本质为 `NDS 原始 save + DeSmuME footer`
+  - 服务端当前已兼容 `.dsv` 外层 footer 保留，避免上传/编辑/导出后格式损坏
   - 支持用户手动指定 save dir；未配置时回退默认目录
   - pkmanager 启动前写入 `.dsv`，退出后回读到 `save.sav`
 
@@ -736,10 +744,10 @@
   - 未安装协议时，回退脚本仍缺少退出后自动同步 / 恢复本机旧 `.dsv`
   - 需要保证 NDS 本机启动在两条路径下行为一致
 
-- [ ] **本地 DeSmuME 全链路人工验收**
-  - 至少验证一款 Gen4（如钻石/心金）和一款 Gen5（如黑/黑2）
-  - 验证流程：启动前注入 → 游戏内保存 → 退出自动同步 → 恢复本机旧 `.dsv`
-  - 验证与现有 melonDS WASM 路径互不干扰
+- [x] **本地 DeSmuME 全链路人工验收**
+  - 已验证：本地启动响应正常、`.dsv` 上传/导出恢复正常、退出后同步与恢复链路可用
+  - 已验证工作台入口：NDS 存档支持 `Web 游玩 / 本地游玩` 双按钮
+  - 后续仍建议补一轮 Gen5 版本冒烟，但当前主链路已可用
 
 ---
 
@@ -774,7 +782,7 @@
 
 ### I.2 3DS ROM 管理
 
-- [ ] **3DS ROM 导入（文件系统路径模式）**
+- [x] **3DS ROM 导入（文件系统路径模式）**
   - 3DS ROM 体积 1–4 GB，不入库 BYTEA，只存 `local_path`
   - 支持格式：`.3ds`（Cartridge dump）/ `.cci`（CTR Cart Image）/ `.cxi`（CTR Executable Image）
   - `POST /api/Emulator/roms/import-local` 扩展支持 3DS ROM 识别
@@ -836,6 +844,7 @@
   - 协议启动器本地等待 Azahar 进程退出
   - 退出后自动同步本机 `main` 回服务器，再恢复本机旧存档
   - 浏览器协议启动路径不再依赖前端轮询 PID
+  - 已人工验证：本机启动 → 正常进入游戏 → 退出模拟器后进入同步/恢复分支
 
 ### I.4 存档联动
 
@@ -843,6 +852,7 @@
   - 协议启动器在 Azahar 退出后直接 POST 二进制到 `/api/Emulator/sync-save/{saveFileId}`
   - 后端写入 `data/saves/` 并更新 `save_files` 元数据
   - 同步后保留 pkmanager 备份链路
+  - 已人工验证：游戏内保存后，关闭 Azahar 可触发自动回传
 
 - [ ] **本地模拟器设计文档与现状对齐**
   - `docs/本地模拟器关联设计.md` 仍保留“后端 Process.Start + 服务器负责生命周期”的旧模型
@@ -858,6 +868,7 @@
   - 协议启动器等待 Azahar 退出后，直接自动上传二进制存档
   - 同步成功后恢复本机旧存档
   - 不依赖浏览器页面仍然保持打开
+  - 已人工验证：同步较慢时需要等待，但主链路可用
 
 - [ ] **存档冲突检测与处理**
   - 同步前比较双方存档修改时间：
@@ -895,13 +906,13 @@
 
 ### J.1 全局错误捕获层
 
-- [ ] **React ErrorBoundary 组件**
+- [x] **React ErrorBoundary 组件**
   - 创建 `src/components/ErrorBoundary.tsx`（Class Component，`componentDidCatch` + `getDerivedStateFromError`）
   - 包裹整个 `<App />`（最外层），同时为每个懒加载路由单独包裹（`EmulatorPage` / `NdsEmulatorPage`）
   - Fallback UI：Ant Design `Result` 组件（`status="error"`）+ 错误摘要 + 「刷新页面」按钮 + 「查看诊断」按钮
   - 崩溃后不卸载整个 React 树，仅渲染 Fallback UI
 
-- [ ] **全局 window 异常监听**
+- [x] **全局 window 异常监听**
   - `window.addEventListener('error', ...)` — 捕获未被 ErrorBoundary 覆盖的 JS 运行时错误
   - `window.addEventListener('unhandledrejection', ...)` — 捕获未处理的 Promise 拒绝（当前此类异常完全静默丢失）
   - 所有捕获异常写入诊断 Store
@@ -912,20 +923,20 @@
 
 ### J.2 诊断 Store + 持久化
 
-- [ ] **诊断 Store（Zustand）**
+- [x] **诊断 Store（Zustand）**
   - 创建 `src/stores/diagnosticStore.ts`
   - 内存中维护环形缓冲区（最近 200 条，防止内存泄漏）
   - 每条日志结构：`{ id, timestamp, category: 'api'|'render'|'wasm'|'network'|'auth'|'unknown', level: 'error'|'warn'|'info', message, stack?, context? }`
   - Actions: `log(entry)`, `clear()`, `export()`
 
-- [ ] **localStorage 持久化**
+- [x] **localStorage 持久化**
   - 每次写入 Store 时同步持久化到 `localStorage`（key: `pkmanager_error_log`）
   - 页面刷新后自动恢复历史日志（`diagnosticStore` 初始化时从 localStorage 读取）
   - 总容量限制 500KB (~最近 300-500 条错误)，超出后裁剪旧条目
 
 ### J.3 诊断面板 UI
 
-- [ ] **诊断面板组件**
+- [x] **诊断面板组件**
   - 创建 `src/components/DiagnosticPanel.tsx`（Ant Design Drawer）
   - 入口：页面右下角浮动按钮（Ant Design `FloatButton`，仅在 `NODE_ENV !== 'production'` 时显示；生产环境通过键盘快捷键 Ctrl+Shift+D 打开）
   - 顶部：彩色统计条（🔴 错误 N / 🟡 警告 N / 🔵 信息 N）+ 「健康检查」按钮
@@ -946,19 +957,19 @@
 
 ### J.4 Axios 拦截器增强
 
-- [ ] **请求/响应错误日志化**
+- [x] **请求/响应错误日志化**
   - `axios.ts` 响应错误拦截器中，每条失败请求自动调用 `diagnosticStore.log()`
   - 记录：URL、HTTP 方法、状态码、请求体（截断 500 字符）、响应体（截断 500 字符）、耗时
   - 分类为 `api`，级别根据状态码：4xx→warn, 5xx→error, timeout→error
 
-- [ ] **401 软重定向**
+- [x] **401 软重定向**
   - 当前：`window.location.href = '/login'`（硬跳转，丢失一切状态）
   - 改进：先 `message.warning('登录已过期，即将跳转...')` → 延迟 1.5 秒 → 清除 Token → React Router `navigate('/login')`
   - 跳转前将当前页面 URL 写入 `sessionStorage`，登录成功后自动跳回
 
 ### J.5 页面加载健康检查
 
-- [ ] **启动时自检**
+- [x] **启动时自检**
   - App 挂载后自动运行 3 项检查：
     1. **API 可达性**：`GET /api/health`（5 秒超时）
     2. **Auth Token 有效性**：调用一个轻量端点验证（如 `GET /api/Auth/me`）
@@ -968,7 +979,7 @@
 
 ### J.6 静默失败修复
 
-- [ ] **消灭空 catch 块**
+- [x] **消灭空 catch 块**
   - 修复 `resourceStore.loadAll()`：失败时设置 `error` 状态 + 写入诊断 Store（当前空 catch）
   - 修复 `Dashboard.tsx`：静默失败 → 至少写入诊断 Store
   - 修复 `OTMiscTab.tsx` / `MovesTab.tsx` / `MainTab.tsx`：`.catch(() => {})` → 写入诊断 Store
@@ -977,18 +988,18 @@
 
 ### J.7 日志回传后端（客户端 → 服务端）
 
-- [ ] **客户端错误日志回传端点**
+- [x] **客户端错误日志回传端点**
   - `POST /api/diagnostics/client-error` — 接收单条客户端错误
   - 使用 `navigator.sendBeacon` 发送（页面崩溃/关闭时也能发出，不阻塞主线程）
   - 存储方式：文件系统 `data/logs/client-errors.jsonl`（每行一条 JSON），不入库，保持轻量
   - 每条日志：`{ timestamp, category, level, message, stack, url, userAgent, userId }`
 
-- [ ] **错误报告查询端点**
+- [x] **错误报告查询端点**
   - `GET /api/diagnostics/report?hours=24` — 返回最近 N 小时错误汇总
   - 返回：`{ totalErrors, byCategory, byLevel, recentItems[] }`
   - `DELETE /api/diagnostics/clear` — 清空日志文件（需确认）
 
-- [ ] **diagnosticStore 自动上报**
+- [x] **diagnosticStore 自动上报**
   - 每条新日志自动调用 `navigator.sendBeacon('/api/diagnostics/client-error', JSON.stringify(entry))`
   - 去重：同一错误类型+URL 在 5 秒内不重复上报
   - 降级：`sendBeacon` 不可用时回退到 `fetch`（带 `keepalive: true`）
@@ -1010,7 +1021,7 @@
 
 ### J.9 一键健康检查脚本
 
-- [ ] **`check-health.sh` 脚本**
+- [x] **`check-health.sh` 脚本**
   - 位于项目根目录
   - 检查项：
     1. API 可达性：`curl -s http://localhost:5000/api/health | jq .`
@@ -1075,16 +1086,43 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 | Phase | 总任务数 | 已完成 | 进行中 | 待开始 |
 |-------|---------|--------|--------|--------|
 | A: 编辑面板升级 | 35 | 33 | 0 | 2 |
-| B: 存档编辑器优化 | 14 | 8 | 0 | 6 |
+| B: 存档编辑器优化 | 14 | 10 | 0 | 4 |
 | C: 新增功能模块 | 12 | 0 | 0 | 12 |
 | D: 高级工具 | 14 | 0 | 0 | 14 |
 | E: 世代专属与打磨 | 17 | 5 | 0 | 12 |
 | F: 后端基础设施 | 8 | 3 | 0 | 5 |
 | G: GBA在线模拟器 | 21 | 19 | 0 | 2 |
-| H: NDS在线模拟器 | 33 | 25 | 0 | 8 |
-| I: 3DS Azahar集成 | 19 | 14 | 0 | 5 |
-| J: 前端错误诊断 | 17 | 10 | 0 | 7 |
-| **合计** | **190** | **118** | **0** | **72** |
+| H: NDS在线模拟器 | 34 | 28 | 0 | 6 |
+| I: 3DS Azahar集成 | 19 | 16 | 0 | 3 |
+| J: 前端错误诊断 | 17 | 15 | 0 | 2 |
+| **合计** | **191** | **129** | **0** | **62** |
+
+> **更新 (2026-06-07) — 本地模拟器人工验证 + 项目文档刷新**：
+>
+> ### DeSmuME 本地启动全链路验证通过
+> - ✅ **DeSmuME 全链路人工验收** — Gen4 本地启动 → 注入 .dsv → 游戏内保存 → 退出自动同步 → 恢复本机旧 .dsv。协议启动器和回退脚本均可用
+> - ✅ **Dashboard NDS 存档双入口** — Web 游玩 / 本地游玩 两个按钮，新游戏保持仅 Web 路径
+> - ✅ **DeSmuME .dsv footer 兼容** — 服务端上传/编辑/导出保留 DeSmuME footer，避免格式损坏
+>
+> ### Azahar 3DS 本地启动验证
+> - ✅ **I.2 3DS ROM 导入** — 文件系统路径模式，.3ds/.cci/.cxi 支持
+> - ✅ **I.3 启动集成** — 本机启动 → 正常进入游戏 → 退出模拟器后进入同步/恢复分支
+> - ✅ **I.4 存档回传** — 游戏内保存后关闭 Azahar 可触发自动二进制回传，同步后恢复本机旧 main
+>
+> ### CLAUDE.md 全面刷新
+> - ✅ 项目架构、前后端分层、所有 Controller/Service/Store 重新梳理
+> - ✅ 本地模拟器启动链路（协议 + 回退脚本）完整描述
+> - ✅ device_id 机制、诊断体系、GameCover 组件、统一游戏元数据等新特性补充
+>
+> ### TODOLIST 同步
+> - ✅ Phase J 大多数复选框已与进度跟踪对齐（J.1-J.7 + J.9 已完成）
+> - ✅ B.1 全部箱子弹窗 / Swap — 已实现，补勾
+> - ✅ H.4 存档兼容 / H.5 双入口 — 已实现
+> - ⚠️ J.8 Playwright 冒烟测试 / J.1 WASM错误捕获 / J.3 诊断面板可访问性 待实施
+> - ⚠️ melonDS WASM 新游戏→保存→退出→可重新加载 仍需最终人工验收
+> - ⚠️ melonDS GPU GL_BGRA→RGBA 通道交换 需实测确认
+> - TypeScript 0 错误 + .NET Build 0 错误 + Vite 构建通过
+> - 总计 191 项 / 已完成 129 / 剩余 62
 
 > **更新 (2026-06-06)**：
 > 

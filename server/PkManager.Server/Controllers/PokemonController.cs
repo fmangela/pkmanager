@@ -175,8 +175,15 @@ public class PokemonController : ControllerBase
         else
             rawData = saveFile.RawSaveData;
 
-        var sav = SaveUtil.GetVariantSAV((byte[])rawData.Clone());
-        if (sav == null) return null;
+        PKHeX.Core.SaveFile sav;
+        try
+        {
+            sav = ParseService.OpenSaveFile(rawData, saveFile.Filename);
+        }
+        catch (BusinessException)
+        {
+            return null;
+        }
 
         // 写入 Party 槽位
         if (slotIndex >= 0 && slotIndex < 6)
@@ -186,10 +193,15 @@ public class PokemonController : ControllerBase
         }
 
         // 重写存档二进制
-        var updatedData = sav.Write();
-        var reparsed = SaveUtil.GetVariantSAV((byte[])updatedData.Clone());
-        if (reparsed == null)
+        var updatedData = ParseService.FinalizeSaveBytes(sav, rawData);
+        try
+        {
+            ParseService.OpenSaveFile(updatedData, saveFile.Filename);
+        }
+        catch (BusinessException)
+        {
             throw new BusinessException("保存后的存档无法重新解析，已中止写入");
+        }
 
         if (!string.IsNullOrEmpty(saveFile.SavePath))
         {

@@ -7,7 +7,6 @@ set "SELF=%~f0"
 set "INSTALL_DIR=%APPDATA%\pkmanager"
 set "PS1=%INSTALL_DIR%\pkmanager-launcher.ps1"
 set "BAT=%INSTALL_DIR%\pkmanager-launcher.bat"
-set "EXTRACTOR=%TEMP%\pkmanager-extract-%RANDOM%-%RANDOM%.ps1"
 
 net session >nul 2>&1
 if not "%errorlevel%"=="0" (
@@ -26,25 +25,8 @@ if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 if errorlevel 1 goto :install_dir_error
 
 echo [1/4] Writing PowerShell launcher...
-> "%EXTRACTOR%" echo $self = $env:SELF
->> "%EXTRACTOR%" echo $outFile = $env:PS1
->> "%EXTRACTOR%" echo $lines = Get-Content -LiteralPath $self -Encoding UTF8
->> "%EXTRACTOR%" echo $start = [Array]::IndexOf($lines, 'REM @@LAUNCHER_START@@')
->> "%EXTRACTOR%" echo $end = [Array]::IndexOf($lines, 'REM @@LAUNCHER_END@@')
->> "%EXTRACTOR%" echo if ($start -lt 0 -or $end -le $start) { throw 'launcher markers not found' }
->> "%EXTRACTOR%" echo $encoding = New-Object System.Text.UTF8Encoding $true
->> "%EXTRACTOR%" echo $writer = New-Object System.IO.StreamWriter($outFile, $false, $encoding)
->> "%EXTRACTOR%" echo try {
->> "%EXTRACTOR%" echo     for ($i = $start + 1; $i -lt $end; $i++) {
->> "%EXTRACTOR%" echo         $line = $lines[$i] -replace '^REM ?', ''
->> "%EXTRACTOR%" echo         $writer.WriteLine($line)
->> "%EXTRACTOR%" echo     }
->> "%EXTRACTOR%" echo } finally {
->> "%EXTRACTOR%" echo     $writer.Dispose()
->> "%EXTRACTOR%" echo }
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%EXTRACTOR%"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$lines = Get-Content -LiteralPath $env:SELF -Encoding UTF8; $start = [Array]::IndexOf($lines, 'REM @@LAUNCHER_START@@'); $end = [Array]::IndexOf($lines, 'REM @@LAUNCHER_END@@'); if ($start -lt 0 -or $end -le $start) { throw 'launcher markers not found' }; $body = $lines[($start + 1)..($end - 1)] | ForEach-Object { $_ -replace '^REM ?', '' }; $encoding = New-Object System.Text.UTF8Encoding $true; [System.IO.File]::WriteAllLines($env:PS1, $body, $encoding)"
 set "EXTRACT_RC=%errorlevel%"
-del /q "%EXTRACTOR%" >nul 2>&1
 if not "%EXTRACT_RC%"=="0" goto :extract_error
 if not exist "%PS1%" goto :extract_missing
 
@@ -175,6 +157,63 @@ REM         return ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).R
 REM     } finally {
 REM         $sha.Dispose()
 REM     }
+REM }
+REM 
+REM function Get-DesmumeRomSearchTerms([int]$gameVersion) {
+REM     switch ($gameVersion) {
+REM         10 { return @("钻石", "diamond") }
+REM         11 { return @("珍珠", "pearl") }
+REM         12 { return @("白金", "platinum") }
+REM         7  { return @("心金", "heartgold") }
+REM         8  { return @("魂银", "soulsilver") }
+REM         20 { return @("白", "white") }
+REM         21 { return @("黑", "black") }
+REM         22 { return @("白2", "white2") }
+REM         23 { return @("黑2", "black2") }
+REM         default { return @() }
+REM     }
+REM }
+REM 
+REM function Resolve-DesmumeRomPath([string]$fallbackPath, [string]$saveDir, [string]$exePath, [int]$gameVersion) {
+REM     if ($fallbackPath -and (Test-Path $fallbackPath -ErrorAction SilentlyContinue)) {
+REM         return $fallbackPath
+REM     }
+REM 
+REM     $terms = Get-DesmumeRomSearchTerms $gameVersion
+REM     $roots = New-Object System.Collections.Generic.List[string]
+REM 
+REM     $exeDir = Split-Path $exePath -Parent
+REM     if ($exeDir) { $roots.Add($exeDir) }
+REM     if ($saveDir) { $roots.Add($saveDir) }
+REM     $saveParent = if ($saveDir) { Split-Path $saveDir -Parent } else { $null }
+REM     if ($saveParent) { $roots.Add($saveParent) }
+REM     $fallbackParent = if ($fallbackPath) { Split-Path $fallbackPath -Parent } else { $null }
+REM     if ($fallbackParent) { $roots.Add($fallbackParent) }
+REM 
+REM     $searchRoots = $roots |
+REM         Where-Object { $_ -and (Test-Path $_ -ErrorAction SilentlyContinue) } |
+REM         Select-Object -Unique
+REM 
+REM     foreach ($root in $searchRoots) {
+REM         try {
+REM             $files = Get-ChildItem -LiteralPath $root -Filter *.nds -File -Recurse -ErrorAction Stop
+REM             foreach ($term in $terms) {
+REM                 $match = $files | Where-Object {
+REM                     $_.BaseName.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+REM                 } | Sort-Object FullName | Select-Object -First 1
+REM                 if ($match) {
+REM                     Write-Host "[pkmanager] Resolved local DeSmuME ROM by search term '$term': $($match.FullName)" -ForegroundColor Green
+REM                     return $match.FullName
+REM                 }
+REM             }
+REM         } catch {
+REM         }
+REM     }
+REM 
+REM     if ($fallbackPath) {
+REM         return $fallbackPath
+REM     }
+REM     throw "Unable to resolve a local NDS ROM path for gameVersion=$gameVersion"
 REM }
 REM 
 REM function Get-BigEndianUInt32([byte[]]$bytes, [int]$offset) {
@@ -325,7 +364,13 @@ REM $titleIdLow = Resolve-AzaharTitleIdLow $pkg.titleIdLow $pkg.romPath
 REM $romPath = if ($pkg.type -eq "azahar") {
 REM     Normalize-WindowsPath (Resolve-AzaharContentPath $pkg.saveDir $titleIdLow $pkg.romPath)
 REM } else {
-REM     Normalize-WindowsPath $pkg.romPath
+REM     Normalize-WindowsPath (Resolve-DesmumeRomPath $pkg.romPath $pkg.saveDir $pkg.exePath $pkg.gameVersion)
+REM }
+REM $pkg.emuSavePath = if ($pkg.type -eq "desmume") {
+REM     $romFileName = [IO.Path]::GetFileNameWithoutExtension($romPath)
+REM     Normalize-WindowsPath (Join-Path $pkg.saveDir "$romFileName.dsv")
+REM } else {
+REM     Normalize-WindowsPath $pkg.emuSavePath
 REM }
 REM $launchArgs = if ($romPath) { @(Quote-ProcessArgument $romPath) } else { @() }
 REM 
