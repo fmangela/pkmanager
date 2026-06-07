@@ -602,7 +602,7 @@
 ### G.1 模拟器核心
 
 - [x] **mGBA WASM 选型与封装** — `client/src/lib/mgba.ts` (MGBAEmulator 接口)
-- [ ] **mGBA WASM 文件部署** — 下载 `mgba.wasm` + `mgba.js` 到 `public/emulator/`
+- [x] **mGBA WASM 文件部署** — `client/public/emulator/mgba.wasm` + `client/public/emulator/mgba.js`
 - [x] **软件测试渲染器** — 240×160 Canvas 直写像素，mGBA 到位前可验证页面
 
 ### G.2 ROM 管理
