@@ -1,6 +1,7 @@
 import React from 'react';
 import { InputNumber, Tag, Space, Switch } from 'antd';
 import type { PokemonDto } from '../../api/saveFile';
+import StatsRadar from './StatsRadar';
 
 interface Props {
   pokemon: PokemonDto;
@@ -47,14 +48,25 @@ const StatsTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
 
   return (
     <div>
-      {/* Summary bar */}
-      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <Tag color="purple" style={{ fontSize: 13, padding: '2px 10px' }}>
-          觉醒力量: {HIDDEN_POWER_TYPES[pokemon.hiddenPowerType] || `类型${pokemon.hiddenPowerType}`}
-        </Tag>
-        <Tag color={evTotal > 510 ? 'red' : evTotal === 510 ? 'green' : 'blue'}>
-          努力值: {evTotal} / 510
-        </Tag>
+      {/* ── 种族值雷达图 + 摘要 ── */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap',
+        marginBottom: 12,
+      }}>
+        <div style={{ flexShrink: 0 }}>
+          <StatsRadar values={base} maxValue={255} title="种族值雷达图" />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 160 }}>
+          <Tag color="purple" style={{ fontSize: 13, padding: '2px 10px' }}>
+            觉醒力量: {HIDDEN_POWER_TYPES[pokemon.hiddenPowerType] || `类型${pokemon.hiddenPowerType}`}
+          </Tag>
+          <Tag color={evTotal > 510 ? 'red' : evTotal === 510 ? 'green' : 'blue'}>
+            努力值: {evTotal} / 510
+          </Tag>
+          <Tag color="default">
+            个体值: {ivTotal} / {maxIV * 6}
+          </Tag>
+        </div>
       </div>
 
       {/* Stat Table — PKHeX style */}
