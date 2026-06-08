@@ -754,7 +754,7 @@
 ## Phase I: 3DS 模拟器集成（Azahar 本地启动）
 
 > 目标: 3DS 不采用 WASM 方案 — Citra 核心远比 melonDS 重，浏览器端性能无法流畅运行宝可梦 3DS 游戏。改为绑定本地 Azahar 模拟器，Web 端点击启动后由浏览器所在机器的协议启动器/回退脚本调起原生模拟器，退出后自动回传并恢复本机旧存档。
-> **Azahar** 是作者强烈推荐的 3DS 模拟器。它是 Citra 的继承者（PabloMK7's Citra fork + Lime3DS 合并），GPLv2 开源，目前唯一持续活跃且能完美模拟 3DS 宝可梦全系列的模拟器。其他 Citra 分支（Mandarine-Neo、Borked3DS）已不再维护或兼容性不足。
+> **Azahar** 是作者强烈推荐的 3DS 模拟器。它是 Citra 的继承者（PabloMK7s Citra fork + Lime3DS 合并），GPLv2 开源，目前唯一持续活跃且能完美模拟 3DS 宝可梦全系列的模拟器。其他 Citra 分支（Mandarine-Neo、Borked3DS）已不再维护或兼容性不足。
 > 
 > **覆盖游戏**: Gen6 X/Y/OR/AS + Gen7 S/M/US/UM，共 8 款。
 
@@ -1033,6 +1033,54 @@
 
 ---
 
+## Phase K: GitHub 发布前解耦
+
+> **目标**: 让项目可被社区开发者 clone 后直接运行，消除作者机器专属的硬编码依赖。
+> **原则**: 不改架构、不改核心绑定（PKHeX/mGBA/melonDS/Azahar/DeSmuME），仅做配置外部化 + i18n 基础设施。
+> **详细分析**: 见 `docs/解耦分析报告-GitHub发布准备.md`
+
+### K.1 硬编码绝对路径消除（🔴 必须 — 否则项目不可运行）
+
+- [ ] **连接字符串外部化**
+  - `appsettings.json` → 移除硬编码 PostgreSQL Unix socket 路径，改为 `localhost` + 端口 + 环境变量回退
+  - `Program.cs` → 优先读 `PKM_CONNECTION_STRING` 环境变量
+  - 新建 `appsettings.template.json` 提交到 git 供开发者参考
+
+- [ ] **证书路径外部化**
+  - `Program.cs` PFX 路径 → `PKM_CERT_PATH` 环境变量 + 相对项目根路径回退
+  - `vite.config.ts` cert/key 路径 → 环境变量 + 相对路径
+  - 开发环境不强制 HTTPS（未配置证书时仅监听 HTTP）
+
+- [ ] **ROM 目录硬编码修复**
+  - `EmulatorController.cs:70` `romDir = "/home/fmangela/pkmanager/roms"` → `PKM_ROM_DIR` 环境变量 + 相对路径 `./roms/`
+  - `ImportLocal()` ROM 名称映射 → 外部 `roms/rom-mapping.json` 配置文件
+
+- [ ] **后端 API 基础 URL 检测增强**
+  - `localLaunch.ts` 仅支持 `:5173` 端口 → 改为更通用的 Vite dev 检测机制
+
+### K.2 配置文件体系重构
+
+- [ ] **环境变量模板** — 新建 `.env.example`（PKM_CONNECTION_STRING / PKM_JWT_SECRET / PKM_CERT_PATH / PKM_CERT_PASSWORD / PKM_ROM_DIR / PKM_DATA_DIR）
+- [ ] **配置分层** — `appsettings.json`（非敏感默认值，提交） → `appsettings.Development.json`（本地覆盖，gitignore） → 环境变量（生产部署）
+- [ ] **`.gitignore` 审计** — 新增 `.env`、`.env.local`、`*.pfx`、`server/cert.key`、`server/cert.crt`、`appsettings.Development.json`、`roms/`
+- [ ] **`start-dev.sh` 更新** — 首次运行时自动从 `.env.example` 复制 `.env`，生成开发用证书，检查 PostgreSQL 连接
+
+### K.3 前端 i18n 国际化基础设施
+
+- [ ] **i18n 框架搭建** — 新建 `client/src/i18n/`（`index.ts`、`locales/zh-CN.ts`、`locales/en-US.ts`、`useTranslation.ts`）
+- [ ] **UI 文案提取 — 登录/注册页** — Login.tsx、Register.tsx
+- [ ] **UI 文案提取 — Dashboard/Saves/Bank** — Dashboard.tsx、Saves.tsx、Bank.tsx
+- [ ] **UI 文案提取 — 编辑面板** — EditPanel.tsx 及 7 个子 Tab 组件
+- [ ] **UI 文案提取 — 模拟器/设置/诊断** — Emulator.tsx、NdsEmulator.tsx、Settings.tsx、DiagnosticPanel.tsx
+- [ ] **后端 API 消息整理** — 所有 Controller 错误消息 → 统一 `Messages.cs` 常量类（中文默认 + 英文 key 映射）
+- [ ] **游戏元数据多语言** — `constants/games.ts` 添加 `displayNameEn`、`shortNameEn` 字段
+
+### K.4 README.md 完善
+
+- [ ] **README.md 重写** — 项目简介、技术栈、快速开始（clone → 配置 → 启动）、架构图、功能列表、贡献指南
+
+---
+
 ## 实施顺序建议
 
 ```
@@ -1095,7 +1143,8 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 | H: NDS在线模拟器 | 34 | 28 | 0 | 6 |
 | I: 3DS Azahar集成 | 19 | 16 | 0 | 3 |
 | J: 前端错误诊断 | 17 | 15 | 0 | 2 |
-| **合计** | **191** | **129** | **0** | **62** |
+| K: GitHub发布解耦 | 15 | 0 | 0 | 15 |
+| **合计** | **206** | **129** | **0** | **77** |
 
 > **更新 (2026-06-07) — 本地模拟器人工验证 + 项目文档刷新**：
 >
@@ -1315,7 +1364,7 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 >   - **根因**: `GAME_VERSION_DISPLAY` 仅覆盖到 Gen5，Gen6+ 版本号无对应条目
 >   - PKHeX 返回具体版本（如 UM=33, SW=44），但因不在映射表而 fallback 到 `` Gen${ver} ``
 > - 🔧 **修复**:
->   - 前端 `GAME_VERSION_DISPLAY` 补齐全部世代：Gen6 (X/Y/OR/AS)、Gen7 (S/M/US/UM/GO + Let's Go)、Gen8 (Sw/Sh/BDSP/PLA)、Gen9 (S/V)
+>   - 前端 `GAME_VERSION_DISPLAY` 补齐全部世代：Gen6 (X/Y/OR/AS)、Gen7 (S/M/US/UM/GO + Lets Go)、Gen8 (Sw/Sh/BDSP/PLA)、Gen9 (S/V)
 >   - 后端 `GameVersionNormalizer.Map` 补全 Gen1-9 所有复合版本 → 具体版本默认映射（68=XY→24=X, 71=SM→30=SN, 72=USUM→32=US, 73=GG→42=GP, 74=SWSH→44=SW, 75=BDSP→48=BD, 76=SV→50=SL）
 >   - `IsCompositeVersion` 范围从 62-67 扩大为 52-76（覆盖全部世代复合版本）
 >
