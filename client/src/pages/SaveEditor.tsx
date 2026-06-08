@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Typography, Button, App, Spin, Tag, Tooltip, Space, Popconfirm, Dropdown,
+  Typography, Button, App, Spin, Tag, Tooltip, Space, Popconfirm, Dropdown, Select,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -443,6 +443,16 @@ const SaveEditor: React.FC = () => {
               style={{ minWidth: 0, minHeight: 0, padding: 0 }} />
             <Text type="secondary">Gen{saveData.generation} | {saveData.gameVersionName}</Text>
           </Space>
+          <Select size="small" value={activeBox} style={{ width: 210 }}
+            onChange={setActiveBox}
+            options={boxList.map(b => {
+              const used = b.slots.filter(s => !s.isEmpty).length;
+              return {
+                value: b.boxIndex,
+                label: `Box ${b.boxIndex + 1}: ${b.boxName} (${used}/${b.capacity})`,
+              };
+            })}
+          />
           <Space>
             <Tooltip title="合法性批量扫描">
               <Button icon={<SafetyCertificateOutlined />} onClick={handleBatchLegalityScan}
