@@ -1,19 +1,20 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Typography, Button, App, Spin, Tag, Tooltip, Space, Popconfirm,
+  Typography, Button, App, Spin, Tag, Tooltip, Space, Popconfirm, Dropdown,
 } from 'antd';
+import type { MenuProps } from 'antd';
 import {
   SaveOutlined, DownloadOutlined, ArrowLeftOutlined, BankOutlined,
   SafetyCertificateOutlined, AppstoreOutlined, LeftOutlined, RightOutlined,
-  StarFilled,
+  StarFilled, SortAscendingOutlined,
 } from '@ant-design/icons';
 import {
   DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors,
   useDraggable, useDroppable,
   type DragStartEvent, type DragEndEvent,
 } from '@dnd-kit/core';
-import { saveFileApi, type SaveFileDetail, type BoxSlotDto, type PokemonDto, type SaveBackupDto, type LegalityStatus } from '../api/saveFile';
+import { saveFileApi, type SaveFileDetail, type BoxSlotDto, type PokemonDto, type SaveBackupDto, type LegalityStatus, type SaveBoxSortBy } from '../api/saveFile';
 import { useDiagnosticStore } from '../stores/diagnosticStore';
 import { bankApi, type BankPokemon } from '../api/bank';
 import EditPanel from '../components/editor/EditPanel';
@@ -28,6 +29,18 @@ const saveSlotId = (box: number, slot: number) => `save:${box}:${slot}`;
 const bankItemId = (bankId: string) => `bank:${bankId}`;
 const bankDropId = 'bank-drop-zone';
 const parseSaveSlot = (id: string) => ({ boxIndex: +id.split(':')[1], slotIndex: +id.split(':')[2] });
+const BOX_SORT_LABELS: Record<SaveBoxSortBy, string> = {
+  species: '物种编号',
+  level: '等级',
+  shiny: '闪光优先',
+  name: '名称',
+};
+const BOX_SORT_MENU_ITEMS: MenuProps['items'] = [
+  { key: 'species', label: '按物种编号' },
+  { key: 'level', label: '按等级' },
+  { key: 'shiny', label: '闪光优先' },
+  { key: 'name', label: '按名称' },
+];
 
 const getDownloadFileName = (contentDisposition?: string, fallback = 'save.sav') => {
   if (!contentDisposition) return fallback;
@@ -203,6 +216,8 @@ const SaveEditor: React.FC = () => {
   const [editingIsParty, setEditingIsParty] = useState(false);
   const [editPanelOpen, setEditPanelOpen] = useState(false);
   const [legalityScanning, setLegalityScanning] = useState(false);
+  const [sortingCurrentBox, setSortingCurrentBox] = useState(false);
+  const [sortingBoxes, setSortingBoxes] = useState(false);
   const [legalityMap, setLegalityMap] = useState<Record<string, LegalityStatus>>({});
   const [allBoxesOpen, setAllBoxesOpen] = useState(false);
 
@@ -360,6 +375,52 @@ const SaveEditor: React.FC = () => {
     } catch { message.error('扫描失败'); }
     finally { setLegalityScanning(false); }
   };
+  const handleSortBoxes = async (sortBy: SaveBoxSortBy) => {
+    if (!id || sortingBoxes) return;
+    if (editPanelOpen) {
+      message.warning('请先关闭编辑面板后再排序');
+      return;
+    }
+
+    setSortingBoxes(true);
+    try {
+      await saveFileApi.sortBoxes(id, sortBy);
+      setLegalityMap({});
+      await fetchData();
+      message.success(`已按${BOX_SORT_LABELS[sortBy]}完成箱子排序`);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || '排序失败');
+    } finally {
+      setSortingBoxes(false);
+    }
+  };
+  const handleSortCurrentBox = async (sortBy: SaveBoxSortBy) => {
+    if (!id || sortingCurrentBox || !currentBox) return;
+    if (editPanelOpen) {
+      message.warning('请先关闭编辑面板后再排序');
+      return;
+    }
+
+    setSortingCurrentBox(true);
+    try {
+      await saveFileApi.sortBox(id, currentBox.boxIndex, sortBy);
+      setLegalityMap({});
+      await fetchData();
+      message.success(`已按${BOX_SORT_LABELS[sortBy]}完成当前箱排序`);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || '排序失败');
+    } finally {
+      setSortingCurrentBox(false);
+    }
+  };
+  const sortMenu: MenuProps = {
+    items: BOX_SORT_MENU_ITEMS,
+    onClick: ({ key }) => { void handleSortBoxes(key as SaveBoxSortBy); },
+  };
+  const currentBoxSortMenu: MenuProps = {
+    items: BOX_SORT_MENU_ITEMS,
+    onClick: ({ key }) => { void handleSortCurrentBox(key as SaveBoxSortBy); },
+  };
   if (!isAuthenticated) return <div style={{ padding: 48, textAlign: 'center' }}>请先登录</div>;
   if (loading) return <div style={{ padding: 48, textAlign: 'center' }}><Spin size="large" /></div>;
   if (!saveData) return <div style={{ padding: 48, textAlign: 'center' }}><Title level={4}>存档不存在</Title><Button onClick={() => navigate('/saves')}>返回</Button></div>;
@@ -387,6 +448,9 @@ const SaveEditor: React.FC = () => {
               <Button icon={<SafetyCertificateOutlined />} onClick={handleBatchLegalityScan}
                 loading={legalityScanning}>合法性扫描</Button>
             </Tooltip>
+            <Dropdown menu={sortMenu} trigger={['click']} disabled={sortingBoxes || saveData.boxes.length === 0}>
+              <Button icon={<SortAscendingOutlined />} loading={sortingBoxes}>全部排序</Button>
+            </Dropdown>
             <Tooltip title="手动创建备份"><Button icon={<SaveOutlined />} onClick={handleSave}>备份</Button></Tooltip>
             <Tooltip title="导出下载"><Button icon={<DownloadOutlined />} onClick={handleDownload}>导出</Button></Tooltip>
           </Space>
@@ -434,7 +498,14 @@ const SaveEditor: React.FC = () => {
 
             {/* Box Grid */}
             <div style={{ flex: 1, alignSelf: 'flex-start', background: '#fff', borderRadius: 8, padding: 16, border: '1px solid #e8e8e8' }}>
-              <Text strong style={{ display: 'block', marginBottom: 12 }}>{currentBox?.boxName || `Box ${activeBox + 1}`}</Text>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+                <Text strong>{currentBox?.boxName || `Box ${activeBox + 1}`}</Text>
+                <Tooltip title="只对当前箱子内部排序，空槽位会排到末尾">
+                  <Dropdown menu={currentBoxSortMenu} trigger={['click']} disabled={sortingCurrentBox || !currentBox}>
+                    <Button size="small" icon={<SortAscendingOutlined />} loading={sortingCurrentBox}>当前箱排序</Button>
+                  </Dropdown>
+                </Tooltip>
+              </div>
               {currentBox && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, maxWidth: 600 }}>
                   {currentBox.slots.map(slot => {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Dapper;
 using Microsoft.AspNetCore.Hosting;
 using Npgsql;
@@ -296,6 +297,27 @@ public class SaveFileService
         await WriteBackSave(sf, userId, sav);
     }
 
+    public async Task SortAllBoxes(Guid saveFileId, Guid userId, string? sortBy)
+    {
+        var (sf, sav) = await LoadSave(saveFileId, userId);
+        var sortMethod = GetBoxSortMethod(sortBy);
+
+        for (int boxIndex = 0; boxIndex < sav.BoxCount; boxIndex++)
+            sav.SortBoxes(boxIndex, boxIndex, sortMethod);
+
+        await WriteBackSave(sf, userId, sav);
+    }
+
+    public async Task SortBox(Guid saveFileId, Guid userId, int boxIndex, string? sortBy)
+    {
+        var (sf, sav) = await LoadSave(saveFileId, userId);
+        if ((uint)boxIndex >= sav.BoxCount)
+            throw new BusinessException("箱子索引无效", 400);
+
+        sav.SortBoxes(boxIndex, boxIndex, GetBoxSortMethod(sortBy));
+        await WriteBackSave(sf, userId, sav);
+    }
+
     public async Task WriteBoxSlot(Guid saveFileId, Guid userId, int boxIndex, int slotIndex, PKM pkm)
     {
         var (sf, sav) = await LoadSave(saveFileId, userId);
@@ -494,6 +516,44 @@ public class SaveFileService
         if (backup.RawSaveData is { Length: > 0 })
             return backup.RawSaveData;
         return Array.Empty<byte>();
+    }
+
+    private static Func<IEnumerable<PKM>, int, IEnumerable<PKM>> GetBoxSortMethod(string? sortBy)
+    {
+        var normalized = sortBy?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "species" => (list, _) => list.OrderBySpecies(),
+            "level" => (list, _) => list.OrderByDescendingLevel(),
+            "shiny" => (list, _) => list.OrderByCustom(pk => pk.IsShiny ? 0 : 1, pk => pk.Species),
+            "name" => (list, _) => OrderByName(list),
+            _ => throw new BusinessException("不支持的排序方式", 400),
+        };
+    }
+
+    private static IEnumerable<PKM> OrderByName(IEnumerable<PKM> list)
+    {
+        var speciesNames = GameInfo.GetStrings("zh").Species;
+        var max = speciesNames.Count - 1;
+        var comparer = StringComparer.Create(CultureInfo.GetCultureInfo("zh-CN"), true);
+
+        string GetSortName(PKM pk)
+        {
+            if (pk.IsNicknamed && !string.IsNullOrWhiteSpace(pk.Nickname))
+                return pk.Nickname;
+            if (pk.Species > 0 && pk.Species <= max)
+                return speciesNames[pk.Species];
+            return pk.Nickname ?? string.Empty;
+        }
+
+        return list
+            .OrderBy(pk => pk.Species == 0)
+            .ThenBy(pk => pk.IsEgg)
+            .ThenBy(GetSortName, comparer)
+            .ThenBy(pk => pk.Species)
+            .ThenBy(pk => pk.Form)
+            .ThenBy(pk => pk.Gender)
+            .ThenBy(pk => pk.IsNicknamed);
     }
 
     // ═══ 映射 ═════════════════════════════════════════════

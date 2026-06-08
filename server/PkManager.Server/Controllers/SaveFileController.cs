@@ -265,6 +265,46 @@ public class SaveFileController : ControllerBase
     }
 
     /// <summary>
+    /// 对所有箱子分别执行内部排序
+    /// </summary>
+    [HttpPost("{id:guid}/sortBoxes")]
+    public async Task<ActionResult<ApiResponse<object>>> SortBoxes(Guid id, [FromBody] SortBoxesRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<object>.Error(401, "未登录"));
+
+        try
+        {
+            await _saveFileService.SortAllBoxes(id, userId.Value, request.SortBy);
+            return Ok(ApiResponse<object>.Ok(new { }, $"已按{GetSortLabel(request.SortBy)}完成箱子排序"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<object>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 对单个箱子执行内部排序
+    /// </summary>
+    [HttpPost("{id:guid}/sortBox")]
+    public async Task<ActionResult<ApiResponse<object>>> SortBox(Guid id, [FromBody] SortBoxRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<object>.Error(401, "未登录"));
+
+        try
+        {
+            await _saveFileService.SortBox(id, userId.Value, request.BoxIndex, request.SortBy);
+            return Ok(ApiResponse<object>.Ok(new { }, $"已按{GetSortLabel(request.SortBy)}完成当前箱排序"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<object>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
     /// 创建新游戏空白存档（用于模拟器新游戏入口）
     /// </summary>
     [HttpPost("new-game")]
@@ -283,6 +323,15 @@ public class SaveFileController : ControllerBase
             return BadRequest(ApiResponse<SaveFileDetailDto>.Error(ex.ErrorCode, ex.Message));
         }
     }
+
+    private static string GetSortLabel(string? sortBy) => sortBy?.Trim().ToLowerInvariant() switch
+    {
+        "species" => "物种编号",
+        "level" => "等级",
+        "shiny" => "闪光优先",
+        "name" => "名称",
+        _ => "指定方式",
+    };
 }
 
 public class MoveFromBankRequest
@@ -304,6 +353,17 @@ public class SwapBoxesRequest
 {
     public int BoxIndexA { get; set; }
     public int BoxIndexB { get; set; }
+}
+
+public class SortBoxesRequest
+{
+    public string SortBy { get; set; } = "species";
+}
+
+public class SortBoxRequest
+{
+    public int BoxIndex { get; set; }
+    public string SortBy { get; set; } = "species";
 }
 
 public class NewGameRequest

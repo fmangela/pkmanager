@@ -15,6 +15,8 @@ export interface SaveFileInfo {
   updatedAt: string;
 }
 
+export type SaveBoxSortBy = 'species' | 'level' | 'shiny' | 'name';
+
 export interface MoveDto {
   moveId: number;
   moveName: string;
@@ -253,6 +255,12 @@ export const saveFileApi = {
 
   swapBoxes: (saveFileId: string, boxIndexA: number, boxIndexB: number) =>
     apiClient.post(`/SaveFile/${saveFileId}/swap-boxes`, { boxIndexA, boxIndexB }),
+
+  sortBoxes: (saveFileId: string, sortBy: SaveBoxSortBy) =>
+    apiClient.post(`/SaveFile/${saveFileId}/sortBoxes`, { sortBy }),
+
+  sortBox: (saveFileId: string, boxIndex: number, sortBy: SaveBoxSortBy) =>
+    apiClient.post(`/SaveFile/${saveFileId}/sortBox`, { boxIndex, sortBy }),
 
   listBackups: (saveFileId: string) =>
     apiClient.get<SaveBackupDto[]>(`/SaveFile/${saveFileId}/backups`),
