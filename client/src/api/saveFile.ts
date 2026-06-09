@@ -270,7 +270,124 @@ export const saveFileApi = {
 
   newGame: (gameId: string) =>
     apiClient.post<SaveFileDetail>('/SaveFile/new-game', { gameId }),
+
+  // ── 背包（Bag Editor）──
+  getBag: (saveFileId: string) =>
+    apiClient.get<BagDto>(`/SaveFile/${saveFileId}/bag`),
+
+  saveBag: (saveFileId: string, bag: BagDto) =>
+    apiClient.put(`/SaveFile/${saveFileId}/bag`, bag),
+
+  // ── 训练家信息（Trainer Info）──
+  getTrainerInfo: (saveFileId: string) =>
+    apiClient.get<TrainerInfoDto>(`/SaveFile/${saveFileId}/trainer`),
+
+  saveTrainerInfo: (saveFileId: string, info: TrainerInfoDto) =>
+    apiClient.put(`/SaveFile/${saveFileId}/trainer`, info),
+
+  // ── 图鉴（Pokédex Editor）──
+  getPokedex: (saveFileId: string) =>
+    apiClient.get<PokedexDto>(`/SaveFile/${saveFileId}/pokedex`),
+
+  savePokedex: (saveFileId: string, data: PokedexDto) =>
+    apiClient.put(`/SaveFile/${saveFileId}/pokedex`, data),
+
+  batchPokedex: (saveFileId: string, action: string) =>
+    apiClient.post<PokedexDto>(`/SaveFile/${saveFileId}/pokedex/batch`, { action }),
 };
+
+// ── Bag types ─────────────────────────────────────────
+
+export interface BagCapability {
+  hasFavorite: boolean;
+  hasNewFlag: boolean;
+  hasFreeSpace: boolean;
+  maxItemID: number;
+}
+
+export interface BagDto {
+  capability: BagCapability;
+  pouches: PouchDto[];
+}
+
+export interface PouchDto {
+  type: string;
+  maxCount: number;
+  items: BagItemDto[];
+}
+
+export interface BagItemDto {
+  index: number;
+  count: number;
+  isFavorite?: boolean;
+  isNew?: boolean;
+  isFreeSpace?: boolean;
+}
+
+// ── Trainer Info types ───────────────────────────────
+
+export interface TrainerCapability {
+  hasCoins: boolean;
+  hasBP: boolean;
+  hasLeaguePoints: boolean;
+  hasBadges: boolean;
+  badgeCount: number;
+  badgeNames: string[];
+  hasTrainerCard: boolean;
+  hasCardNumber: boolean;
+  hasGameSync: boolean;
+  maxStringLengthTrainer: number;
+  maxMoney: number;
+  maxCoins?: number;
+  trainerIDFormat: number;  // 0=None, 1=16BitSingle, 2=16Bit, 3=SixDigit
+}
+
+export interface TrainerInfoDto {
+  capability: TrainerCapability;
+  ot: string;
+  tid16: number;
+  sid16: number;
+  displayTID: number;
+  displaySID: number;
+  gender: number;
+  language: number;
+  languageName?: string;
+  playedHours: number;
+  playedMinutes: number;
+  playedSeconds: number;
+  generation: number;
+  gameVersionName?: string;
+  money?: number;
+  coins?: number;
+  bp?: number;
+  leaguePoints?: number;
+  badges?: number;
+  cardNumber?: string;
+  gameSyncID?: string;
+}
+
+// ── Pokédex types ────────────────────────────────────
+
+export interface PokedexEntryDto {
+  species: number;
+  seen: boolean;
+  caught: boolean;
+}
+
+export interface PokedexDto {
+  hasPokeDex: boolean;
+  gameVersion?: number;
+  generation: number;
+  visibleSpeciesMax: number; // 0 = use totalSpecies
+  isSupported: boolean;
+  unsupportedReason?: string;
+  totalSpecies: number;
+  seenCount: number;
+  caughtCount: number;
+  percentSeen: number;
+  percentCaught: number;
+  entries: PokedexEntryDto[];
+}
 
 // ── 本地模拟器 API ──────────────────────────────────────
 

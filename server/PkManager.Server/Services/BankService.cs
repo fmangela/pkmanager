@@ -183,7 +183,7 @@ public class BankService
 
         // Map to DTO
         var pokemon = ParseService.MapToPokemonDto(pkm);
-        var pkmDataBase64 = Convert.ToBase64String(pkm.DecryptedPartyData);
+        var buf = new byte[pkm.SIZE_PARTY]; pkm.WriteDecryptedDataParty(buf); var pkmDataBase64 = Convert.ToBase64String(buf);
 
         // 获取世代
         var saveFile = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(

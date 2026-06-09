@@ -36,7 +36,7 @@ public class PokemonEditService
             {
                 Identifier = r.Identifier.ToString(),
                 Judgement = r.Judgement.ToString(),
-                Comment = r.Comment,
+                Comment = "", // TODO: use LegalityFormatting.Report() in v26
                 Issue = GetHumanReadableIssue(r),
                 CanFix = CanAutoFix(r),
                 FixAction = GetFixAction(r)
@@ -423,7 +423,7 @@ public class PokemonEditService
             {
                 Identifier = r.Identifier.ToString(),
                 Judgement = r.Judgement.ToString(),
-                Comment = r.Comment,
+                Comment = "", // TODO: use LegalityFormatting.Report() in v26
                 Issue = GetHumanReadableIssue(r),
                 CanFix = CanAutoFix(r),
                 FixAction = GetFixAction(r)
@@ -502,7 +502,7 @@ public class PokemonEditService
     /// </summary>
     public byte[] ExportSinglePkm(PKM pkm, string? format = null)
     {
-        return pkm.DecryptedPartyData;
+        var buf = new byte[pkm.SIZE_PARTY]; pkm.WriteDecryptedDataParty(buf); return buf;
     }
 
     // ── 合法性辅助方法 ──────────────────────────────────
@@ -544,7 +544,7 @@ public class PokemonEditService
     private static string GetHumanReadableIssue(CheckResult r)
     {
         var id = GetChineseCheckName(r.Identifier);
-        var comment = !string.IsNullOrWhiteSpace(r.Comment) ? r.Comment : $"{id}校验失败";
+        var comment = $"{id}校验失败";
         return r.Judgement switch
         {
             Severity.Valid => string.Empty,

@@ -10,6 +10,8 @@ PGDATA="$PROJECT_DIR/data/pgdata"
 PG_LOG="$PGDATA/logfile"
 SERVER_DIR="$PROJECT_DIR/server/PkManager.Server"
 CLIENT_DIR="$PROJECT_DIR/client"
+PKHEX_FEED_DIR="$PROJECT_DIR/artifacts/nuget"
+PKHEX_PROPS="$PROJECT_DIR/Directory.Build.props"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -65,6 +67,9 @@ if [ "$1" = "--stop" ] || [ "$1" = "-s" ]; then
     stop_all
 fi
 
+PKHEX_CORE_VERSION="$(sed -n 's:.*<PKHeXCoreVersion>\(.*\)</PKHeXCoreVersion>.*:\1:p' "$PKHEX_PROPS" | head -n 1)"
+PKHEX_CORE_PACKAGE="$PKHEX_FEED_DIR/PKHeX.Core.$PKHEX_CORE_VERSION.nupkg"
+
 echo ""
 echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║     🐾 宝可梦全世代管理平台 — 开发环境启动       ║${NC}"
@@ -96,6 +101,12 @@ fi
 log "2/3 启动后端 API..."
 
 free_port 5000
+
+if [ ! -f "$PKHEX_CORE_PACKAGE" ]; then
+    err "   PKHeX.Core 本地包不存在: $PKHEX_CORE_PACKAGE"
+    err "   请先运行: ./scripts/update-pkhex-core-package.sh"
+    exit 1
+fi
 
 if [ ! -d "$SERVER_DIR" ]; then
     err "   后端目录不存在: $SERVER_DIR"
@@ -144,12 +155,12 @@ FRONTEND_PID=$!
 sleep 2
 
 for i in $(seq 1 10); do
-    if curl -s http://localhost:5173 > /dev/null 2>&1; then
-        log "   前端启动成功 ✅  http://${LAN_IP}:5173"
+    if curl -ks https://localhost:5173 > /dev/null 2>&1; then
+        log "   前端启动成功 ✅  https://${LAN_IP}:5173"
         break
     fi
     if [ $i -eq 10 ]; then
-        warn "   前端可能仍在启动中，请稍后检查 http://${LAN_IP}:5173"
+        warn "   前端可能仍在启动中，请稍后检查 https://${LAN_IP}:5173"
     fi
     sleep 1
 done
@@ -159,7 +170,7 @@ echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║  🎉 开发环境已就绪！                              ║${NC}"
 echo -e "${GREEN}╠══════════════════════════════════════════════════╣${NC}"
-echo -e "${GREEN}║  📦 前端:   http://${LAN_IP}:5173                ║${NC}"
+echo -e "${GREEN}║  📦 前端:   https://${LAN_IP}:5173               ║${NC}"
 echo -e "${GREEN}║  🔧 后端:   http://${LAN_IP}:5000                ║${NC}"
 echo -e "${GREEN}║  📖 API文档: http://${LAN_IP}:5000/swagger        ║${NC}"
 echo -e "${GREEN}║  🗄️  PG:     psql -h $PGDATA/run -U pkadmin       ║${NC}"

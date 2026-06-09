@@ -3,6 +3,7 @@ using Dapper;
 using Microsoft.AspNetCore.Hosting;
 using Npgsql;
 using PKHeX.Core;
+using PkManager.Server.Helpers;
 using PkManager.Server.Models.Entity;
 using PkManager.Server.Models.Response;
 using SaveFileEntity = PkManager.Server.Models.Entity.SaveFile;
@@ -477,6 +478,424 @@ public class SaveFileService
         var rawData = ReadSaveBytes(saveFile);
         var sav = ParseService.OpenSaveFile(rawData, saveFile.Filename);
         return pokemonEditService.BatchScan(sav);
+    }
+
+    // ═══ 背包编辑（Bag Editor）════════════════════════════
+
+    /// <summary>
+    /// 获取存档背包 — 返回 capability 驱动的多 Pouch 道具列表
+    /// </summary>
+    public async Task<BagDto> GetBag(Guid saveFileId, Guid userId)
+    {
+        var (_, sav) = await LoadSave(saveFileId, userId);
+        // PKHeX v24.3.10: Inventory 返回 IReadOnlyList&lt;InventoryPouch&gt;，Items 直接引用原始数据
+        var inventory = sav.Inventory;
+
+        // — capability 检测：通过第一个非空 item 的实际类型判断 —
+        var capability = new BagCapability
+        {
+            MaxItemID = sav.MaxItemID,
+        };
+        // capability 检测：取第一个 pouch 的第一个 item（即使 index=0 也暴露正确接口）。
+        // 不用非空 item 过滤，因为空存档/空背包会误判为全部 false。
+        var sampleItem = inventory.Pouches
+            .SelectMany(p => p.Items)
+            .FirstOrDefault();
+        if (sampleItem != null)
+        {
+            capability.HasFavorite = sampleItem is IItemFavorite;
+            capability.HasNewFlag = sampleItem is IItemNewFlag;
+            capability.HasFreeSpace = sampleItem is IItemFreeSpace;
+        }
+
+        // — 映射 Pouch 列表 —
+        var pouches = new List<PouchDto>();
+        foreach (var pouch in inventory.Pouches)
+        {
+            var pouchDto = new PouchDto
+            {
+                Type = pouch.Type.ToString(),
+                MaxCount = pouch.MaxCount,
+                Items = pouch.Items.Select(item =>
+                {
+                    var dto = new BagItemDto
+                    {
+                        Index = item.Index,
+                        Count = item.Count,
+                    };
+                    if (capability.HasFavorite && item is IItemFavorite fav)
+                        dto.IsFavorite = fav.IsFavorite;
+                    if (capability.HasNewFlag && item is IItemNewFlag nf)
+                        dto.IsNew = nf.IsNew;
+                    if (capability.HasFreeSpace && item is IItemFreeSpace fs)
+                        dto.IsFreeSpace = fs.IsFreeSpace;
+                    return dto;
+                }).ToList(),
+            };
+            pouches.Add(pouchDto);
+        }
+
+        return new BagDto { Capability = capability, Pouches = pouches };
+    }
+
+    /// <summary>
+    /// 保存背包变更 — 将 DTO 写回 PKHeX Inventory 并持久化存档。
+    /// InventoryPouch.Items 直接引用原始存档数据，修改即修改存档。
+    /// </summary>
+    public async Task SaveBag(Guid saveFileId, Guid userId, BagDto dto)
+    {
+        var (sf, sav) = await LoadSave(saveFileId, userId);
+        var inventory = sav.Inventory;
+        var maxItemID = sav.MaxItemID;
+
+        foreach (var pouchDto in dto.Pouches)
+        {
+            if (!Enum.TryParse<InventoryType>(pouchDto.Type, out var invType))
+                continue;
+
+            var pouch = inventory.Pouches.FirstOrDefault(p => p.Type == invType);
+            if (pouch == null)
+                continue; // 该存档不支持此 Pouch 类型，跳过
+
+            var items = pouch.Items;
+            for (int i = 0; i < Math.Min(pouchDto.Items.Count, items.Length); i++)
+            {
+                var src = pouchDto.Items[i];
+                var dest = items[i];
+
+                // 校验道具 ID：0 表示空格，否则必须在有效范围内
+                var idx = src.Index;
+                if (idx != 0 && (idx < 0 || idx > maxItemID))
+                    idx = 0; // 非法道具 ID → 清空槽位
+                dest.Index = idx;
+
+                // 数量：只保证非负，不做袋子级上限钳制。
+                // PKHeX 按道具限制（如 Z-Ring 在 KeyItems 袋限 2、TM 和 TR 规则不同），
+                // 袋子 MaxCount 不能代表所有道具的上限。
+                dest.Count = Math.Max(0, src.Count);
+
+                if (src.IsFavorite.HasValue && dest is IItemFavorite fav)
+                    fav.IsFavorite = src.IsFavorite.Value;
+                if (src.IsNew.HasValue && dest is IItemNewFlag nf)
+                    nf.IsNew = src.IsNew.Value;
+                if (src.IsFreeSpace.HasValue && dest is IItemFreeSpace fs)
+                    fs.IsFreeSpace = src.IsFreeSpace.Value;
+            }
+        }
+
+        // 关键：把袋子内容序列化回存档原始数据。
+        // InventoryPouch.Items 只是在 GetPouch 时从原始字节读出的快照；
+        // 修改 Items 只改了内存对象，必须通过 SetPouch → 每个 pouch 写回 sav.Data 对应偏移。
+        inventory.CopyTo(sav);
+
+        await WriteBackSave(sf, userId, sav);
+    }
+
+    // ═══ 训练家信息（Trainer Info）════════════════════════
+
+    /// <summary>
+    /// 获取训练家完整信息 — capability 驱动
+    /// </summary>
+    public async Task<TrainerInfoDto> GetTrainerInfo(Guid saveFileId, Guid userId)
+    {
+        var (_, sav) = await LoadSave(saveFileId, userId);
+
+        // — capability 检测 — 使用强类型适配器替代反射
+        var cap = new TrainerCapability
+        {
+            HasCoins = PkhexSaveAdapters.GetCoin(sav) != null,
+            HasBP = PkhexSaveAdapters.GetBP(sav) != null,
+            HasLeaguePoints = PkhexSaveAdapters.GetLeaguePoints(sav) != null,
+            HasBadges = PkhexSaveAdapters.GetBadges(sav) != null,
+            HasGameSync = sav is IGameSync,
+            HasTrainerCard = sav is SAV8SWSH,
+            HasCardNumber = sav is SAV8SWSH,
+            MaxStringLengthTrainer = sav.MaxStringLengthTrainer,
+            MaxMoney = sav.MaxMoney,
+            TrainerIDFormat = (int)sav.TrainerIDDisplayFormat,
+        };
+
+        if (cap.HasBadges)
+        {
+            var (count, names) = GetBadgeInfo(sav);
+            cap.BadgeCount = count;
+            cap.BadgeNames = names;
+        }
+
+        if (cap.HasCoins)
+            cap.MaxCoins = sav.MaxCoins;
+
+        var dto = new TrainerInfoDto
+        {
+            Capability = cap,
+            OT = sav.OT,
+            TID16 = sav.TID16,
+            SID16 = sav.SID16,
+            DisplayTID = sav.DisplayTID,
+            DisplaySID = sav.DisplaySID,
+            Gender = sav.Gender,
+            Language = sav.Language,
+            LanguageName = GetLanguageName(sav.Language),
+            PlayedHours = sav.PlayedHours,
+            PlayedMinutes = sav.PlayedMinutes,
+            PlayedSeconds = sav.PlayedSeconds,
+            Generation = sav.Generation,
+            GameVersionName = GameInfo.GetVersionName(sav.Version),
+        };
+
+        dto.Money = sav.Money;
+        dto.Coins = PkhexSaveAdapters.GetCoin(sav);
+        dto.BP = PkhexSaveAdapters.GetBP(sav);
+        dto.LeaguePoints = (int?)PkhexSaveAdapters.GetLeaguePoints(sav);
+        dto.Badges = PkhexSaveAdapters.GetBadges(sav);
+        dto.CardNumber = PkhexSaveAdapters.GetCardNumber(sav);
+        dto.GameSyncID = PkhexSaveAdapters.GetGameSyncID(sav);
+
+        return dto;
+    }
+
+    /// <summary>
+    /// 保存训练家信息
+    /// </summary>
+    public async Task SaveTrainerInfo(Guid saveFileId, Guid userId, TrainerInfoDto dto)
+    {
+        var (sf, sav) = await LoadSave(saveFileId, userId);
+
+        // 基本字段 — 带钳制校验
+        sav.OT = dto.OT ?? "";
+        sav.TID16 = Math.Clamp(dto.TID16, (ushort)0, (ushort)65535);
+        sav.SID16 = Math.Clamp(dto.SID16, (ushort)0, (ushort)65535);
+        sav.Gender = dto.Gender <= 1 ? dto.Gender : (byte)0;
+        sav.Language = dto.Language is >= 1 and <= 10 ? dto.Language : 2;
+        sav.PlayedHours = Math.Clamp(dto.PlayedHours, 0, 999);
+        sav.PlayedMinutes = Math.Clamp(dto.PlayedMinutes, 0, 59);
+        sav.PlayedSeconds = Math.Clamp(dto.PlayedSeconds, 0, 59);
+
+        if (dto.Money.HasValue)
+            sav.Money = Math.Clamp(dto.Money.Value, 0u, (uint)sav.MaxMoney);
+
+        // — 货币 — 使用强类型适配器
+        var cap = dto.Capability;
+        if (cap.HasCoins && dto.Coins.HasValue)
+            PkhexSaveAdapters.SetCoin(sav, Math.Clamp(dto.Coins.Value, 0, sav.MaxCoins));
+        if (cap.HasBP && dto.BP.HasValue)
+            PkhexSaveAdapters.SetBP(sav, Math.Clamp(dto.BP.Value, 0, 99999));
+        if (cap.HasLeaguePoints && dto.LeaguePoints.HasValue)
+            PkhexSaveAdapters.SetLeaguePoints(sav, (uint)Math.Clamp(dto.LeaguePoints.Value, 0, 99999999));
+
+        // — 徽章 —
+        if (cap.HasBadges && dto.Badges.HasValue && cap.BadgeCount > 0)
+        {
+            var maxMask = (1 << cap.BadgeCount) - 1;
+            PkhexSaveAdapters.SetBadges(sav, dto.Badges.Value & maxMask);
+        }
+
+        // — 训练家卡片 —
+        if (cap.HasCardNumber && dto.CardNumber != null)
+            PkhexSaveAdapters.SetCardNumber(sav, dto.CardNumber);
+
+        await WriteBackSave(sf, userId, sav);
+    }
+
+    // ═══ 图鉴编辑（Pokédex Editor）═════════════════════
+
+    /// <summary>后端集中判定图鉴可见范围与支持状态 — 唯一数据源，前端不自行映射</summary>
+    private static (int visibleMax, bool supported, string? reason) GetDexVisibility(
+        int generation, int gameVersion)
+    {
+        // LA (PKHeX version = 47) — 研究任务体系，V1 不支持
+        if (gameVersion == 47)
+            return (0, false, "Pokémon Legends: Arceus 的研究任务体系暂不支持，请使用 PKHeX 桌面版编辑图鉴");
+
+        // V1 其余存档均支持；visibleMax=0 表示"使用 MaxSpeciesID"
+        return (0, true, null);
+    }
+
+    /// <summary>
+    /// 获取存档图鉴 — 返回 capability 和 seen/caught 条目列表
+    /// </summary>
+    public async Task<PokedexDto> GetPokedex(Guid saveFileId, Guid userId)
+    {
+        var (sf, sav) = await LoadSave(saveFileId, userId);
+        var gameVersion = sf.GameVersion ?? (int)sav.Version;
+        var generation = sf.Generation;
+
+        var (visibleMax, isSupported, reason) = GetDexVisibility(generation, gameVersion);
+
+        var entries = new List<PokedexEntryDto>();
+        var maxSpecies = sav.MaxSpeciesID;
+        for (ushort i = 1; i <= maxSpecies; i++)
+        {
+            entries.Add(new PokedexEntryDto
+            {
+                Species = i,
+                Seen = sav.GetSeen(i),
+                Caught = sav.GetCaught(i),
+            });
+        }
+
+        return new PokedexDto
+        {
+            HasPokeDex = sav.HasPokeDex,
+            GameVersion = gameVersion,
+            Generation = generation,
+            VisibleSpeciesMax = visibleMax,
+            IsSupported = isSupported,
+            UnsupportedReason = reason,
+            TotalSpecies = maxSpecies,
+            SeenCount = sav.SeenCount,
+            CaughtCount = sav.CaughtCount,
+            PercentSeen = sav.PercentSeen,
+            PercentCaught = sav.PercentCaught,
+            Entries = entries,
+        };
+    }
+
+    /// <summary>
+    /// 保存图鉴变更 — 带去重、物种范围校验、caught⇒seen 归一化
+    /// </summary>
+    public async Task SavePokedex(Guid saveFileId, Guid userId, PokedexDto dto)
+    {
+        var (sf, sav) = await LoadSave(saveFileId, userId);
+        var maxSpecies = sav.MaxSpeciesID;
+
+        // 去重：按 species 取最后一条
+        var deduped = dto.Entries
+            .GroupBy(e => e.Species)
+            .ToDictionary(g => g.Key, g => g.Last());
+
+        foreach (var (species, entry) in deduped)
+        {
+            if (species < 1 || species > maxSpecies)
+                throw new BusinessException($"物种编号 {species} 超出该存档范围 (1-{maxSpecies})", 400);
+
+            // 语义归一化：caught ⇒ seen / !seen ⇒ !caught
+            if (entry.Caught) entry.Seen = true;
+            if (!entry.Seen) entry.Caught = false;
+
+            sav.SetSeen(species, entry.Seen);
+            sav.SetCaught(species, entry.Caught);
+        }
+
+        await WriteBackSave(sf, userId, sav);
+    }
+
+    /// <summary>
+    /// 图鉴批量操作 — seenAll / caughtAll / clearAll
+    /// </summary>
+    private static readonly HashSet<string> AllowedPokedexBatchActions = new(StringComparer.OrdinalIgnoreCase)
+        { "seenAll", "caughtAll", "clearAll" };
+
+    public async Task<PokedexDto> BatchPokedex(Guid saveFileId, Guid userId, string action)
+    {
+        // 手动判空 + 白名单校验（ASP.NET 自动 400 已禁用）
+        if (string.IsNullOrWhiteSpace(action))
+            throw new BusinessException("缺少批量操作参数", 400);
+        var normalized = action.Trim();
+        if (!AllowedPokedexBatchActions.Contains(normalized))
+            throw new BusinessException($"不支持的批量操作: {action}，可选: seenAll, caughtAll, clearAll", 400);
+
+        var (sf, sav) = await LoadSave(saveFileId, userId);
+        var max = sav.MaxSpeciesID;
+
+        switch (normalized.ToLowerInvariant())
+        {
+            case "seenall":
+                for (ushort i = 1; i <= max; i++)
+                    sav.SetSeen(i, true);
+                break;
+            case "caughtall":
+                for (ushort i = 1; i <= max; i++)
+                {
+                    sav.SetSeen(i, true);
+                    sav.SetCaught(i, true);
+                }
+                break;
+            case "clearall":
+                for (ushort i = 1; i <= max; i++)
+                {
+                    sav.SetSeen(i, false);
+                    sav.SetCaught(i, false);
+                }
+                break;
+        }
+
+        await WriteBackSave(sf, userId, sav);
+        return await GetPokedex(saveFileId, userId);
+    }
+
+    // ── Trainer 辅助 ──────────────────────────────────
+
+    /// <summary>语言 ID → 中文名称</summary>
+    private static string? GetLanguageName(int langId) => langId switch
+    {
+        1 => "日本語",
+        2 => "English",
+        3 => "Français",
+        4 => "Italiano",
+        5 => "Deutsch",
+        7 => "Español",
+        8 => "한국어",
+        9 => "简体中文",
+        10 => "繁體中文",
+        _ => langId > 0 ? $"Language {langId}" : null,
+    };
+
+    /// <summary>根据游戏版本返回 (徽章总数, 按 bit 顺序的徽章名称列表)</summary>
+    private static (int count, string[] names) GetBadgeInfo(PKHeX.Core.SaveFile sav)
+    {
+        var version = sav.Version;
+        // Kanto (Gen1 RBY, Gen2 GSC second set, Gen3 FRLG, Gen4 HGSS second set)
+        string[] kanto = ["灰色徽章", "蓝色徽章", "橙色徽章", "彩虹徽章", "粉色徽章", "金色徽章", "深红徽章", "绿色徽章"];
+        // Johto (Gen2 GSC, Gen4 HGSS first set)
+        string[] johto = ["飞翼徽章", "昆虫徽章", "普通徽章", "鬼魂徽章", "打击徽章", "矿物徽章", "冰河徽章", "升龙徽章"];
+        // Hoenn (Gen3 RS, Gen3 E, Gen6 ORAS)
+        string[] hoenn = ["岩石徽章", "拳击徽章", "电力徽章", "火焰徽章", "天平徽章", "羽毛徽章", "心灵徽章", "雨滴徽章"];
+        // Sinnoh (Gen4 DP, Gen4 Pt, Gen8 BDSP)
+        string[] sinnoh = ["石炭徽章", "森林徽章", "圆石徽章", "沼泽徽章", "遗迹徽章", "矿山徽章", "冰柱徽章", "灯塔徽章"];
+        // Kalos (Gen6 XY)
+        string[] kalos = ["虫虫徽章", "岩壁徽章", "格斗徽章", "植物徽章", "电压徽章", "妖精徽章", "超能徽章", "冰山徽章"];
+        // Galar (Gen8 SwSh)
+        string[] galar = ["草之徽章", "水之徽章", "火之徽章", "格斗徽章", "妖精徽章", "岩石徽章", "恶之徽章", "龙之徽章"];
+
+        return version switch
+        {
+            // Gen1 RBY/G — Kanto only, 8 badges
+            GameVersion.RD or GameVersion.GN or GameVersion.BU or GameVersion.YW => (8, kanto),
+
+            // Gen2 GSC — 8 Johto + 8 Kanto = 16
+            GameVersion.GD or GameVersion.SI or GameVersion.C => (16, [..johto, ..kanto]),
+
+            // Gen3 RS/E — Hoenn 8
+            GameVersion.S or GameVersion.R or GameVersion.E => (8, hoenn),
+            // Gen3 FRLG — Kanto 8
+            GameVersion.FR or GameVersion.LG => (8, kanto),
+            // Gen3 CXD — Colosseum/XD, no traditional badges but HasBadges may be true
+            GameVersion.CXD => (0, []),
+
+            // Gen4 DP/Pt — Sinnoh 8
+            GameVersion.D or GameVersion.P or GameVersion.Pt => (8, sinnoh),
+            // Gen4 HGSS — 8 Johto + 8 Kanto = 16
+            GameVersion.HG or GameVersion.SS => (16, [..johto, ..kanto]),
+
+            // Gen6 XY — Kalos 8
+            GameVersion.X or GameVersion.Y => (8, kalos),
+            // Gen6 ORAS — Hoenn 8
+            GameVersion.OR or GameVersion.AS => (8, hoenn),
+
+            // Gen8 SwSh — Galar 8
+            GameVersion.SW or GameVersion.SH => (8, galar),
+            // Gen8 BDSP — Sinnoh 8
+            GameVersion.BD or GameVersion.SP => (8, sinnoh),
+
+            // Default — try to infer from generation
+            _ => sav.Generation switch
+            {
+                1 => (8, kanto),
+                3 => (8, hoenn),
+                _ => (PkhexSaveAdapters.GetBadges(sav) != null ? 8 : 0, []),
+            },
+        };
     }
 
     // ═══ 内部辅助 ═════════════════════════════════════════

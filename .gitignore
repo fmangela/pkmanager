@@ -19,3 +19,5 @@ publish/
 server/PkManager.Server/data/
 tmp/
 sdk/
+lib/PKHeX.Core/
+artifacts/nuget/

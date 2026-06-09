@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Typography, Button, App, Spin, Tag, Tooltip, Space, Popconfirm, Dropdown, Select,
+  Tabs,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -16,8 +17,11 @@ import {
 } from '@dnd-kit/core';
 import { saveFileApi, type SaveFileDetail, type BoxSlotDto, type PokemonDto, type SaveBackupDto, type LegalityStatus, type SaveBoxSortBy } from '../api/saveFile';
 import { useDiagnosticStore } from '../stores/diagnosticStore';
-import { bankApi, type BankPokemon } from '../api/bank';
+import { bankApi, type BankListItem } from '../api/bank';
 import EditPanel from '../components/editor/EditPanel';
+import BagPanel from '../components/editor/BagPanel';
+import TrainerPanel from '../components/editor/TrainerPanel';
+import PokedexPanel from '../components/editor/PokedexPanel';
 import AllBoxesModal from '../components/AllBoxesModal';
 import { useAuthStore } from '../stores/authStore';
 import GameCover from '../components/GameCover';
@@ -154,7 +158,7 @@ const DraggableSlot: React.FC<{
 };
 
 // ── Draggable Bank Item ──────────────────────────────
-const DraggableBankItem: React.FC<{ pokemon: BankPokemon }> = ({ pokemon }) => {
+const DraggableBankItem: React.FC<{ pokemon: BankListItem }> = ({ pokemon }) => {
   const id = bankItemId(pokemon.id);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
 
@@ -207,7 +211,7 @@ const SaveEditor: React.FC = () => {
 
   const [saveData, setSaveData] = useState<SaveFileDetail | null>(null);
   const [activeBox, setActiveBox] = useState(0);
-  const [bankPokemon, setBankPokemon] = useState<BankPokemon[]>([]);
+  const [bankPokemon, setBankPokemon] = useState<BankListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeDrag, setActiveDrag] = useState<{ label: string } | null>(null);
   const [editingPokemon, setEditingPokemon] = useState<PokemonDto | null>(null);
@@ -220,6 +224,7 @@ const SaveEditor: React.FC = () => {
   const [sortingBoxes, setSortingBoxes] = useState(false);
   const [legalityMap, setLegalityMap] = useState<Record<string, LegalityStatus>>({});
   const [allBoxesOpen, setAllBoxesOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('boxes');
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -466,6 +471,23 @@ const SaveEditor: React.FC = () => {
           </Space>
         </div>
 
+        {/* Tab navigation — archive-level features */}
+        <div style={{ background: '#fff', padding: '0 24px', borderBottom: '1px solid #e8e8e8' }}>
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            size="small"
+            items={[
+              { key: 'boxes', label: '📦 箱子' },
+              { key: 'bag', label: '🎒 背包' },
+              { key: 'trainer', label: '👤 训练家' },
+              { key: 'pokedex', label: '📖 图鉴' },
+            ]}
+          />
+        </div>
+
+        {/* Content area — switches based on active tab */}
+        {activeTab === 'boxes' && (
         <div style={{ padding: 12 }}>
           <div style={{ display: 'flex', gap: 12 }}>
             {/* Box List Sidebar — height matches box grid */}
@@ -583,6 +605,25 @@ const SaveEditor: React.FC = () => {
           {/* Backup Section */}
           <BackupSection saveFileId={id!} />
         </div>
+        )}
+
+        {activeTab === 'bag' && (
+          <div style={{ padding: 12, background: '#fff', borderRadius: 8, margin: 12, border: '1px solid #e8e8e8' }}>
+            <BagPanel saveFileId={id!} />
+          </div>
+        )}
+
+        {activeTab === 'trainer' && (
+          <div style={{ padding: 12, background: '#fff', borderRadius: 8, margin: 12, border: '1px solid #e8e8e8' }}>
+            <TrainerPanel saveFileId={id!} />
+          </div>
+        )}
+
+        {activeTab === 'pokedex' && (
+          <div style={{ background: '#fff', borderRadius: 8, margin: 12, border: '1px solid #e8e8e8', overflow: 'hidden' }}>
+            <PokedexPanel saveFileId={id!} />
+          </div>
+        )}
       </div>
 
       <DragOverlay>

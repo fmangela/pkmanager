@@ -33,7 +33,7 @@ public class ParseService
     public static PKHeX.Core.SaveFile OpenSaveFile(byte[] saveData, string? fileName = null)
     {
         var parseBuffer = GetCoreSaveBytes(saveData);
-        var sav = SaveUtil.GetVariantSAV(parseBuffer);
+        var sav = SaveUtil.GetSaveFile(parseBuffer);
         if (sav == null)
             throw new BusinessException("不支持的存档格式或文件已损坏");
         return sav;
@@ -419,7 +419,7 @@ public class ParseService
 
             // ── General ──────────────────────────────
             IsValid = true,
-            PkmDataBase64 = Convert.ToBase64String(pkm.DecryptedPartyData)
+            PkmDataBase64 = GetPkmBase64(pkm)
         };
     }
 
@@ -769,6 +769,14 @@ public class ParseService
     }
 
     // ── 辅助方法 ────────────────────────────────────────
+
+    /// <summary>PKM → Base64（v26 中 DecryptedPartyData 已移除，改用 WriteDecryptedDataParty）</summary>
+    private static string GetPkmBase64(PKM pkm)
+    {
+        var buffer = new byte[pkm.SIZE_PARTY];
+        pkm.WriteDecryptedDataParty(buffer);
+        return Convert.ToBase64String(buffer);
+    }
 
     private static string GetSafeString(IReadOnlyList<string> list, int index, string fallback)
     {

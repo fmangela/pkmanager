@@ -2,15 +2,16 @@
 
 > **日期**: 2026-05-31  
 > **依据**: PKHeX完整功能对比与缺口分析报告 + PKMDS-Blazor分析报告  
-> **原则**: 项目主体架构不变 (React 18 + ASP.NET Core 8 + PostgreSQL)，在界面外观和编辑功能上做优化补齐  
-> **当前基线**: 已有用户登录/注册、存档上传/解析/存储、箱子网格展示(6列)、dnd-kit拖拽、银行面板、基础5Tab编辑面板、二元合法性校验
+> **原则**: 项目主体架构不变 (React 19 + ASP.NET Core 10 + PostgreSQL 14)，在界面外观和编辑功能上做优化补齐  
+> **2026-06-09**: 后端升级 .NET 8→10 + PKHeX.Core v24.3.10 NuGet→v26.05.05 SDK 源码编译（本地 NuGet 包），详见 `docs/PKHeX-NET10-升级方案.md`。破坏性 API 变更：`GetVariantSAV`→`GetSaveFile`、`DecryptedPartyData`→`WriteDecryptedDataParty`、`CheckResult.Comment` 已移除、Coin 命名/类型变更。Swagger JWT 定义因 OpenApi v2.x API 变更暂时注释。
+> **当前基线**: 已有用户登录/注册、存档上传/解析/存储、箱子网格展示(6列)、dnd-kit拖拽、银行面板、7Tab编辑面板、三态合法性校验（Legal/Fishy/Illegal）、背包编辑（BagPanel）、训练家编辑（TrainerPanel）、存档编辑器 Tabs 导航重构（箱子/背包/训练家）
 
 ---
 
 ## Phase A: 编辑面板全面升级（EditPanel 重构）
 
 > 目标：将编辑覆盖率从 13% 提升至 60%+，补齐 PKHeX 最核心的编辑字段。
-> 当前 5 个 Tab → 目标 7 个 Tab
+> 7 个 Tab 全部就位（Main / Stats / Moves / Met / Legality / OTMisc / Cosmetic）
 
 ### A.1 编辑面板架构重构
 
@@ -21,7 +22,7 @@
   - 创建 `src/components/editor/MovesTab.tsx` — 招式
   - 创建 `src/components/editor/LegalityTab.tsx` — 合法性详情（**新增**）
   - `EditPanel.tsx` 已重构为薄壳容器，只负责 Tabs 路由 + 提交
-  - (OTMiscTab + CosmeticTab 后端已完成，前端组件待创建)
+  - OTMiscTab + CosmeticTab 前端组件已创建并集成（A.6 + A.7 均已完成）
 
 - [x] **后端扩展 Pokémon 编辑 API**
   - 扩展 `PokemonEditRequest` DTO，新增 50+ 个字段
@@ -149,7 +150,7 @@
 
 ---
 
-### A.7 外观/装饰 Tab（Cosmetic Tab）— 覆盖率 0% → 80%（✅ 已完成）
+### A.7 外观/装饰 Tab（Cosmetic Tab）— 覆盖率 0% → 80%
 
 - [x] **标记编辑器 (Markings)**
   - 6 个标记：● ▲ ■ ♥ ★ ♦
@@ -256,15 +257,15 @@
 
 ### B.2 宝可梦格子视觉升级
 
-- [x] **格子精灵叠加图标** ✅ 已完成
+- [x] **格子精灵叠加图标**
   - 左下角：合法性状态小圆点（三色: Legal绿 / Fishy黄 / Illegal红）
   - 右上角：闪光 ✨ 星星图标（StarFilled）
   - 特殊状态：Alpha α（左上角红色圆形）/ Gigantamax G（右下角橙色圆形）
   - 实现在 SaveEditor.tsx `DraggableSlot`（第108-144行）+ AllBoxesModal.tsx `MiniSlot`（第64-80行）
 
-- [x] **格子 Hover 信息卡片** — ❌ 不做（用户判断没必要）
+- [x] **格子 Hover 信息卡片** — 不做（用户判断没必要）
 
-- [x] **格子右键菜单** — ❌ 不做（网页右键菜单实现难度大，违背 Web 惯例）
+- [x] **格子右键菜单** — 不做（网页右键菜单实现难度大，违背 Web 惯例）
   - 导出功能替代方案：编辑面板内添加导出按钮（结合 Phase D.5 Showdown 导入导出）
 
 ### B.3 合法性批量扫描
@@ -274,22 +275,22 @@
   - 后端 `POST /api/SaveFile/{id}/legality-report`
   - 返回所有 Party + Box 槽位的合法性状态汇总表 → 注入 `legalityMap` state
 
-- [x] **合法性报告浮层** — ❌ 不做（格子三色圆点已实现"一眼标记"，浮层表格纯属多余）
+- [x] **合法性报告浮层** — 不做（格子三色圆点已实现"一眼标记"，浮层表格纯属多余）
 
 ### B.4 银行面板增强
 
-- [x] **银行卡片视图升级** ✅ 已完成
+- [x] **银行卡片视图升级**
   - 统一与格子相同的精灵图 + 叠加图标风格（Alpha α/Gmax G/闪光 StarFilled）
   - 每个卡片显示：精灵图 / 昵称 / 物种名 / Lv / 持有物 / 世代Tag
   - List 视图同步叠加图标
 
-- [x] **银行筛选/搜索增强** ✅ 已完成
+- [x] **银行筛选/搜索增强**
   - 筛选：世代 / 闪光 / 性格 / 特性（Select showSearch）
   - 排序：添加时间 / 等级 ↑↓ / 物种编号 ↑↓
   - 搜索支持物种名+昵称混合搜索
   - 物种属性筛选延后（需预计算 type 列）
 
-- [x] **银行批量操作** ✅ 已完成
+- [x] **银行批量操作**
   - 多选模式（hover Checkbox，选中蓝色边框）
   - 批量删除（已有，保留）
   - 批量导出为 .zip（`POST /api/bank/batch-export`）
@@ -303,44 +304,51 @@
 
 ### C.1 背包/道具编辑（Bag Editor）
 
-- [ ] **后端 Bag API**
+- [x] **后端 Bag API** ✅ 已完成
   - `GET /api/SaveFile/{id}/bag` — 返回多 Pouch 道具列表
   - `PUT /api/SaveFile/{id}/bag` — 保存道具变更
   - Pouch 类型自动识别 (Items/Medicine/TMs/Berries/Balls/Battle Items/Key Items等)
+  - Capability 驱动的字段 (IsFavorite/IsNew/IsFreeSpace 按接口检测)
 
-- [ ] **前端 Bag 页面/面板**
-  - 存档编辑器新增「背包」Tab 或独立 Drawer
-  - Pouch 分类 Tab 导航（带精灵图标）
-  - 道具行：图标 + 名称 + 数量输入 + 收藏标记
-  - 排序按钮：按名称 / 按数量 / 按索引
+- [x] **前端 Bag 页面/面板** ✅ 已完成
+  - 存档编辑器新增「背包」Tab
+  - Pouch 分类 Tab 导航（竖直左侧布局）
+  - 道具行：图标 + 名称 + 数量输入 + 收藏标记（capability 驱动）
+  - 排序按钮：按名称 / 按数量 / 按索引 / 空格排末尾
   - 「显示空格」开关
+  - 保存按钮
 
 ### C.2 训练家信息完善（Trainer Info）
 
-- [ ] **后端 Trainer API**
-  - `GET /api/SaveFile/{id}/trainer` — 返回完整训练家信息
+- [x] **后端 Trainer API** ✅ 已完成
+  - `GET /api/SaveFile/{id}/trainer` — 返回完整训练家信息（含 capability）
   - `PUT /api/SaveFile/{id}/trainer` — 保存
+  - 徽章名称字典（按游戏版本映射中文名称）
+  - 货币按接口/类型检测（Coins/BP/LeaguePoints）
 
-- [ ] **前端训练家面板**
-  - 基本信息区：OT Name / TID / SID (16-bit + 6-digit) / 游戏语言 / 游戏时间
-  - 货币区（条件显示，按世代）：金钱 / Coins / BP / Poké Miles / Watts / Festival Coins / League Points
-  - 徽章区（Gen1-7）：可视化徽章图标，点击切换获得/未获得
-  - 训练家卡片（Gen8 SwSh）：Card Name / Card Number / Trainer ID
-  - Game Sync ID (Gen5-7)：十六进制只读 + 复制
+- [x] **前端训练家面板** ✅ 已完成
+  - 基本信息区：OT Name / TID / SID (16-bit + 6-digit capability驱动) / 游戏语言 / 游戏时间
+  - 货币区（capability 驱动条件显示）：金钱 / Coins / BP / League Points
+  - 徽章区（capability.HasBadges 驱动）：可视化徽章图标，点击切换获得/未获得
+  - 训练家卡片（Gen8 SwSh）：Card Number
+  - Game Sync ID (Gen5-7)：十六进制只读 + 复制按钮
 
-### C.3 图鉴管理（Pokédex Editor）
+### C.3 图鉴管理（Pokédex Editor）✅ 已完成 (V1)
 
-- [ ] **后端 Pokédex API**
-  - `GET /api/SaveFile/{id}/pokedex` — 按世代返回图鉴数据
-  - `PUT /api/SaveFile/{id}/pokedex` — 批量保存
-  - `POST /api/SaveFile/{id}/pokedex/fill` — Fill/SeenAll/CaughtAll/Clear
+- [x] **后端 Pokédex API** ✅ 已完成
+  - `GET /api/SaveFile/{id}/pokedex` — 返回图鉴数据（含 isSupported/visibleSpeciesMax 后端集中判定）
+  - `PUT /api/SaveFile/{id}/pokedex` — 保存 Seen/Caught 变更（带去重 + 物种范围校验 + caught⇒seen 归一化）
+  - `POST /api/SaveFile/{id}/pokedex/batch` — 批量操作（seenAll / caughtAll / clearAll）
+  - V1 不做 completeAll（需 Zukan 适配层处理形态/性别/语言/闪光标志位，推迟到 C.3.1）
 
-- [ ] **前端图鉴页面**
-  - 存档编辑器新增「图鉴」Tab
-  - 顶部：Seen%/Caught% 进度条 + Fill/SeenAll/Clear 按钮
-  - 搜索栏（名称或图鉴编号）
-  - 分页网格：每格显示精灵图 + Seen/Caught 复选框
-  - 世代条件显示（仅展示该存档版本对应的图鉴范围）
+- [x] **前端图鉴页面** ✅ 已完成
+  - 存档编辑器新增「📖 图鉴」Tab（PokedexPanel.tsx）
+  - 顶部：Seen%/Caught% 进度条（从可见条目前端重算，不直接用 DTO 百分比）
+  - 搜索栏（按编号或中文名称）
+  - 分页网格（pageSize=100）：每格显示物种编号+名称 + Seen/Caught 复选框
+  - 可见范围由后端 visibleSpeciesMax 控制，前端不自行映射版本号
+  - LA 存档显示「暂不支持」Alert
+  - 批量按钮（全见过/全捕获/全清除）带 Popconfirm
 
 ### C.4 宝可梦详情页
 
@@ -585,7 +593,7 @@
 ### G.2 ROM 管理
 
 - [x] **ROM 数据库** — `rom_files` 表 (game_id, display_name, generation, rom_data)
-- [x] **ROM 上传** — `POST /api/Emulator/roms/upload` 
+- [x] **ROM 上传** — `POST /api/Emulator/roms/upload`
 - [x] **ROM 下载** — `GET /api/Emulator/roms/{gameId}`
 - [x] **5 个 GBA 宝可梦 ROM 入库** — 红宝石/蓝宝石/绿宝石/火红/叶绿
 
@@ -732,7 +740,7 @@
 
 > 目标: 3DS 不采用 WASM 方案 — Citra 核心远比 melonDS 重，浏览器端性能无法流畅运行宝可梦 3DS 游戏。改为绑定本地 Azahar 模拟器，Web 端点击启动后由浏览器所在机器的协议启动器/回退脚本调起原生模拟器，退出后自动回传并恢复本机旧存档。
 > **Azahar** 是作者强烈推荐的 3DS 模拟器。它是 Citra 的继承者（PabloMK7s Citra fork + Lime3DS 合并），GPLv2 开源，目前唯一持续活跃且能完美模拟 3DS 宝可梦全系列的模拟器。其他 Citra 分支（Mandarine-Neo、Borked3DS）已不再维护或兼容性不足。
-> 
+>
 > **覆盖游戏**: Gen6 X/Y/OR/AS + Gen7 S/M/US/UM，共 8 款。
 
 ### I.1 Azahar 配置管理
@@ -1111,8 +1119,8 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 | Phase | 总任务数 | 已完成 | 进行中 | 待开始 |
 |-------|---------|--------|--------|--------|
 | A: 编辑面板升级 | 29 | 29 | 0 | 0 |
-| B: 存档编辑器优化 | 14 | 12 | 0 | 2 |
-| C: 新增功能模块 | 12 | 0 | 0 | 12 |
+| B: 存档编辑器优化 | 13 | 13 | 0 | 0 |
+| C: 新增功能模块 | 12 | 11 | 0 | 1 |
 | D: 高级工具 | 14 | 0 | 0 | 14 |
 | E: 世代专属与打磨 | 17 | 5 | 0 | 12 |
 | F: 后端基础设施 | 8 | 3 | 0 | 5 |
@@ -1121,26 +1129,30 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 | I: 3DS Azahar集成 | 19 | 16 | 0 | 3 |
 | J: 前端错误诊断 | 17 | 15 | 0 | 2 |
 | K: GitHub发布解耦 | 15 | 0 | 0 | 15 |
-| **合计** | **200** | **132** | **0** | **68** |
+| **合计** | **199** | **144** | **0** | **55** |
 
 > **更新 (2026-06-07) — 本地模拟器人工验证 + 项目文档刷新**：
 >
 > ### DeSmuME 本地启动全链路验证通过
+>
 > - ✅ **DeSmuME 全链路人工验收** — Gen4 本地启动 → 注入 .dsv → 游戏内保存 → 退出自动同步 → 恢复本机旧 .dsv。协议启动器和回退脚本均可用
 > - ✅ **Dashboard NDS 存档双入口** — Web 游玩 / 本地游玩 两个按钮，新游戏保持仅 Web 路径
 > - ✅ **DeSmuME .dsv footer 兼容** — 服务端上传/编辑/导出保留 DeSmuME footer，避免格式损坏
 >
 > ### Azahar 3DS 本地启动验证
+>
 > - ✅ **I.2 3DS ROM 导入** — 文件系统路径模式，.3ds/.cci/.cxi 支持
 > - ✅ **I.3 启动集成** — 本机启动 → 正常进入游戏 → 退出模拟器后进入同步/恢复分支
 > - ✅ **I.4 存档回传** — 游戏内保存后关闭 Azahar 可触发自动二进制回传，同步后恢复本机旧 main
 >
 > ### CLAUDE.md 全面刷新
+>
 > - ✅ 项目架构、前后端分层、所有 Controller/Service/Store 重新梳理
 > - ✅ 本地模拟器启动链路（协议 + 回退脚本）完整描述
 > - ✅ device_id 机制、诊断体系、GameCover 组件、统一游戏元数据等新特性补充
 >
 > ### TODOLIST 同步
+>
 > - ✅ Phase J 大多数复选框已与进度跟踪对齐（J.1-J.7 + J.9 已完成）
 > - ✅ B.1 全部箱子弹窗 / Swap — 已实现，补勾
 > - ✅ H.4 存档兼容 / H.5 双入口 — 已实现
@@ -1151,8 +1163,9 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - 总计 191 项 / 已完成 129 / 剩余 62
 
 > **更新 (2026-06-06)**：
-> 
+>
 > ### GBA 模拟器 AI 控制接口
+>
 > - ✅ **设计文档** — `docs/GBA模拟器AI控制接口设计.md`（架构、命令列表、HTTP API、Python 示例）
 > - ✅ **浏览器端控制器** — `client/src/lib/gbaControl.ts`（GBAController 类，封装按键/截图/存档/速度/命令执行器）
 > - ✅ **后端命令桥接** — 4 个端点：`send` / `poll` / `result` / `execute`（同步阻塞）
@@ -1160,8 +1173,9 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - ⚠️ GBA 内存读写需要重编译 mGBA WASM（待后续）
 > - TypeScript 0 错误 + .NET 0 错误 + Vite 构建通过
 > - Phase G: 21/19 (+2)
-> 
+>
 > ### 本地模拟器启动完整链路
+>
 > - ✅ **DeSmuME + Azahar 源码分析** — `sdk/desmume/` + `sdk/azahar/`，分析 CLI 参数、存档路径、配置目录
 > - ✅ **设计文档更新** — `本地模拟器关联设计.md`（NDS/3DS 存档路径修正 + CLI 启动方式）+ `本地模拟器异常处理设计.md`（26 种异常场景 + 备份恢复 + 急救）
 > - ✅ **预校验端点** — `POST /api/Emulator/check-local`（验证 exe + CIA/ROM 就绪）
@@ -1173,17 +1187,19 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - ✅ **PostgreSQL 迁移** — `~/pgdata` → `data/pgdata/`（项目内部，WAL 限制 128MB）
 > - TypeScript 0 错误 + .NET 0 错误 + Vite 构建通过
 > - Phase H: 33/25 (+2), Phase I: 19/14 (+6), 总计 190/116/0/74
-> 
+>
 > **更新 (2026-06-04)**：
-> 
+>
 > ### 3DS 游戏卡片 + Dashboard 适配
+>
 > - ✅ **8 款 3DS 宝可梦游戏** — GAME_META + VERSION_TO_GAME_ID + PLAYABLE_GAMES（X/Y/ΩR/αS/S/M/US/UM，按发行日期排列）
 > - ✅ **Dashboard** — 22 张游戏卡片（5 GBA + 9 NDS + 8 3DS），3DS 卡片路由到 `/saves`（无 WASM）
 > - ✅ **Saves 页** — 3DS 存档仅显示「本机」按钮（自动路由到 Azahar），无 WASM 按钮
 > - TypeScript 0 错误 + Vite 构建通过
 > - Phase I: 19/8 (+3)
-> 
+>
 > ### I.1+H.8 本地模拟器配置框架完成
+>
 > - ✅ **设计文档** — `docs/emulator-local-launch-design.md`
 > - ✅ **DB** — `user_settings` 表 (user_id + device_id + key → value)，已执行
 > - ✅ **后端** — `SettingsService` + `SettingsController` (`GET/PUT /api/settings/emulators`) + `EmulatorController.LaunchLocal` / `CreateLaunchToken` / `GetLaunchPackage` / `SyncSaveBinary`
@@ -1195,6 +1211,7 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 **更新 (2026-06-07)**：
 
 > ### 本地协议启动 + 自动同步恢复闭环
+>
 > - ✅ **协议一键启动** — 浏览器优先调用 `pkmanager://launch/{token}`；未安装协议时回退下载本地脚本
 > - ✅ **路径与引号修复** — Windows 启动参数统一带引号，支持包含空格的 `Nintendo 3DS` 路径
 > - ✅ **本地写入校验** — 注入 `main` / `.dsv` 后立即回读并校验字节数与 SHA-256
@@ -1203,8 +1220,9 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - ✅ **导出链路修复** — 存档查看页「导出」改为带鉴权 blob 下载；服务器导出结果已可手动覆盖本地 `main`
 > - ✅ **上传/编辑稳定性修复** — ParseService 改为副本解析；写回前 `GetCompatiblePKM` + round-trip 校验；保存后从磁盘回读真实槽位返回前端
 > - ✅ **EXP/等级联动** — 物种经验表接口 + 前端等级/EXP 双向同步，避免提交不一致
-> 
+>
 > ### 工作台卡片封面化完成
+>
 > - ✅ **统一游戏元数据** — `src/constants/games.ts`（唯一数据源，GAME_META + VERSION_TO_GAME_ID + GAME_VERSION_DISPLAY + GENERATION_MAP）
 > - ✅ **GameCover 组件** — `src/components/GameCover.tsx`（有封面图用图，无图用彩色占位卡片：Pokeball SVG + 游戏简称 + 平台 Tag + 主题色）
 > - ✅ **Dashboard** — 14 张卡片全部从 PlayCircle 图标升级为彩色占位封面
@@ -1213,8 +1231,9 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - ✅ **Bank 详情抽屉** — 顶部加 PokeAPI official-artwork 精灵图(160px)
 > - TypeScript 0 错误 + Vite 构建通过
 > - 消除 3 处重复映射（Dashboard GAME_VERSION_MAP/GAMES/NDS_GAMES + Saves GAME_VERSION_DISPLAY/GENERATION_MAP/GENERATION_COLORS → 统一 constants/games.ts）
-> 
+>
 > ### B.1+B.2 箱子管理交互升级完成
+>
 > - ✅ **B.2 格子叠加图标** — 合法性三色圆点 + Alpha α 徽章(左上) + Gmax G 徽章(右下) + StarFilled 闪光星标(右上)
 > - ✅ **B.1 全部箱子弹窗** — `AllBoxesModal.tsx` 响应式网格(4/3/1列) + 6×5 迷你精灵图 + Swap ⇄ 按钮
 > - ✅ **B.1 箱子快速导航** — ◀ ▶ 翻页按钮 + 键盘 Left/Right 方向键
@@ -1222,8 +1241,9 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - ✅ B.2 合法性扫描结果持久化 — `legalityMap` state + 每格子三色圆点
 > - TypeScript 0 错误 + Vite 生产构建通过
 > - Phase B: 13 项 / 已完成 13 / 剩余 0 ✅ **Phase B 全部完结**
-> 
+>
 > ### Phase J 实施完成（核心链路）
+>
 > - ✅ **J.1** ErrorBoundary.tsx + main.tsx 全局 window.onerror / unhandledrejection 监听
 > - ✅ **J.2** diagnosticStore.ts — Zustand 环形缓冲(200条) + localStorage 持久化(500KB) + sendBeacon 自动上报
 > - ✅ **J.3** DiagnosticPanel.tsx — FloatButton(dev) + Ctrl+Shift+D 全局快捷键 + Drawer 面板（统计条+筛选+时间线+复制全部+清空）
@@ -1235,15 +1255,17 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - ⚠️ **J.8** Playwright 冒烟测试待实施
 > - TypeScript 0 错误 + .NET Build 0 错误（仅 1 个预存 CS1998 warning）+ Vite 生产构建通过
 > - Phase J: 17 项 / 已完成 10 / 剩余 7
-> 
+>
 > ### Phase I + H.8 本地模拟器规划
+>
 > - Phase I 新增 19 项（3DS Azahar）；Phase H.8 新增 6 项（NDS DeSmuME 备选方案）
-> 
+>
 > - 总计 190 项，已完成 93 项，剩余 97 项
-> 
+>
 > **更新 (2026-06-02)**：
-> 
+>
 > ### Phase A.7 外观/装饰 Tab 完成
+>
 > - ✅ 新建 `CosmeticTab.tsx` 组件（327行），EditPanel 注册第7个Tab
 > - ✅ **标记编辑器**: 6符号按钮(●▲■♥★♦)，Gen3-6关↔蓝 / Gen7+关→蓝→红三态循环
 > - ✅ **选美属性**: Cool/Beauty/Cute/Smart/Tough/Sheen，Gen3-4条件显示
@@ -1252,17 +1274,19 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - ⚠️ 后端 markings 写入目前只处理第一个标记（`Marking` 属性），后续需补充 `SetMarking(index)` 反射调用
 > - ⚠️ Contest Stats 雷达图、Spinda 精灵图精确映射留待后续打磨
 > - ✅ Phase A 已全部完成（34/34）
-> 
+>
 > **更新 (2026-06-01 深夜 / 6月2日凌晨)**：
-> 
+>
 > ### GBA 存档同步流程修复
+>
 > - `CreateNewGame` → 不再使用 PKHeX 预建存档，统一创建空占位记录
 > - 新增 `SyncSaveBinary` 端点 (sendBeacon 二进制存档，绕过 keepalive 64KB 限制)
 > - 前端新增「同步存档」按钮替代 30s 定时轮询，关闭时 await 同步完成再关窗口
 > - `u8b64` chunk 32KB→8KB，React duplicate keys 修复
 > - 按键重绑 bugfix: 重绑时清除旧绑定
-> 
+>
 > ### NDS 在线模拟器 (Phase H)
+>
 > - ✅ `melonds.ts` NdsEmulator 封装 (loadRom/loadSave/getSave/pressButton/touch/pause/setSpeed)
 > - ✅ NdsEmulatorPage 组件: 双屏渲染、触摸屏、按键映射、存档同步
 > - ✅ Dashboard 9 张 NDS 卡片 (Gen4: 钻石/珍珠/白金/心金/魂银 + Gen5: 黑/白/黑2/白2)
@@ -1277,13 +1301,15 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 >   - ds-anywhere 源码已克隆并打补丁 (`~/ds-anywhere/`)
 >   - 修复 WasmPlatform semaphore (std::counting_semaphore→pthread sem_t)
 >   - 新版 WASM 843KB，内含 SIMD 指令，预期性能提升 30-50%
-> 
+>
 > ### 存档流程重构
+>
 > - 新游戏不预建 DB 占位记录，首次「同步存档」时服务器自动创建
 > - `SyncSave` 增加 gameId 参数支持自动创建
 > - `CreateNewGame` 统一创建空记录 (PKHeX SAV4/SAV5 不支持空白存档)
-> 
+>
 > ### 版本号修复
+>
 > - PKHeX GameVersion 内部值映射: RS(56)→Ruby, RSE(57)→Emerald, FRLG(58)→FireRed
 > - 黑/白版本号修正: PKHeX W=20, B=21 (原映射反了)
 > - `GameVersionNormalizer` 统一前后端版本号
@@ -1291,6 +1317,7 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > **更新 (2026-06-02 下午)**：
 >
 > ### melonDS GPU 加速 (WebGL 2.0)
+>
 > - ✅ 源码修补: GLESCompat.h/cpp 兼容层 (glColorMaski仿真 + GL_BGRA→RGBA + glFramebufferTexture→2D + glDrawBuffer→DrawBuffers + glMapBuffer→MapBufferRange 等 15+ API 映射)
 > - ✅ GLSL 着色器转换: GPU3D_OpenGL_shaders.h + GPU_OpenGL_shaders.h 全部 `#version 140`→`#version 300 es` + `layout(location=N) out` + `precision highp float`
 > - ✅ WebGL 2.0 上下文创建: WasmEmulator::initialize() 中用 emscripten_webgl_create_context + GLRenderer::New()
@@ -1305,15 +1332,17 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - ⚠️ GL_BGRA→RGBA 映射可能导致 R/B 通道交换 (需实测确认)
 >
 > ### NDS 存档同步链路修正
+>
 > - ✅ `melonds.ts` 调整启动顺序：`setSavePath('/savefiles/game.sav')` 提前到 `loadCart()` 之前，避免已有存档打开时未被加载
 > - ✅ wasmelonDS `writeSave()` 增加 `FileFlush + CloseFile`，避免游戏内保存后 `.sav` 未真正落盘
 > - ✅ NDS `beforeunload` 增加新游戏分支：无 `saveFileId` 时走 `/api/Emulator/sync-save/new/{gameId}`，允许正常退出时自动创建存档记录
 > - ✅ 后端新增二进制新游戏同步入口：接收 `sendBeacon` 的 `.sav`，自动 `CreateNewGame()` + 写文件系统 + 更新 `save_files` 元数据
 > - ⚠️ 以上修正已完成，但”新游戏内保存→直接退出→存档管理出现并可重新加载”仍需最终人工验收
-> 
+>
 > **更新 (2026-06-03 下午)**：
-> 
+>
 > ### NDS 存档同步 Bug 修复 — Module.FS 未定义导致 getSave() 永远返回 null
+>
 > - 🐛 **Bug**: 游戏内保存后点击”同步存档”，存档管理页面无新存档出现
 >   - **根因**: Emscripten 5.0.7 编译产物中 `FS` 仅作为全局 `var FS` 导出，**未**赋值到 `Module.FS`
 >   - `melonds.ts` 中 `loadSave()` 和 `getSave()` 使用 `window.Module.FS.readFile/writeFile/createDataFile`，全部因 `Module.FS === undefined` 而抛出异常
@@ -1322,6 +1351,7 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - 🔧 **前端改进**: `syncSaveNow()` 在 `getSave()` 返回空数据时显示”尚未在游戏中存档”状态提示，不再静默失败
 >
 > ### NDS 存档游戏版本显示修复
+>
 > - 🐛 **Bug**: 存档管理页面 NDS 存档显示 “Gen62” 而非正确游戏名（如”钻石”）
 >   - **根因**: PKHeX.Core 解析 NDS 存档时可能返回**复合版本**（DP=62 / DPPt=63 / HGSS=64 / BW=66 / B2W2=67），而非具体版本（D=10 / P=11 等）
 >   - `SyncSave` 中用 `parsed.GameVersion`(62) 覆盖了 `CreateNewGame` 存入的正确版本(10)
@@ -1337,6 +1367,7 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - 🔧 `UploadSave` 增加版本归一化；`GetSaveDetail` 优先使用 DB 中已归一化的版本号
 >
 > ### 全世代版本号显示补齐（Gen6-9 / 3DS / Switch）
+>
 > - 🐛 **Bug**: 3DS/Switch 存档显示 "Gen33"（究极月）、"Gen44"（剑）等
 >   - **根因**: `GAME_VERSION_DISPLAY` 仅覆盖到 Gen5，Gen6+ 版本号无对应条目
 >   - PKHeX 返回具体版本（如 UM=33, SW=44），但因不在映射表而 fallback 到 `` Gen${ver} ``
@@ -1348,6 +1379,7 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > **更新 (2026-06-03 下午，第二轮)**：
 >
 > ### TypeScript 编译清零 + 已知遗留清理
+>
 > - ✅ **NDS 存档同步端到端**: 人工验收通过 — 游戏内保存 → 同步按钮 → 存档管理列表出现并可正常编辑
 > - ✅ **TypeScript 0 错误**: 修复 `BlobPart` 类型错误 (Emulator.tsx + NdsEmulator.tsx 的 `Uint8Array<ArrayBufferLike>` 不兼容) + `melonds.ts` WebGL readPixels 未用变量 + `Dashboard.tsx` 未用 `message` 变量
 > - ℹ️ **存档目录**: 当前 `/home/fmangela/pkmanager-saves` 工作正常，暂不迁移至项目内 `data/saves/`
@@ -1355,6 +1387,7 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > **更新 (2026-06-03 下午，第三轮)**：
 >
 > ### 存档目录迁移至项目内部
+>
 > - ✅ **存档路径迁移**: `/home/fmangela/pkmanager-saves` → `server/PkManager.Server/data/saves/`
 >   - `SaveFileService` + `EmulatorController` 注入 `IWebHostEnvironment`，使用 `ContentRootPath` 相对定位
 >   - 路径格式: `{ContentRoot}/data/saves/{userId}/{saveFileId}/save.sav`
@@ -1362,11 +1395,13 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 >   - `.gitignore`: 新增 `server/PkManager.Server/data/` 忽略规则
 >
 > ### 已知遗留
+>
 > - OpenGL GPU 渲染器因 WebGL2 API 兼容问题未启用 (glColorMaski/glDrawBuffer/glMapBuffer 缺失)
-> 
+>
 > **更新 (2026-06-02 下午)**：
-> 
+>
 > ### NDS 模拟器 frameUpdate 修复
+>
 > - 🐛 **Bug**: melonDS WASM 加载后 frameUpdate 持续报错 `TypeError: Cannot read properties of undefined (reading 'buffer')`
 >   - 根因: Emscripten 5.0.7 + PThreads 编译后 `Module.HEAPU8` 为 undefined
 >   - `webmelon.js:442` 使用 `Module.HEAPU8.buffer` 但新版 Emscripten 中 HEAPU8 仅为局部 var，未导出到 Module 对象
@@ -1374,11 +1409,13 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - 🔧 **Program.cs 中间件**: Cross-Origin Isolation 头部从仅 `/play` → `/play` + `/play-nds`（melonDS PThreads 依赖 SharedArrayBuffer）
 
 > ### B.2 宝可梦格子视觉升级 — 完结 (2026-06-09)
+>
 > - ✅ **格子叠加图标** — 早已完成：SaveEditor `DraggableSlot` + AllBoxesModal `MiniSlot` 均有合法性三色圆点 + Alpha α + Gmax G + StarFilled 闪光
 > - ❌ **Hover 信息卡片** — 不做（用户判断没必要，点击进去就能看到全部信息）
 > - ❌ **右键菜单** — 不做（Web 右键菜单实现难度大、违背 UX 惯例，导出功能走编辑面板按钮 + Phase D.5 Showdown 导入导出即可）
 >
 > ### B.4 银行面板增强 — 完结 (2026-06-09)
+>
 > - ✅ **卡片视图升级** — Grid/List 统一叠加图标（Alpha α / Gmax G / 闪光 StarFilled）+ 持有物 Tag
 > - ✅ **筛选/搜索增强** — 性格/特性 Select（showSearch）+ 排序 Dropdown（5 种）；物种属性延后
 > - ✅ **批量操作** — hover Checkbox 多选 + 选中蓝色边框 + 批量删除/导出.zip/移动到存档（Modal 选存档+箱子，自动填空位；按勾选顺序处理，返回未移动项）
@@ -1387,7 +1424,73 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 ---
 
 > **参考文档**:
+>
 > - `docs/PKHeX完整功能对比与缺口分析报告.md` — 逐字段缺口详情
 > - `docs/PKMDS-Blazor分析报告.md` — UI/UX 借鉴参考
 > - `docs/TODOLIST.md` — 原基础设施 TODO
 > - `docs/宝可梦全世代管理端-技术方案设计.md` — 原始技术方案
+
+> **更新 (2026-06-09) — PKHeX v26 + .NET 10 升级 + Phase C.1/C.2 完成**：
+>
+> ### PKHeX.Core v26.05.05 SDK 源码编译升级
+>
+> - ✅ **SDK 源码引用替代 NuGet 包** — `Directory.Build.props` 统一管理版本号，`scripts/update-pkhex-core-package.sh` 一键编译打包到 `artifacts/nuget/`
+> - ✅ **破坏性 API 适配**:
+>   - `SaveUtil.GetVariantSAV(byte[])` → `SaveUtil.GetSaveFile(byte[])`（ParseService、SaveFileService）
+>   - `PKM.DecryptedPartyData` 属性 → `PKM.WriteDecryptedDataParty(byte[])` 方法（ParseService.GetPkmBase64、BankService、PokemonEditService.ExportSinglePkm）
+>   - `CheckResult.Comment` 已移除 → 暂时返回空字符串，待接入 `LegalityFormatting.Report()`
+>   - `Coin` 属性名从 `Coins` → `Coin`（v26 命名变更，类型 ushort→uint）
+> - ✅ **Swagger OpenApi v2.x 适配** — JWT Bearer 安全定义暂时注释（`SecuritySchemeType` API 变更），Swagger UI 仍可浏览
+> - ✅ **.NET SDK 10.0.300** — `global.json` 锁定，`net10.0` target framework，所有 NuGet 包升级（JwtBearer/OpenApi 10.0.8, Swashbuckle 10.2.1）
+> - ✅ **PkhexSaveAdapters.cs** — 强类型兼容适配层，收敛 Badges/BP/Coin/LeaguePoints/GameSync/CardNumber 的跨世代异构字段访问
+> - ✅ **ReflectPkhex 工具删除** — SDK 源码引用后不再需要反射探测 API
+>
+> ### Phase C.1 背包编辑器 — 完结
+>
+> - ✅ **后端** — `GET/PUT /api/SaveFile/{id}/bag`（SaveFileController + SaveFileService.GetBag/SaveBag）
+>   - Capability 驱动：HasFavorite/HasNewFlag/HasFreeSpace（接口检测，非 generation switch）
+>   - InventoryPouch.Items 直接引用原始存档数据，修改即写回
+> - ✅ **前端** — `BagPanel.tsx`（~320 行），集成到 SaveEditor Tabs 导航
+>   - Pouch 分类竖直 Tabs（Items/Medicine/TM/Berries/Balls 等 15 种）
+>   - 彩色占位图标（HSL 稳定色相）+ 数量 InputNumber + 收藏星标
+>   - 排序 Dropdown（4 种）+ 空格开关 + 保存按钮
+> - ✅ **DTO** — `BagDto.cs`（BagCapability + PouchDto + BagItemDto），前端同步 TypeScript 类型
+>
+> ### Phase C.2 训练家信息编辑器 — 完结
+>
+> - ✅ **后端** — `GET/PUT /api/SaveFile/{id}/trainer`（SaveFileController + SaveFileService.GetTrainerInfo/SaveTrainerInfo）
+>   - Capability 驱动：HasBadges/HasCoins/HasBP/HasLeaguePoints/HasTrainerCard/HasGameSync
+>   - 徽章名称字典（按游戏版本映射中文名称）
+>   - 货币通过 PkhexSaveAdapters 强类型读写（Coins→Coin v26 适配）
+> - ✅ **前端** — `TrainerPanel.tsx`（~420 行），集成到 SaveEditor Tabs 导航
+>   - 基本信息区：OT Name / TID / SID（16-bit + 6-digit capability 驱动）/ Gender / Language / Play Time
+>   - 货币区（capability 条件显示）：Money / Coins / BP / League Points
+>   - 徽章区：可视化徽章图标，点击切换获得/未获得
+>   - 训练家卡片（Gen8 SwSh）+ GameSync ID（Gen5-7 只读+复制按钮）
+> - ✅ **DTO** — `TrainerInfoDto.cs`（TrainerCapability + TrainerInfoDto），前端同步 TypeScript 类型
+>
+> ### SaveEditor Tabs 导航重构
+>
+> - ✅ **SaveEditor.tsx** — 顶部 Ant Design Tabs（📦 箱子 / 🎒 背包 / 👤 训练家）
+>   - 原全部内容（箱子+银行+编辑面板+备份）放入「箱子」Tab
+>   - 「背包」和「训练家」为新增存档级编辑面板
+>   - `activeTab` state 管理标签切换
+>
+> ### BankService PKHeX v26 适配
+>
+> - ✅ `BankService.cs` — `DecryptedPartyData` → `new byte[pkm.SIZE_PARTY]; pkm.WriteDecryptedDataParty(buf)` 修复编译错误
+>
+> ### start-dev.sh 增强
+>
+> - ✅ 启动前检查 PKHeX.Core 本地 NuGet 包是否存在，缺失时提示运行 `update-pkhex-core-package.sh`
+> - ✅ 前端健康检查从 HTTP → HTTPS（匹配 Vite 自签证书环境）
+>
+> ### 项目文件结构变更
+>
+> - ✅ `.gitignore` 新增 `lib/PKHeX.Core/` + `artifacts/nuget/`
+> - ✅ `Directory.Build.props` — 集中管理 `PKHeXCoreVersion` + `RestoreAdditionalProjectSources`
+> - ✅ `global.json` — SDK 10.0.300 锁定
+> - ✅ `tools/ReflectPkhex/` 已删除（SDK 源码引用后不再需要）
+> - TypeScript 0 错误 + .NET Build 0 错误（仅 1 个预存 CS1998 warning）+ Vite 构建通过
+> - Phase C: 12/8 已完成 (+8)
+> - 合计: 199/141 (+8)

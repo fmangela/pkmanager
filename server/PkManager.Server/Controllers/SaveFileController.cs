@@ -245,6 +245,148 @@ public class SaveFileController : ControllerBase
     }
 
     /// <summary>
+    /// 获取存档背包（道具列表）
+    /// </summary>
+    [HttpGet("{id:guid}/bag")]
+    public async Task<ActionResult<ApiResponse<BagDto>>> GetBag(Guid id)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<BagDto>.Error(401, "未登录"));
+
+        try
+        {
+            var bag = await _saveFileService.GetBag(id, userId.Value);
+            return Ok(ApiResponse<BagDto>.Ok(bag));
+        }
+        catch (BusinessException ex)
+        {
+            return NotFound(ApiResponse<BagDto>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 保存背包变更
+    /// </summary>
+    [HttpPut("{id:guid}/bag")]
+    public async Task<ActionResult<ApiResponse<object>>> SaveBag(Guid id, [FromBody] BagDto bag)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<object>.Error(401, "未登录"));
+
+        try
+        {
+            await _saveFileService.SaveBag(id, userId.Value, bag);
+            return Ok(ApiResponse<object>.Ok(new { }, "背包已保存"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<object>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 获取训练家信息
+    /// </summary>
+    [HttpGet("{id:guid}/trainer")]
+    public async Task<ActionResult<ApiResponse<TrainerInfoDto>>> GetTrainer(Guid id)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<TrainerInfoDto>.Error(401, "未登录"));
+
+        try
+        {
+            var info = await _saveFileService.GetTrainerInfo(id, userId.Value);
+            return Ok(ApiResponse<TrainerInfoDto>.Ok(info));
+        }
+        catch (BusinessException ex)
+        {
+            return NotFound(ApiResponse<TrainerInfoDto>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 保存训练家信息变更
+    /// </summary>
+    [HttpPut("{id:guid}/trainer")]
+    public async Task<ActionResult<ApiResponse<object>>> SaveTrainer(Guid id, [FromBody] TrainerInfoDto info)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<object>.Error(401, "未登录"));
+
+        try
+        {
+            await _saveFileService.SaveTrainerInfo(id, userId.Value, info);
+            return Ok(ApiResponse<object>.Ok(new { }, "训练家信息已保存"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<object>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 获取存档图鉴（seen/caught 条目列表 + 统计数据）
+    /// </summary>
+    [HttpGet("{id:guid}/pokedex")]
+    public async Task<ActionResult<ApiResponse<PokedexDto>>> GetPokedex(Guid id)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<PokedexDto>.Error(401, "未登录"));
+
+        try
+        {
+            var dto = await _saveFileService.GetPokedex(id, userId.Value);
+            return Ok(ApiResponse<PokedexDto>.Ok(dto));
+        }
+        catch (BusinessException ex)
+        {
+            return NotFound(ApiResponse<PokedexDto>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 保存图鉴变更（seen/caught 切换）
+    /// </summary>
+    [HttpPut("{id:guid}/pokedex")]
+    public async Task<ActionResult<ApiResponse<object>>> SavePokedex(Guid id, [FromBody] PokedexDto dto)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<object>.Error(401, "未登录"));
+
+        try
+        {
+            await _saveFileService.SavePokedex(id, userId.Value, dto);
+            return Ok(ApiResponse<object>.Ok(new { }, "图鉴已保存"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<object>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 图鉴批量操作 — seenAll / caughtAll / clearAll
+    /// </summary>
+    [HttpPost("{id:guid}/pokedex/batch")]
+    public async Task<ActionResult<ApiResponse<PokedexDto>>> BatchPokedex(Guid id, [FromBody] PokedexBatchRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<PokedexDto>.Error(401, "未登录"));
+
+        try
+        {
+            if (request?.Action == null)
+                return BadRequest(ApiResponse<PokedexDto>.Error(400, "缺少批量操作参数"));
+            var result = await _saveFileService.BatchPokedex(id, userId.Value, request.Action);
+            return Ok(ApiResponse<PokedexDto>.Ok(result));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<PokedexDto>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
     /// 交换两个箱子的全部宝可梦
     /// </summary>
     [HttpPost("{id:guid}/swap-boxes")]
