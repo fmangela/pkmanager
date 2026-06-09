@@ -490,7 +490,7 @@ public class SaveFileService
     private Task<SaveFileEntity> LoadSaveFileEntityAsync(Guid saveFileId, Guid userId) =>
         LoadSaveFileEntity(saveFileId, userId);
 
-    private async Task<(SaveFileEntity, PKHeX.Core.SaveFile)> LoadSave(Guid saveFileId, Guid userId)
+    internal async Task<(SaveFileEntity, PKHeX.Core.SaveFile)> LoadSave(Guid saveFileId, Guid userId)
     {
         var sf = await LoadSaveFileEntity(saveFileId, userId);
         var rawData = ReadSaveBytes(sf);
@@ -499,7 +499,7 @@ public class SaveFileService
     }
 
     /// <summary>写入存档：先自动备份，再写入文件系统</summary>
-    private async Task WriteBackSave(SaveFileEntity sf, Guid userId, PKHeX.Core.SaveFile sav)
+    internal async Task WriteBackSave(SaveFileEntity sf, Guid userId, PKHeX.Core.SaveFile sav)
     {
         // 写入前自动备份
         await CreateBackup(sf.Id, userId, "编辑前自动备份");

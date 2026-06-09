@@ -1,6 +1,8 @@
+using System.IO.Compression;
 using System.Text.Json;
 using Dapper;
 using Npgsql;
+using PKHeX.Core;
 using PkManager.Server.Models.Entity;
 using PkManager.Server.Models.Response;
 
@@ -14,12 +16,14 @@ public class BankService
     private readonly NpgsqlConnection _db;
     private readonly ParseService _parseService;
     private readonly SaveFileService _saveFileService;
+    private readonly PokemonEditService _editService;
 
-    public BankService(NpgsqlConnection db, ParseService parseService, SaveFileService saveFileService)
+    public BankService(NpgsqlConnection db, ParseService parseService, SaveFileService saveFileService, PokemonEditService editService)
     {
         _db = db;
         _parseService = parseService;
         _saveFileService = saveFileService;
+        _editService = editService;
     }
 
     /// <summary>
@@ -43,11 +47,32 @@ public class BankService
             parameters.Add("IsShiny", filter.IsShiny.Value);
         }
 
+        if (filter.Nature.HasValue)
+        {
+            where += " AND nature = @Nature";
+            parameters.Add("Nature", filter.Nature.Value);
+        }
+
+        if (filter.Ability.HasValue)
+        {
+            where += " AND ability = @Ability";
+            parameters.Add("Ability", filter.Ability.Value);
+        }
+
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
             where += " AND (species_name ILIKE @Search OR nickname ILIKE @Search)";
             parameters.Add("Search", $"%{filter.Search}%");
         }
+
+        // 排序（白名单防注入）
+        var orderBy = filter.SortBy switch
+        {
+            "level" => "level",
+            "species" => "species",
+            _ => "created_at"
+        };
+        var dir = filter.SortAsc ? "ASC" : "DESC";
 
         // 计数
         var countSql = $"SELECT COUNT(*) FROM bank_pokemon {where}";
@@ -62,10 +87,14 @@ public class BankService
             SELECT id, species, species_name AS SpeciesName, nickname, level,
                    nature_name AS NatureName, ability_name AS AbilityName,
                    generation, game_version AS GameVersion, is_shiny AS IsShiny,
-                   is_egg AS IsEgg, is_valid AS IsValid, source, notes,
+                   is_egg AS IsEgg, is_valid AS IsValid,
+                   COALESCE((pokemon_json->>'isAlpha')::boolean, FALSE) AS IsAlpha,
+                   COALESCE((pokemon_json->>'canGigantamax')::boolean, FALSE) AS CanGigantamax,
+                   NULLIF(pokemon_json->>'heldItemName', '') AS HeldItemName,
+                   source, source_save_id AS SourceSaveId, notes,
                    created_at AS CreatedAt, updated_at AS UpdatedAt
             FROM bank_pokemon {where}
-            ORDER BY created_at DESC
+            ORDER BY {orderBy} {dir}
             LIMIT @PageSize OFFSET @Offset";
 
         parameters.Add("PageSize", pageSize);
@@ -219,6 +248,112 @@ public class BankService
 
         return deleted;
     }
+
+    /// <summary>
+    /// 批量导出为 .zip（.pk* 文件）
+    /// </summary>
+    public async Task<byte[]> BatchExport(List<Guid> ids, Guid userId)
+    {
+        var records = (await _db.QueryAsync<BankPokemon>(
+            "SELECT id, species_name, nickname, pkm_data_base64 FROM bank_pokemon WHERE id = ANY(@Ids) AND user_id = @UserId",
+            new { Ids = ids, UserId = userId })).ToList();
+
+        if (records.Count == 0)
+            throw new BusinessException("未找到可导出的宝可梦", 404);
+
+        using var ms = new MemoryStream();
+        using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var rec in records)
+            {
+                if (string.IsNullOrEmpty(rec.PkmDataBase64)) continue;
+
+                var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(rec.PkmDataBase64));
+                if (pkm == null) continue;
+
+                var data = _editService.ExportSinglePkm(pkm);
+                var ext = $"pk{Math.Max(1, (int)pkm.Format)}";
+                var name = SanitizeFileName(rec.SpeciesName ?? "unknown");
+                var nick = string.IsNullOrWhiteSpace(rec.Nickname) ? null : SanitizeFileName(rec.Nickname);
+                var label = nick ?? name;
+                var shortId = rec.Id.ToString("N")[..8];
+                var fileName = $"{label}_{shortId}.{ext}";
+
+                // Deduplicate
+                var entry = archive.CreateEntry(fileName, CompressionLevel.Fastest);
+                using var es = entry.Open();
+                es.Write(data, 0, data.Length);
+            }
+        }
+
+        ms.Position = 0;
+        return ms.ToArray();
+    }
+
+    /// <summary>
+    /// 批量移动到存档（一箱、自动找空位）
+    /// </summary>
+    public async Task<int> BatchMoveToSave(List<Guid> ids, Guid saveFileId, int targetBoxIndex, Guid userId)
+    {
+        // 加载存档
+        var (sf, sav) = await _saveFileService.LoadSave(saveFileId, userId);
+        var boxData = sav.GetBoxData(targetBoxIndex);
+        var capacity = boxData.Length;
+
+        // 找空位
+        var emptySlots = new List<int>();
+        for (int i = 0; i < capacity; i++)
+        {
+            if (boxData[i].Species == 0)
+                emptySlots.Add(i);
+        }
+
+        if (emptySlots.Count < ids.Count)
+            throw new BusinessException($"目标箱子仅剩 {emptySlots.Count} 个空位，需要 {ids.Count} 个");
+
+        // 读取银行宝可梦
+        var records = (await _db.QueryAsync<BankPokemon>(
+            "SELECT * FROM bank_pokemon WHERE id = ANY(@Ids) AND user_id = @UserId",
+            new { Ids = ids, UserId = userId })).ToList();
+
+        if (records.Count != ids.Count)
+            throw new BusinessException("部分宝可梦未找到");
+
+        // 分配到空位
+        var moved = 0;
+        foreach (var rec in records)
+        {
+            if (string.IsNullOrEmpty(rec.PkmDataBase64)) continue;
+            var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(rec.PkmDataBase64));
+            if (pkm == null) continue;
+
+            var slot = emptySlots[moved];
+            boxData[slot] = pkm;
+            moved++;
+        }
+
+        sav.SetBoxData(boxData, targetBoxIndex);
+
+        // 一次写回
+        await _saveFileService.WriteBackSave(sf, userId, sav);
+
+        // 批量删除银行记录
+        await _db.ExecuteAsync(
+            "DELETE FROM bank_pokemon WHERE id = ANY(@Ids) AND user_id = @UserId",
+            new { Ids = ids, UserId = userId });
+
+        return moved;
+    }
+
+    /// <summary>
+    /// 文件名安全化
+    /// </summary>
+    private static string SanitizeFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var sanitized = new string(name.Where(c => !invalid.Contains(c)).ToArray());
+        return string.IsNullOrWhiteSpace(sanitized) ? "pokemon" : sanitized;
+    }
 }
 
 // ── 辅助类型 ────────────────────────────────────────────
@@ -227,6 +362,10 @@ public class BankFilter
 {
     public int? Generation { get; set; }
     public bool? IsShiny { get; set; }
+    public int? Nature { get; set; }
+    public int? Ability { get; set; }
+    public string? SortBy { get; set; }    // "created" | "level" | "species"
+    public bool SortAsc { get; set; }
     public string? Search { get; set; }
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
@@ -254,7 +393,11 @@ public class BankPokemonDto
     public bool IsShiny { get; set; }
     public bool IsEgg { get; set; }
     public bool IsValid { get; set; }
+    public bool IsAlpha { get; set; }
+    public bool CanGigantamax { get; set; }
+    public string? HeldItemName { get; set; }
     public string? Source { get; set; }
+    public Guid? SourceSaveId { get; set; }
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

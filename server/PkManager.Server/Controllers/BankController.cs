@@ -19,13 +19,17 @@ public class BankController : ControllerBase
     }
 
     /// <summary>
-    /// 查询个人银行（支持筛选/分页）
+    /// 查询个人银行（支持筛选/排序/分页）
     /// </summary>
     [HttpGet]
     public async Task<ActionResult<ApiResponse<BankListResult>>> List(
         [FromQuery] int? generation,
         [FromQuery] bool? isShiny,
-        [FromQuery] string? search,
+        [FromQuery] int? nature,
+        [FromQuery] int? ability,
+        [FromQuery] string? sortBy,
+        [FromQuery] bool sortAsc = false,
+        [FromQuery] string? search = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -36,9 +40,13 @@ public class BankController : ControllerBase
         {
             Generation = generation,
             IsShiny = isShiny,
+            Nature = nature,
+            Ability = ability,
+            SortBy = sortBy,
+            SortAsc = sortAsc,
             Search = search,
             Page = page,
-            PageSize = Math.Min(pageSize, 100) // 最多100条/页
+            PageSize = Math.Min(pageSize, 100)
         };
 
         var result = await _bankService.GetBankList(userId.Value, filter);
@@ -119,6 +127,47 @@ public class BankController : ControllerBase
         var count = await _bankService.BatchDelete(request.Ids, userId.Value);
         return Ok(ApiResponse<object>.Ok(new { DeletedCount = count }, $"已删除 {count} 只宝可梦"));
     }
+
+    /// <summary>
+    /// 批量导出为 .zip（.pk* 文件）
+    /// </summary>
+    [HttpPost("batch-export")]
+    public async Task<IActionResult> BatchExport([FromBody] BatchDeleteRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized();
+
+        try
+        {
+            var zipBytes = await _bankService.BatchExport(request.Ids, userId.Value);
+            return File(zipBytes, "application/zip", "pokemon_export.zip");
+        }
+        catch (BusinessException ex)
+        {
+            return NotFound(ApiResponse<object>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 批量移动到存档
+    /// </summary>
+    [HttpPost("batch-move-to-save")]
+    public async Task<ActionResult<ApiResponse<object>>> BatchMoveToSave([FromBody] BatchMoveToSaveRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<object>.Error(401, "未登录"));
+
+        try
+        {
+            var count = await _bankService.BatchMoveToSave(
+                request.Ids, request.SaveFileId, request.TargetBoxIndex, userId.Value);
+            return Ok(ApiResponse<object>.Ok(new { MovedCount = count }, $"已移动 {count} 只宝可梦到存档"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<object>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
 }
 
 public class MoveFromSaveRequest
@@ -131,4 +180,11 @@ public class MoveFromSaveRequest
 public class BatchDeleteRequest
 {
     public List<Guid> Ids { get; set; } = new();
+}
+
+public class BatchMoveToSaveRequest
+{
+    public List<Guid> Ids { get; set; } = new();
+    public Guid SaveFileId { get; set; }
+    public int TargetBoxIndex { get; set; }
 }

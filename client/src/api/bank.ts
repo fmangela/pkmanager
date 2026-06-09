@@ -1,59 +1,77 @@
 import apiClient from './axios';
 import type { PokemonDto } from './saveFile';
 
-export interface BankPokemon {
+// ── 列表摘要（GET /api/bank 返回）─────────────────────
+
+export interface BankListItem {
   id: string;
   species: number;
   speciesName: string;
-  nickname: string;
+  nickname?: string;
   level: number;
-  nature: number;
-  natureName: string;
-  ability: number;
-  abilityName: string;
+  natureName?: string;
+  abilityName?: string;
   generation: number;
-  gameVersion: number;
   isShiny: boolean;
   isEgg: boolean;
+  isAlpha: boolean;
+  canGigantamax: boolean;
+  heldItemName?: string;
   source: string;
+  sourceSaveId?: string;
   createdAt: string;
-  pokemonData: PokemonDto;
 }
 
 export interface BankListResponse {
-  items: BankPokemon[];
+  items: BankListItem[];
   total: number;
   page: number;
   pageSize: number;
 }
 
+// ── 详情（GET /api/bank/{id} 返回完整 PokemonDto）─────
+// 复用 PokemonDto，不再用独立的 BankPokemon 类型
+
 export const bankApi = {
   list: (params?: {
     generation?: number;
     isShiny?: boolean;
+    nature?: number;
+    ability?: number;
+    sortBy?: string;
+    sortAsc?: boolean;
     search?: string;
     page?: number;
     pageSize?: number;
   }) => apiClient.get<BankListResponse>('/bank', { params }),
 
   getDetail: (id: string) =>
-    apiClient.get<BankPokemon>(`/bank/${id}`),
+    apiClient.get<PokemonDto>(`/bank/${id}`),
 
   fromSave: (data: {
     saveFileId: string;
     boxIndex: number;
     slotIndex: number;
-  }) => apiClient.post<BankPokemon>('/bank/from-save', data),
+  }) => apiClient.post<PokemonDto>('/bank/from-save', data),
 
   moveToSave: (saveFileId: string, data: {
     bankPokemonId: string;
     targetBoxIndex: number;
     targetSlotIndex: number;
-  }) => apiClient.post(`/save-file/${saveFileId}/move-from-bank`, data),
+  }) => apiClient.post(`/SaveFile/${saveFileId}/move-from-bank`, data),
 
   delete: (id: string) =>
     apiClient.delete(`/bank/${id}`),
 
   batchDelete: (ids: string[]) =>
     apiClient.post('/bank/batch-delete', { ids }),
+
+  batchExport: (ids: string[]) =>
+    apiClient.post('/bank/batch-export', { ids }, { responseType: 'blob' }),
+
+  batchMoveToSave: (data: {
+    ids: string[];
+    saveFileId: string;
+    targetBoxIndex: number;
+  }) => apiClient.post<{ movedCount: number }>('/bank/batch-move-to-save', data),
 };

@@ -256,47 +256,44 @@
 
 ### B.2 宝可梦格子视觉升级
 
-- [ ] **格子精灵叠加图标**
-  - 左下角：合法性状态小圆点（三色）
-  - 右上角：闪光 ✨ 星星图标
-  - 特殊状态：Alpha (LA) / Gigantamax / 对战队伍成员
-  - 参考 PKMDS-Blazor `PokemonSlotComponent.razor`
+- [x] **格子精灵叠加图标** ✅ 已完成
+  - 左下角：合法性状态小圆点（三色: Legal绿 / Fishy黄 / Illegal红）
+  - 右上角：闪光 ✨ 星星图标（StarFilled）
+  - 特殊状态：Alpha α（左上角红色圆形）/ Gigantamax G（右下角橙色圆形）
+  - 实现在 SaveEditor.tsx `DraggableSlot`（第108-144行）+ AllBoxesModal.tsx `MiniSlot`（第64-80行）
 
-- [ ] **格子 Hover 信息卡片**
-  - 鼠标悬停弹出小卡片：物种名 + 等级 + 性格 + 特性 + 持有物
-  - 合法性状态 Chip
+- [x] **格子 Hover 信息卡片** — ❌ 不做（用户判断没必要）
 
-- [ ] **格子右键菜单**
-  - 复制 / 粘贴 / 删除 / 导出为 .pk* / 导出为 Showdown
-  - 查看详情 / 存入银行
+- [x] **格子右键菜单** — ❌ 不做（网页右键菜单实现难度大，违背 Web 惯例）
+  - 导出功能替代方案：编辑面板内添加导出按钮（结合 Phase D.5 Showdown 导入导出）
 
 ### B.3 合法性批量扫描
 
 - [x] **全存档合法性扫描按钮**
   - 按钮位置：存档编辑器工具栏「合法性扫描」
   - 后端 `POST /api/SaveFile/{id}/legality-report`
-  - 返回所有 Party + Box 槽位的合法性状态汇总表
+  - 返回所有 Party + Box 槽位的合法性状态汇总表 → 注入 `legalityMap` state
 
-- [ ] **合法性报告浮层**
-  - 表格式展示：物种精灵 + 名称 + 位置 + 状态Chip + 首要问题
-  - 过滤：全部 / Legal / Fishy / Illegal（ToggleGroup）
-  - 点击行跳转到对应箱子/槽位
-  - 批量 Legalize 按钮 + 进度条 + 取消
+- [x] **合法性报告浮层** — ❌ 不做（格子三色圆点已实现"一眼标记"，浮层表格纯属多余）
 
 ### B.4 银行面板增强
 
-- [ ] **银行卡片视图升级**
-  - 统一与格子相同的精灵图 + 叠加图标风格
-  - 每个卡片显示：精灵图 / 昵称 / 物种名 / Lv / 闪光标志 / 世代Tag / 来源存档Tag
+- [x] **银行卡片视图升级** ✅ 已完成
+  - 统一与格子相同的精灵图 + 叠加图标风格（Alpha α/Gmax G/闪光 StarFilled）
+  - 每个卡片显示：精灵图 / 昵称 / 物种名 / Lv / 持有物 / 世代Tag
+  - List 视图同步叠加图标
 
-- [ ] **银行筛选/搜索增强**
-  - 筛选：世代 / 闪光 / 物种类型 / 性格 / 特性
-  - 排序：添加时间 / 等级 / 物种编号
+- [x] **银行筛选/搜索增强** ✅ 已完成
+  - 筛选：世代 / 闪光 / 性格 / 特性（Select showSearch）
+  - 排序：添加时间 / 等级 ↑↓ / 物种编号 ↑↓
   - 搜索支持物种名+昵称混合搜索
+  - 物种属性筛选延后（需预计算 type 列）
 
-- [ ] **银行批量操作**
-  - 多选模式（Shift/Ctrl 点选）
-  - 批量删除 / 批量导出为 .zip / 批量移动到存档
+- [x] **银行批量操作** ✅ 已完成
+  - 多选模式（hover Checkbox，选中蓝色边框）
+  - 批量删除（已有，保留）
+  - 批量导出为 .zip（`POST /api/bank/batch-export`）
+  - 批量移动到存档（`POST /api/bank/batch-move-to-save`，Modal 选存档+箱子，自动填空位，空间不足拒绝）
 
 ---
 
@@ -1224,7 +1221,7 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - ✅ **B.1 Swap** — 调用已有 `swapBoxes` API，交换相邻箱子全部内容
 > - ✅ B.2 合法性扫描结果持久化 — `legalityMap` state + 每格子三色圆点
 > - TypeScript 0 错误 + Vite 生产构建通过
-> - Phase B: 14 项 / 已完成 8 / 剩余 6
+> - Phase B: 13 项 / 已完成 13 / 剩余 0 ✅ **Phase B 全部完结**
 > 
 > ### Phase J 实施完成（核心链路）
 > - ✅ **J.1** ErrorBoundary.tsx + main.tsx 全局 window.onerror / unhandledrejection 监听
@@ -1375,6 +1372,17 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 >   - `webmelon.js:442` 使用 `Module.HEAPU8.buffer` 但新版 Emscripten 中 HEAPU8 仅为局部 var，未导出到 Module 对象
 >   - 修复: `webmelon.js` 3处 `Module.HEAPU8.buffer` → `Module.wasmMemory.buffer`（wasmMemory 已显式导出）
 > - 🔧 **Program.cs 中间件**: Cross-Origin Isolation 头部从仅 `/play` → `/play` + `/play-nds`（melonDS PThreads 依赖 SharedArrayBuffer）
+
+> ### B.2 宝可梦格子视觉升级 — 完结 (2026-06-09)
+> - ✅ **格子叠加图标** — 早已完成：SaveEditor `DraggableSlot` + AllBoxesModal `MiniSlot` 均有合法性三色圆点 + Alpha α + Gmax G + StarFilled 闪光
+> - ❌ **Hover 信息卡片** — 不做（用户判断没必要，点击进去就能看到全部信息）
+> - ❌ **右键菜单** — 不做（Web 右键菜单实现难度大、违背 UX 惯例，导出功能走编辑面板按钮 + Phase D.5 Showdown 导入导出即可）
+>
+> ### B.4 银行面板增强 — 完结 (2026-06-09)
+> - ✅ **卡片视图升级** — Grid/List 统一叠加图标（Alpha α / Gmax G / 闪光 StarFilled）+ 持有物 Tag
+> - ✅ **筛选/搜索增强** — 性格/特性 Select（showSearch）+ 排序 Dropdown（5 种）；物种属性延后
+> - ✅ **批量操作** — hover Checkbox 多选 + 选中蓝色边框 + 批量删除/导出.zip/移动到存档（Modal 选存档+箱子，自动填空位，不足拒绝）
+> - **Phase B 全部完结** 🎉 — 13/13 项
 
 ---
 
