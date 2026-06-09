@@ -51,9 +51,21 @@ export const GAME_META: Record<string, GameMeta> = {
   pkm_moon:      { gameId: 'pkm_moon',      displayName: '宝可梦 月亮',     shortName: '月亮',     color: '#722ed1', gameVersion: 31, generation: 7, platform: '3DS' },
   pkm_ultrasun:  { gameId: 'pkm_ultrasun',  displayName: '宝可梦 究极之日', shortName: '究极日',   color: '#fa541c', gameVersion: 32, generation: 7, platform: '3DS' },
   pkm_ultramoon: { gameId: 'pkm_ultramoon', displayName: '宝可梦 究极之月', shortName: '究极月',   color: '#531dab', gameVersion: 33, generation: 7, platform: '3DS' },
+
+  // ── Switch Gen8 (PKHeX: SW=44, SH=45, PLA=47, BD=48, SP=49) ──
+  pkm_sword:            { gameId: 'pkm_sword',            displayName: '宝可梦 剑',       shortName: '剑',       color: '#1677ff', gameVersion: 44, generation: 8, platform: 'Switch' },
+  pkm_shield:           { gameId: 'pkm_shield',           displayName: '宝可梦 盾',       shortName: '盾',       color: '#f5222d', gameVersion: 45, generation: 8, platform: 'Switch' },
+  pkm_legendsarceus:    { gameId: 'pkm_legendsarceus',    displayName: '宝可梦传说 阿尔宙斯', shortName: '阿尔宙斯', color: '#13c2c2', gameVersion: 47, generation: 8, platform: 'Switch' },
+  pkm_brilliantdiamond: { gameId: 'pkm_brilliantdiamond', displayName: '宝可梦 晶灿钻石',  shortName: '晶灿钻石', color: '#5b8bd4', gameVersion: 48, generation: 8, platform: 'Switch' },
+  pkm_shiningpearl:     { gameId: 'pkm_shiningpearl',     displayName: '宝可梦 明亮珍珠',  shortName: '明亮珍珠', color: '#e799b0', gameVersion: 49, generation: 8, platform: 'Switch' },
+  // ── Switch Gen9 (PKHeX: SL=50, VL=51) ──
+  pkm_scarlet:  { gameId: 'pkm_scarlet',  displayName: '宝可梦 朱', shortName: '朱', color: '#fa541c', gameVersion: 50, generation: 9, platform: 'Switch' },
+  pkm_violet:   { gameId: 'pkm_violet',   displayName: '宝可梦 紫', shortName: '紫', color: '#722ed1', gameVersion: 51, generation: 9, platform: 'Switch' },
 };
 
 // ── 按发行日期排序的可玩游戏列表 ──────────────────────────────────
+// 仅暴露当前已接通游玩/本机启动流程的游戏；Switch 元数据保留用于展示，
+// 但暂不在工作台开放入口，避免提前暴露未适配能力。
 
 export const PLAYABLE_GAMES: GameMeta[] = [
   GAME_META.pkm_ruby,
@@ -104,6 +116,13 @@ export const VERSION_TO_GAME_ID: Record<number, string> = {
   // Gen7 (3DS)
   30: 'pkm_sun', 31: 'pkm_moon', 32: 'pkm_ultrasun', 33: 'pkm_ultramoon',
   71: 'pkm_sun', 72: 'pkm_ultrasun',  // SM/USUM composite
+  // Gen8 (Switch)
+  44: 'pkm_sword', 45: 'pkm_shield', 47: 'pkm_legendsarceus',
+  48: 'pkm_brilliantdiamond', 49: 'pkm_shiningpearl',
+  74: 'pkm_sword', 75: 'pkm_brilliantdiamond',  // SWSH/BDSP composite
+  // Gen9 (Switch)
+  50: 'pkm_scarlet', 51: 'pkm_violet',
+  76: 'pkm_scarlet',  // SV composite
 };
 
 // ── 通过 gameVersion 查找 GameMeta ─────────────────────────────────
@@ -147,15 +166,15 @@ export const GAME_VERSION_DISPLAY: Record<number, { name: string; color: string 
   35: { name: 'GO',     color: '#52c41a' },
   36: { name: '皮卡丘', color: '#fadb14' },
   37: { name: '伊布',   color: '#d48806' },
-  // Switch Gen8
+  // Switch Gen8 (PKHeX: SW=44,SH=45,PLA=47,BD=48,SP=49)
   44: { name: '剑',     color: '#1677ff' },
   45: { name: '盾',     color: '#f5222d' },
+  47: { name: '传说 阿尔宙斯', color: '#13c2c2' },
   48: { name: '晶灿钻石', color: '#5b8bd4' },
   49: { name: '明亮珍珠', color: '#e799b0' },
-  50: { name: '传说 阿尔宙斯', color: '#13c2c2' },
-  // Switch Gen9
-  52: { name: '朱',     color: '#fa541c' },
-  53: { name: '紫',     color: '#722ed1' },
+  // Switch Gen9 (PKHeX: SL=50,VL=51)
+  50: { name: '朱',     color: '#fa541c' },
+  51: { name: '紫',     color: '#722ed1' },
   // PKHeX 复合版本兜底
   56: { name: '红宝石/蓝宝石', color: '#cf1322' },
   57: { name: '绿宝石',       color: '#08979c' },

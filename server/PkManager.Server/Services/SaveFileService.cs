@@ -756,8 +756,15 @@ public class SaveFileService
     /// </summary>
     public async Task SavePokedex(Guid saveFileId, Guid userId, PokedexDto dto)
     {
+        // 空值保护（ASP.NET 自动 400 已禁用，需手动校验）
+        if (dto == null)
+            throw new BusinessException("请求体不能为空", 400);
+
         var (sf, sav) = await LoadSave(saveFileId, userId);
         var maxSpecies = sav.MaxSpeciesID;
+
+        if (dto.Entries == null || dto.Entries.Count == 0)
+            throw new BusinessException("图鉴条目列表不能为空", 400);
 
         // 去重：按 species 取最后一条
         var deduped = dto.Entries

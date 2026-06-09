@@ -71,6 +71,9 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
   const [dirtyEntries, setDirtyEntries] = useState<Map<number, PokedexEntryDto>>(new Map());
   const { message } = App.useApp();
   const speciesList = useResourceStore(s => s.species);
+  const loadAll = useResourceStore(s => s.loadAll);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
 
   // ── 物种名称 Map: id → name（O(1) 查找，避免每次 render 做 Array.find）──
   const speciesNameMap = useMemo(
@@ -193,7 +196,7 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
     setSaving(true);
     try {
       const fullEntries: PokedexEntryDto[] = [];
-      for (const [species, entry] of mergedEntries) {
+      for (const entry of mergedEntries.values()) {
         fullEntries.push(entry);
       }
       await saveFileApi.savePokedex(saveFileId, { ...data, entries: fullEntries });

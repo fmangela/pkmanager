@@ -40,10 +40,11 @@ const DashboardPage: React.FC = () => {
     if (selectedGame) fetchSaves();
   }, [selectedGame, fetchSaves]);
 
-  const gameVersion = selectedGame ? GAME_META[selectedGame.gameId]?.gameVersion : undefined;
+  const selectedMeta = selectedGame ? GAME_META[selectedGame.gameId] : undefined;
+  const gameVersion = selectedMeta?.gameVersion;
   const matchingSaves = saves.filter(s => s.gameVersion === gameVersion);
-  const isNds = selectedGame ? (selectedGame.generation >= 4 && selectedGame.generation <= 5) : false;
-  const is3ds = selectedGame ? selectedGame.generation >= 6 : false;
+  const isNds = selectedMeta?.platform === 'NDS';
+  const is3ds = selectedMeta?.platform === '3DS';
   const [checkState, setCheckState] = useState<{ loading: boolean; ready?: boolean; error?: string }>({ loading: false });
 
   // 3DS 游戏：打开 Modal 时预校验 Azahar
@@ -122,7 +123,7 @@ const DashboardPage: React.FC = () => {
           </Card>
         </Col>
 
-        {/* 可玩游戏卡片 (Gen3 GBA + Gen4/5 NDS + Gen6/7 3DS) — 按发行日期排序 */}
+        {/* 可玩游戏卡片 (当前仅开放 GBA/NDS/3DS 已适配游戏) — 按发行日期排序 */}
         {PLAYABLE_GAMES.map(game => (
           <Col key={game.gameId} xs={24} sm={12} md={8} lg={6}>
             <Card hoverable onClick={() => setSelectedGame({ gameId: game.gameId, displayName: game.displayName, generation: game.generation })}

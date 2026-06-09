@@ -3,8 +3,9 @@
 > **日期**: 2026-05-31  
 > **依据**: PKHeX完整功能对比与缺口分析报告 + PKMDS-Blazor分析报告  
 > **原则**: 项目主体架构不变 (React 19 + ASP.NET Core 10 + PostgreSQL 14)，在界面外观和编辑功能上做优化补齐  
+> **范围限定**: 聚焦 **3DS 及以下世代**（Gen1-7, GBA/NDS/3DS）。Switch (Gen8-9) 游戏处于任天堂官方网络服务期，不做主动开发 — GAME_META/Switch 元数据仅用于存档展示识别，不在 Dashboard 开放工作台入口，Switch 专属功能（编辑/图鉴/模拟器）不是当前优先级。  
 > **2026-06-09**: 后端升级 .NET 8→10 + PKHeX.Core v24.3.10 NuGet→v26.05.05 SDK 源码编译（本地 NuGet 包），详见 `docs/PKHeX-NET10-升级方案.md`。破坏性 API 变更：`GetVariantSAV`→`GetSaveFile`、`DecryptedPartyData`→`WriteDecryptedDataParty`、`CheckResult.Comment` 已移除、Coin 命名/类型变更。Swagger JWT 定义因 OpenApi v2.x API 变更暂时注释。
-> **当前基线**: 已有用户登录/注册、存档上传/解析/存储、箱子网格展示(6列)、dnd-kit拖拽、银行面板、7Tab编辑面板、三态合法性校验（Legal/Fishy/Illegal）、背包编辑（BagPanel）、训练家编辑（TrainerPanel）、存档编辑器 Tabs 导航重构（箱子/背包/训练家）
+> **当前基线**: 已有用户登录/注册、存档上传/解析/存储、箱子网格展示(6列)、dnd-kit拖拽、银行面板、7Tab编辑面板、三态合法性校验（Legal/Fishy/Illegal）、背包编辑（BagPanel）、训练家编辑（TrainerPanel）、图鉴编辑 V1（PokedexPanel — seen/caught 基础读写 + seenAll/caughtAll/clearAll 批量）、存档编辑器 Tabs 导航（📦箱子/🎒背包/👤训练家/📖图鉴）
 
 ---
 

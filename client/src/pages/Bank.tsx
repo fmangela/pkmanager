@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography, Card, Input, Select, Switch, Row, Col, Pagination,
   Tag, Empty, App, Button, Popconfirm, Space, Drawer, Descriptions, Image,
-  Checkbox, Modal, Radio, Tooltip,
+  Checkbox, Modal, Radio,
 } from 'antd';
 import {
   SearchOutlined, DeleteOutlined, StarFilled, AppstoreOutlined,
@@ -403,16 +403,6 @@ const BankPage: React.FC = () => {
       );
     });
     return <div>{items}</div>;
-  };
-
-  // ── Box occupancy helper ─────────────────────────────
-
-  const boxOccupancy = (boxIndex: number): string => {
-    if (!moveSaveDetail?.boxes) return '';
-    const box = moveSaveDetail.boxes[boxIndex];
-    if (!box) return '';
-    const used = box.slots.filter(s => !s.isEmpty).length;
-    return `${used}/${box.slots.length}`;
   };
 
   // ── Main render ──────────────────────────────────────
