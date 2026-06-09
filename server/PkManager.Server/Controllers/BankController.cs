@@ -159,9 +159,17 @@ public class BankController : ControllerBase
 
         try
         {
-            var count = await _bankService.BatchMoveToSave(
+            var result = await _bankService.BatchMoveToSave(
                 request.Ids, request.SaveFileId, request.TargetBoxIndex, userId.Value);
-            return Ok(ApiResponse<object>.Ok(new { MovedCount = count }, $"已移动 {count} 只宝可梦到存档"));
+            var msg = result.FailedCount > 0
+                ? $"已移动 {result.MovedCount} 只，{result.FailedCount} 只失败"
+                : $"已移动 {result.MovedCount} 只宝可梦到存档";
+            return Ok(ApiResponse<object>.Ok(new
+            {
+                MovedCount = result.MovedCount,
+                FailedCount = result.FailedCount,
+                FailedIds = result.FailedIds
+            }, msg));
         }
         catch (BusinessException ex)
         {

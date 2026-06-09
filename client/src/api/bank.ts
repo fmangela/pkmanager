@@ -52,7 +52,7 @@ export const bankApi = {
     saveFileId: string;
     boxIndex: number;
     slotIndex: number;
-  }) => apiClient.post<PokemonDto>('/bank/from-save', data),
+  }) => apiClient.post<{ bankPokemonId: string; pokemon: PokemonDto }>('/bank/from-save', data),
 
   moveToSave: (saveFileId: string, data: {
     bankPokemonId: string;
@@ -73,5 +73,5 @@ export const bankApi = {
     ids: string[];
     saveFileId: string;
     targetBoxIndex: number;
-  }) => apiClient.post<{ movedCount: number }>('/bank/batch-move-to-save', data),
+  }) => apiClient.post<{ movedCount: number; failedCount: number; failedIds: string[] }>('/bank/batch-move-to-save', data),
 };

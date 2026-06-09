@@ -94,7 +94,7 @@ public class BankService
                    source, source_save_id AS SourceSaveId, notes,
                    created_at AS CreatedAt, updated_at AS UpdatedAt
             FROM bank_pokemon {where}
-            ORDER BY {orderBy} {dir}
+            ORDER BY {orderBy} {dir}, id ASC
             LIMIT @PageSize OFFSET @Offset";
 
         parameters.Add("PageSize", pageSize);
@@ -293,8 +293,11 @@ public class BankService
     /// <summary>
     /// 批量移动到存档（一箱、自动找空位）
     /// </summary>
-    public async Task<int> BatchMoveToSave(List<Guid> ids, Guid saveFileId, int targetBoxIndex, Guid userId)
+    public async Task<BatchMoveResult> BatchMoveToSave(List<Guid> ids, Guid saveFileId, int targetBoxIndex, Guid userId)
     {
+        if (ids.Count == 0)
+            throw new BusinessException("请选择要移动的宝可梦", 400);
+
         // 加载存档
         var (sf, sav) = await _saveFileService.LoadSave(saveFileId, userId);
         var boxData = sav.GetBoxData(targetBoxIndex);
@@ -308,41 +311,96 @@ public class BankService
                 emptySlots.Add(i);
         }
 
-        if (emptySlots.Count < ids.Count)
-            throw new BusinessException($"目标箱子仅剩 {emptySlots.Count} 个空位，需要 {ids.Count} 个");
+        if (emptySlots.Count == 0)
+            throw new BusinessException("目标箱子已满");
 
         // 读取银行宝可梦
         var records = (await _db.QueryAsync<BankPokemon>(
             "SELECT * FROM bank_pokemon WHERE id = ANY(@Ids) AND user_id = @UserId",
             new { Ids = ids, UserId = userId })).ToList();
 
-        if (records.Count != ids.Count)
-            throw new BusinessException("部分宝可梦未找到");
+        if (records.Count == 0)
+            throw new BusinessException("未找到可移动的宝可梦", 404);
 
-        // 分配到空位
+        var recordMap = records.ToDictionary(r => r.Id);
+
+        // 分配到空位（追踪成功/失败）
         var moved = 0;
-        foreach (var rec in records)
-        {
-            if (string.IsNullOrEmpty(rec.PkmDataBase64)) continue;
-            var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(rec.PkmDataBase64));
-            if (pkm == null) continue;
+        var movedIds = new List<Guid>();
+        var failedIds = new List<Guid>();
+        var slotIndex = 0;
 
-            var slot = emptySlots[moved];
-            boxData[slot] = pkm;
+        foreach (var id in ids)
+        {
+            if (!recordMap.TryGetValue(id, out var rec))
+            {
+                failedIds.Add(id);
+                continue;
+            }
+
+            if (slotIndex >= emptySlots.Count)
+            {
+                failedIds.Add(id);
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(rec.PkmDataBase64))
+            {
+                failedIds.Add(rec.Id);
+                continue;
+            }
+
+            PKM? pkm;
+            try
+            {
+                pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(rec.PkmDataBase64));
+            }
+            catch
+            {
+                failedIds.Add(rec.Id);
+                continue;
+            }
+
+            if (pkm == null)
+            {
+                failedIds.Add(rec.Id);
+                continue;
+            }
+
+            // 兼容转换（仿 SaveFileService.MoveFromBank 路径）
+            var compat = sav.GetCompatiblePKM(pkm);
+            if (compat == null)
+            {
+                failedIds.Add(rec.Id);
+                continue;
+            }
+
+            boxData[emptySlots[slotIndex]] = compat;
+            movedIds.Add(rec.Id);
             moved++;
+            slotIndex++;
         }
 
-        sav.SetBoxData(boxData, targetBoxIndex);
+        if (moved > 0)
+        {
+            sav.SetBoxData(boxData, targetBoxIndex);
+            await _saveFileService.WriteBackSave(sf, userId, sav);
+        }
 
-        // 一次写回
-        await _saveFileService.WriteBackSave(sf, userId, sav);
+        // 只删除成功移动的记录
+        if (movedIds.Count > 0)
+        {
+            await _db.ExecuteAsync(
+                "DELETE FROM bank_pokemon WHERE id = ANY(@Ids) AND user_id = @UserId",
+                new { Ids = movedIds, UserId = userId });
+        }
 
-        // 批量删除银行记录
-        await _db.ExecuteAsync(
-            "DELETE FROM bank_pokemon WHERE id = ANY(@Ids) AND user_id = @UserId",
-            new { Ids = ids, UserId = userId });
-
-        return moved;
+        return new BatchMoveResult
+        {
+            MovedCount = moved,
+            FailedCount = failedIds.Count,
+            FailedIds = failedIds
+        };
     }
 
     /// <summary>
@@ -401,4 +459,11 @@ public class BankPokemonDto
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+public class BatchMoveResult
+{
+    public int MovedCount { get; set; }
+    public int FailedCount { get; set; }
+    public List<Guid> FailedIds { get; set; } = new();
 }

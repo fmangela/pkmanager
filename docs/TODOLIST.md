@@ -293,7 +293,7 @@
   - 多选模式（hover Checkbox，选中蓝色边框）
   - 批量删除（已有，保留）
   - 批量导出为 .zip（`POST /api/bank/batch-export`）
-  - 批量移动到存档（`POST /api/bank/batch-move-to-save`，Modal 选存档+箱子，自动填空位，空间不足拒绝）
+  - 批量移动到存档（`POST /api/bank/batch-move-to-save`，Modal 选存档+箱子，自动填空位；按勾选顺序处理，返回未移动项）
 
 ---
 
@@ -1381,7 +1381,7 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > ### B.4 银行面板增强 — 完结 (2026-06-09)
 > - ✅ **卡片视图升级** — Grid/List 统一叠加图标（Alpha α / Gmax G / 闪光 StarFilled）+ 持有物 Tag
 > - ✅ **筛选/搜索增强** — 性格/特性 Select（showSearch）+ 排序 Dropdown（5 种）；物种属性延后
-> - ✅ **批量操作** — hover Checkbox 多选 + 选中蓝色边框 + 批量删除/导出.zip/移动到存档（Modal 选存档+箱子，自动填空位，不足拒绝）
+> - ✅ **批量操作** — hover Checkbox 多选 + 选中蓝色边框 + 批量删除/导出.zip/移动到存档（Modal 选存档+箱子，自动填空位；按勾选顺序处理，返回未移动项）
 > - **Phase B 全部完结** 🎉 — 13/13 项
 
 ---

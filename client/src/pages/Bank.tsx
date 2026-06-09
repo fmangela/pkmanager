@@ -144,7 +144,7 @@ const BankPage: React.FC = () => {
       a.download = 'pokemon_export.zip';
       a.click();
       URL.revokeObjectURL(url);
-      message.success(`已导出 ${selectedRowKeys.length} 只宝可梦`);
+      message.success(`已导出`);
     } catch {
       message.error('导出失败');
     }
@@ -180,12 +180,17 @@ const BankPage: React.FC = () => {
     if (!moveTargetSaveId) return;
     setMoveLoading(true);
     try {
-      await bankApi.batchMoveToSave({
+      const res = await bankApi.batchMoveToSave({
         ids: selectedRowKeys,
         saveFileId: moveTargetSaveId,
         targetBoxIndex: moveTargetBox,
       });
-      message.success(`已移动 ${selectedRowKeys.length} 只宝可梦到存档`);
+      const { movedCount, failedCount } = res.data;
+      if (failedCount > 0) {
+        message.warning(`已移动 ${movedCount} 只，${failedCount} 只未移动`);
+      } else {
+        message.success(`已移动 ${movedCount} 只宝可梦到存档`);
+      }
       setSelectedRowKeys([]);
       setMoveModalOpen(false);
       fetchBank();
@@ -592,7 +597,7 @@ const BankPage: React.FC = () => {
             )}
             <Descriptions.Item label="性格">{selectedPokemon.natureName || '-'}</Descriptions.Item>
             <Descriptions.Item label="特性">{selectedPokemon.abilityName || '-'}</Descriptions.Item>
-            <Descriptions.Item label="世代">{GENERATION_OPTIONS.find(g => g.value === selectedPokemon.generation)?.label || `Gen${selectedPokemon.generation}`}</Descriptions.Item>
+            <Descriptions.Item label="世代">{selectedListItem ? GENERATION_OPTIONS.find(g => g.value === selectedListItem.generation)?.label || `Gen${selectedListItem.generation}` : '-'}</Descriptions.Item>
             <Descriptions.Item label="闪光">
               {selectedPokemon.isShiny ? <Tag color="gold">✨ 是</Tag> : '否'}
             </Descriptions.Item>
