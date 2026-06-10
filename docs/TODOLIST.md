@@ -486,7 +486,14 @@
   - 银行页 `/bank` 添加返回按钮 → Dashboard
   - 存档编辑页已有返回按钮 → 存档列表
 
-- [ ] **精灵图升级**
+- [x] **精灵图升级 — 标准精灵图本地化（Phase 1）**
+  - 标准 96×96 精灵图（species 1–1025）从 PokeAPI 批量下载到 `client/public/sprites/pokemon/`，git 入库（~4.2MB）
+  - 新建 `client/src/lib/spriteUrl.ts` URL resolver + `client/src/components/PokemonSprite.tsx` 统一组件
+  - `<PokemonSprite>` 三级回退链（本地 → jsdelivr CDN → SVG 占位），useState 阶段保护 + key 驱动 reset
+  - 9 处散落引用全部收口（SaveEditor 3 + Bank 2 + AllBoxesModal 1 + CosmeticTab 1 + BankEditDrawer 2）
+  - 下载脚本 `scripts/download-pokemon-sprites.js`，支持增量、范围参数、gcore.jsdelivr.net CDN
+
+- [ ] **精灵图升级 — Home 风格高清图 + 风格切换（Phase 2）**
   - 支持 PokeAPI 高清精灵图（Home 风格）
   - 低分辨率备选：pokesprite spritesheet
   - 精灵风格切换：Game (像素) / Home (高清)
@@ -538,15 +545,31 @@
 
 ### F.1 静态数据缓存与种子数据
 
-- [ ] **物种/招式/特性/道具/球种/性格 数据预加载**
-  - 启动时从 PKHeX.Core 提取全量表数据
-  - 存入 PostgreSQL 静态表（带版本标记）
-  - 前端请求时直接从数据库返回（不走 PKHeX.Core 实时计算）
-  - 已有 `resourceStore.ts` 的基础结构，增强即可
+> **数据来源**: PKHeX.Core 源码树 `sdk/PKHeX/PKHeX.Core/Resources/text/` 下维护了纯文本资源文件（一行一个名称），覆盖物种(1025)/招式(920)/特性(310)/性格(25)/属性(18)/道具(2684)/版本(54)/形态/奖章 + 相遇地点(按世代)，支持 10 种语言(ja/en/fr/it/de/es/es-419/ko/zh-Hans/zh-Hant)。
+> **原则**: 数据不走实时 PKHeX.Core API 提取，直接用 shell 脚本读取 .txt 文件 → `psql COPY` 入库。一次性导入，不写入 `start-dev.sh`。Gen7 及之前数据已固化，PKHeX 升级后重跑脚本即可同步。
 
-- [ ] **精灵图 URL 映射表**
-  - 物种ID → PokeAPI sprite URL 映射表
-  - 减少前端硬编码，支持切换精灵图源
+- [ ] **建表 SQL**
+  - `resource_strings` — 物种/招式/特性/性格/属性/版本/形态/奖章名称（resource_type + resource_id + language 复合主键）
+  - `resource_items` — 道具名称（含全世代 2684 条目 + 世代标记后缀）
+  - `resource_locations` — 相遇地点（按 generation + version_group + location_id + language + is_egg）
+  - 新建 `server/PkManager.Server/Data/migration_f1.sql` + 同步追加到 `init.sql`
+
+- [ ] **种子脚本 `scripts/seed-static-data.sh`**
+  - 纯 shell：读取 `sdk/PKHeX/PKHeX.Core/Resources/text/other/{lang}/text_{Type}_{lang}.txt` → `awk` 加行号 → `psql \COPY FROM STDIN`
+  - 道具目录 `text/items/text_Items_{lang}.txt` 单独处理
+  - 相遇地点目录 `text/locations/{gen}/` 按世代遍历
+  - 支持 `--lang all|zh-Hans` 参数选择导入语言
+  - 检测表是否为空，已有数据则跳过（可 `--force` 强制重导）
+
+- [ ] **ResourceController 改为 DB 优先 + PKHeX.Core 回退**
+  - 6 个列表接口（species/moves/abilities/natures/items/balls）先查 DB → 表为空则回退 PKHeX.Core
+  - 新增 `NpgsqlConnection` 注入
+  - 动态接口不动：`species/{id}/abilities` / `species/{id}/moves` / `species/{id}/experience` 维持 ConcurrentDictionary 缓存
+
+- [x] **精灵图 URL 映射表** ✅ 已完成 (Phase 1)
+  - 物种ID → PokeAPI sprite URL 映射表，减少前端硬编码，支持切换精灵图源
+  - `spriteUrl.ts` + `PokemonSprite.tsx` 统一收口，支持 variant 扩展（standard/artwork/home/shiny）
+  - 后续 Phase 2 扩展：形态精灵图、Home 高清图、Shiny 图
 
 ### F.2 合法性引擎升级
 
@@ -1132,14 +1155,14 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 | B: 存档编辑器优化 | 13 | 13 | 0 | 0 |
 | C: 新增功能模块 | 12 | 12 | 0 | 0 |
 | D: 高级工具 | 14 | 0 | 0 | 14 |
-| E: 世代专属与打磨 | 17 | 5 | 0 | 12 |
-| F: 后端基础设施 | 8 | 3 | 0 | 5 |
+| E: 世代专属与打磨 | 17 | 7 | 0 | 10 |
+| F: 后端基础设施 | 8 | 4 | 0 | 4 |
 | G: GBA在线模拟器 | 21 | 19 | 0 | 2 |
 | H: NDS在线模拟器 | 34 | 28 | 0 | 6 |
 | I: 3DS Azahar集成 | 19 | 16 | 0 | 3 |
 | J: 前端错误诊断 | 17 | 15 | 0 | 2 |
 | K: GitHub发布解耦 | 15 | 0 | 0 | 15 |
-| **合计** | **199** | **145** | **0** | **54** |
+| **合计** | **199** | **148** | **0** | **51** |
 
 > **更新 (2026-06-07) — 本地模拟器人工验证 + 项目文档刷新**：
 >
