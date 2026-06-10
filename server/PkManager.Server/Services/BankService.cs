@@ -4,6 +4,7 @@ using Dapper;
 using Npgsql;
 using PKHeX.Core;
 using PkManager.Server.Models.Entity;
+using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
 
 namespace PkManager.Server.Services;
@@ -122,13 +123,210 @@ public class BankService
 
         if (record == null) return null;
 
-        var pokemon = JsonSerializer.Deserialize<PokemonDto>(record.PokemonJson ?? "{}");
-        if (pokemon != null)
+        // Prefer authoritative PKM binary over JSON snapshot
+        if (!string.IsNullOrEmpty(record.PkmDataBase64))
         {
-            pokemon.Id = record.Id;
-            pokemon.PkmDataBase64 = record.PkmDataBase64;
+            try
+            {
+                var pokemon = ParseService.MapToPokemonDto(
+                    EntityFormat.GetFromBytes(Convert.FromBase64String(record.PkmDataBase64))
+                    ?? throw new InvalidOperationException("PKM parse returned null"));
+                pokemon.Id = record.Id;
+                return pokemon;
+            }
+            catch { /* fall back to pokemon_json */ }
         }
-        return pokemon;
+
+        // Fallback: deserialize pokemon_json (legacy / corrupt pkm_data_base64)
+        var pokemonJson = JsonSerializer.Deserialize<PokemonDto>(record.PokemonJson ?? "{}");
+        if (pokemonJson != null)
+        {
+            pokemonJson.Id = record.Id;
+            // Clear PkmDataBase64 so the frontend correctly shows read-only;
+            // the original binary either doesn't exist or failed to parse above.
+            pokemonJson.PkmDataBase64 = null;
+            pokemonJson.Format = 0;
+            pokemonJson.IsValid = false;
+        }
+        return pokemonJson;
+    }
+
+    /// <summary>
+    /// 保存银行宝可梦编辑 — 回写 PKM 二进制 + 同步所有冗余列
+    /// </summary>
+    public async Task<EditResultDto> SaveBankPokemon(Guid bankId, Guid userId, PokemonEditRequest request)
+    {
+        var record = await _db.QueryFirstOrDefaultAsync<BankPokemon>(
+            "SELECT * FROM bank_pokemon WHERE id = @Id AND user_id = @UserId",
+            new { Id = bankId, UserId = userId })
+            ?? throw new BusinessException("银行宝可梦不存在", 404);
+
+        if (string.IsNullOrEmpty(record.PkmDataBase64))
+            throw new BusinessException("该记录缺少原始数据，不可编辑", 400);
+
+        var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(record.PkmDataBase64))
+            ?? throw new BusinessException("无法解析宝可梦数据", 400);
+
+        // Apply edits (reuse PokemonEditService)
+        var result = _editService.ApplyEdits(pkm, request);
+
+        // Re-serialize PKM
+        var buf = new byte[pkm.SIZE_PARTY]; pkm.WriteDecryptedDataParty(buf);
+        var newBase64 = Convert.ToBase64String(buf);
+
+        // Re-generate DTO from edited PKM
+        var dto = ParseService.MapToPokemonDto(pkm);
+        var pokemonJson = JsonSerializer.Serialize(dto);
+
+        // Sync all redundant columns (list/filter/card summary stays in sync)
+        var strings = GameInfo.GetStrings("zh");
+        await _db.ExecuteAsync(@"
+            UPDATE bank_pokemon SET
+                species = @Species, species_name = @SpeciesName, nickname = @Nickname,
+                level = @Level, nature = @Nature, nature_name = @NatureName,
+                ability = @Ability, ability_name = @AbilityName,
+                generation = @Generation, game_version = @GameVersion,
+                is_shiny = @IsShiny, is_egg = @IsEgg, is_valid = @IsValid,
+                pokemon_json = @PokemonJson::jsonb, pkm_data_base64 = @PkmDataBase64,
+                updated_at = NOW()
+            WHERE id = @Id AND user_id = @UserId",
+            new
+            {
+                Id = bankId, UserId = userId,
+                Species = (int)pkm.Species,
+                SpeciesName = strings.Species[pkm.Species],
+                Nickname = pkm.Nickname,
+                Level = (int)pkm.CurrentLevel,
+                Nature = (int)pkm.Nature,
+                NatureName = strings.Natures[(int)pkm.Nature],
+                Ability = (int)pkm.Ability,
+                AbilityName = strings.Ability[pkm.Ability],
+                Generation = pkm.Format,
+                GameVersion = (int)pkm.Version,
+                IsShiny = pkm.IsShiny,
+                IsEgg = pkm.IsEgg,
+                IsValid = result.Status == LegalityStatus.Legal,
+                PokemonJson = pokemonJson,
+                PkmDataBase64 = newBase64
+            });
+
+        result.UpdatedPokemon = dto;
+        return result;
+    }
+
+    /// <summary>
+    /// 单只宝可梦发送到存档（走共享 helper，失败安全顺序）
+    /// </summary>
+    public async Task MoveSingleToSave(Guid bankId, Guid userId, Guid saveFileId, int targetBoxIndex, int? targetSlotIndex)
+    {
+        var record = await _db.QueryFirstOrDefaultAsync<BankPokemon>(
+            "SELECT * FROM bank_pokemon WHERE id = @Id AND user_id = @UserId",
+            new { Id = bankId, UserId = userId })
+            ?? throw new BusinessException("银行宝可梦不存在", 404);
+
+        if (string.IsNullOrEmpty(record.PkmDataBase64))
+            throw new BusinessException("该记录缺少原始数据", 400);
+
+        var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(record.PkmDataBase64))
+            ?? throw new BusinessException("无法解析宝可梦数据", 400);
+
+        var (sf, sav) = await _saveFileService.LoadSave(saveFileId, userId);
+
+        // Auto-find empty slot if not specified
+        int slot;
+        if (targetSlotIndex.HasValue)
+        {
+            slot = targetSlotIndex.Value;
+        }
+        else
+        {
+            var boxData = sav.GetBoxData(targetBoxIndex);
+            slot = -1;
+            for (int i = 0; i < boxData.Length; i++)
+            {
+                if (boxData[i].Species == 0) { slot = i; break; }
+            }
+            if (slot < 0) throw new BusinessException("目标箱子已满", 400);
+        }
+
+        // Shared helper: GetCompatiblePKM + empty check + write
+        _saveFileService.WritePkmToBoxSlot(sav, targetBoxIndex, slot, pkm);
+
+        // Write save first
+        await _saveFileService.WriteBackSave(sf, userId, sav);
+
+        // Only delete bank record after successful save write
+        await _db.ExecuteAsync("DELETE FROM bank_pokemon WHERE id = @Id", new { Id = bankId });
+    }
+
+    /// <summary>
+    /// 历史数据回填：扫描 generation=0 或 game_version IS NULL 的记录，从 pkm_data_base64 重新解析并回写
+    /// </summary>
+    public async Task<BackfillResult> Backfill(Guid userId)
+    {
+        var records = (await _db.QueryAsync<BankPokemon>(
+            "SELECT * FROM bank_pokemon WHERE user_id = @UserId AND (generation = 0 OR game_version IS NULL)",
+            new { UserId = userId })).ToList();
+
+        int fixed_ = 0, skipped = 0, failed = 0;
+        var strings = GameInfo.GetStrings("zh");
+
+        foreach (var rec in records)
+        {
+            if (string.IsNullOrEmpty(rec.PkmDataBase64))
+            {
+                // Mark as invalid since we can't verify
+                await _db.ExecuteAsync(
+                    "UPDATE bank_pokemon SET is_valid = FALSE, updated_at = NOW() WHERE id = @Id",
+                    new { rec.Id });
+                skipped++;
+                continue;
+            }
+
+            try
+            {
+                var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(rec.PkmDataBase64));
+                if (pkm == null) { failed++; continue; }
+
+                var dto = ParseService.MapToPokemonDto(pkm);
+                var pokemonJson = JsonSerializer.Serialize(dto);
+
+                await _db.ExecuteAsync(@"
+                    UPDATE bank_pokemon SET
+                        generation = @Generation, game_version = @GameVersion,
+                        species = @Species, species_name = @SpeciesName, nickname = @Nickname,
+                        level = @Level, nature = @Nature, nature_name = @NatureName,
+                        ability = @Ability, ability_name = @AbilityName,
+                        is_shiny = @IsShiny, is_egg = @IsEgg, is_valid = @IsValid,
+                        pokemon_json = @PokemonJson::jsonb, updated_at = NOW()
+                    WHERE id = @Id",
+                    new
+                    {
+                        rec.Id,
+                        Generation = pkm.Format,
+                        GameVersion = (int)pkm.Version,
+                        Species = (int)pkm.Species,
+                        SpeciesName = strings.Species[pkm.Species],
+                        Nickname = pkm.Nickname,
+                        Level = (int)pkm.CurrentLevel,
+                        Nature = (int)pkm.Nature,
+                        NatureName = strings.Natures[(int)pkm.Nature],
+                        Ability = (int)pkm.Ability,
+                        AbilityName = strings.Ability[pkm.Ability],
+                        IsShiny = pkm.IsShiny,
+                        IsEgg = pkm.IsEgg,
+                        IsValid = rec.IsValid,  // preserve existing, not re-assessed
+                        PokemonJson = pokemonJson
+                    });
+                fixed_++;
+            }
+            catch
+            {
+                failed++;
+            }
+        }
+
+        return new BackfillResult { Fixed = fixed_, Skipped = skipped, Failed = failed };
     }
 
     /// <summary>
@@ -139,12 +337,29 @@ public class BankService
         var bankId = Guid.NewGuid();
         var pokemonJson = JsonSerializer.Serialize(pokemon);
 
+        // Derive generation / game_version from PKM binary (authoritative), fall back to PokemonDto.Format
+        int generation = pokemon.Format;
+        int? gameVersion = null;
+        if (!string.IsNullOrEmpty(pkmDataBase64))
+        {
+            try
+            {
+                var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(pkmDataBase64));
+                if (pkm != null)
+                {
+                    generation = pkm.Format;
+                    gameVersion = (int)pkm.Version;
+                }
+            }
+            catch { /* keep PokemonDto fallback */ }
+        }
+
         await _db.ExecuteAsync(@"
             INSERT INTO bank_pokemon (id, user_id, species, species_name, nickname, level,
-                nature, nature_name, ability, ability_name, generation, is_shiny, is_egg,
+                nature, nature_name, ability, ability_name, generation, game_version, is_shiny, is_egg,
                 is_valid, pokemon_json, pkm_data_base64, source, source_save_id)
             VALUES (@Id, @UserId, @Species, @SpeciesName, @Nickname, @Level,
-                @Nature, @NatureName, @Ability, @AbilityName, @Generation, @IsShiny, @IsEgg,
+                @Nature, @NatureName, @Ability, @AbilityName, @Generation, @GameVersion, @IsShiny, @IsEgg,
                 @IsValid, @PokemonJson::jsonb, @PkmDataBase64, @Source, @SourceSaveId)",
             new
             {
@@ -158,7 +373,8 @@ public class BankService
                 pokemon.NatureName,
                 pokemon.Ability,
                 pokemon.AbilityName,
-                Generation = 0, // Will be updated when saving from save file
+                Generation = generation,
+                GameVersion = gameVersion,
                 pokemon.IsShiny,
                 pokemon.IsEgg,
                 pokemon.IsValid,
@@ -185,20 +401,19 @@ public class BankService
         var pokemon = ParseService.MapToPokemonDto(pkm);
         var buf = new byte[pkm.SIZE_PARTY]; pkm.WriteDecryptedDataParty(buf); var pkmDataBase64 = Convert.ToBase64String(buf);
 
-        // 获取世代
-        var saveFile = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
-            "SELECT generation FROM save_files WHERE id = @Id", new { Id = saveFileId });
-        var generation = saveFile?.Generation ?? 0;
+        // Derive generation / game_version from PKM object itself (not save file)
+        var generation = pkm.Format;
+        var gameVersion = (int)pkm.Version;
 
         // 插入银行
         var bankId = Guid.NewGuid();
         await _db.ExecuteAsync(@"
             INSERT INTO bank_pokemon (id, user_id, species, species_name, nickname, level,
-                nature, nature_name, ability, ability_name, generation,
+                nature, nature_name, ability, ability_name, generation, game_version,
                 is_shiny, is_egg, is_valid, pokemon_json, pkm_data_base64,
                 source, source_save_id)
             VALUES (@Id, @UserId, @Species, @SpeciesName, @Nickname, @Level,
-                @Nature, @NatureName, @Ability, @AbilityName, @Generation,
+                @Nature, @NatureName, @Ability, @AbilityName, @Generation, @GameVersion,
                 @IsShiny, @IsEgg, @IsValid, @PokemonJson::jsonb, @PkmDataBase64,
                 @Source, @SourceSaveId)",
             new
@@ -209,6 +424,7 @@ public class BankService
                 pokemon.Nature, pokemon.NatureName,
                 pokemon.Ability, pokemon.AbilityName,
                 Generation = generation,
+                GameVersion = gameVersion,
                 pokemon.IsShiny, pokemon.IsEgg,
                 IsValid = true,
                 PokemonJson = JsonSerializer.Serialize(pokemon),
@@ -466,4 +682,18 @@ public class BatchMoveResult
     public int MovedCount { get; set; }
     public int FailedCount { get; set; }
     public List<Guid> FailedIds { get; set; } = new();
+}
+
+public class BackfillResult
+{
+    public int Fixed { get; set; }
+    public int Skipped { get; set; }
+    public int Failed { get; set; }
+}
+
+public class MoveToSaveRequest
+{
+    public Guid SaveFileId { get; set; }
+    public int TargetBoxIndex { get; set; }
+    public int? TargetSlotIndex { get; set; }
 }

@@ -267,6 +267,29 @@ public class SaveFileService
         await WriteBackSave(sf, userId, sav);
     }
 
+    /// <summary>
+    /// 共享 helper: 将 PKM 写入存档箱子槽位（含 GetCompatiblePKM 兼容转换）
+    /// </summary>
+    /// <param name="allowOverwrite">true=允许覆盖已占用槽位（拖放等显式选择场景）</param>
+    /// <returns>写入后的兼容 PKM 对象（null 表示失败）</returns>
+    public PKM? WritePkmToBoxSlot(PKHeX.Core.SaveFile sav, int targetBoxIndex, int targetSlotIndex, PKM pkm, bool allowOverwrite = false)
+    {
+        var boxData = sav.GetBoxData(targetBoxIndex);
+        if (targetSlotIndex < 0 || targetSlotIndex >= boxData.Length)
+            throw new BusinessException("槽位索引无效", 400);
+
+        if (!allowOverwrite && boxData[targetSlotIndex].Species != 0)
+            throw new BusinessException("目标槽位已被占用", 400);
+
+        var compat = sav.GetCompatiblePKM(pkm);
+        if (compat == null)
+            throw new BusinessException("宝可梦格式与目标存档不兼容", 400);
+
+        boxData[targetSlotIndex] = compat;
+        sav.SetBoxData(boxData, targetBoxIndex);
+        return compat;
+    }
+
     public async Task MoveFromBank(Guid saveFileId, Guid userId,
         Guid bankPokemonId, int targetBoxIndex, int targetSlotIndex)
     {
@@ -276,15 +299,20 @@ public class SaveFileService
             new { Id = bankPokemonId, UserId = userId })
             ?? throw new BusinessException("银行宝可梦不存在", 404);
 
-        var boxData = sav.GetBoxData(targetBoxIndex);
-        if (!string.IsNullOrEmpty(bankPkm.PkmDataBase64))
-        {
-            var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(bankPkm.PkmDataBase64));
-            if (pkm != null) boxData[targetSlotIndex] = pkm;
-        }
-        sav.SetBoxData(boxData, targetBoxIndex);
-        await _db.ExecuteAsync("DELETE FROM bank_pokemon WHERE id = @Id", new { Id = bankPkm.Id });
+        if (string.IsNullOrEmpty(bankPkm.PkmDataBase64))
+            throw new BusinessException("该银行记录缺少原始数据", 400);
+
+        var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(bankPkm.PkmDataBase64))
+            ?? throw new BusinessException("无法解析宝可梦数据", 400);
+
+        // 共享 helper（allowOverwrite: 拖放是用户显式选择，允许覆盖已占用槽位）
+        WritePkmToBoxSlot(sav, targetBoxIndex, targetSlotIndex, pkm, allowOverwrite: true);
+
+        // 先写存档（失败则银行记录不动）
         await WriteBackSave(sf, userId, sav);
+
+        // 写成功后再删银行记录；删除失败宁可留重复不丢数据
+        await _db.ExecuteAsync("DELETE FROM bank_pokemon WHERE id = @Id", new { Id = bankPkm.Id });
     }
 
     public async Task SwapBoxes(Guid saveFileId, Guid userId, int boxA, int boxB)

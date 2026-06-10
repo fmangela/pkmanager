@@ -418,6 +418,7 @@ public class ParseService
             OriginMark = GetOriginMark(pkm),
 
             // ── General ──────────────────────────────
+            Format = pkm.Format,
             IsValid = true,
             PkmDataBase64 = GetPkmBase64(pkm)
         };

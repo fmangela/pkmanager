@@ -147,6 +147,7 @@ public class PokemonDto
     public int? OriginMark { get; set; }
 
     // ── General ──────────────────────────────
+    public int Format { get; set; }          // PKM format (3=Gen3 PK3, 4=Gen4 PK4, ..., 7=Gen7 PK7)
     public bool IsValid { get; set; } = true;
     public string? PkmDataBase64 { get; set; }
 }

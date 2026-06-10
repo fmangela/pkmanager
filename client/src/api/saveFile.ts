@@ -127,6 +127,7 @@ export interface PokemonDto {
   contestSheen: number;
   originMark?: number;
   // General
+  format: number;      // PKM format (3=PK3/Gen3, 4=PK4/Gen4, ..., 7=PK7/Gen7)
   isValid: boolean;
   pkmDataBase64?: string;
 }
@@ -241,6 +242,10 @@ export const saveFileApi = {
 
   validatePokemon: (pkmDataBase64: string, data: any) =>
     apiClient.post<LegalityReportDto>('/Pokemon/validate-party', { ...data, pkmDataBase64 }),
+
+  /** 按 ID 验证宝可梦合法性（支持银行和存档宝可梦） */
+  validateById: (id: string, data: Record<string, unknown>) =>
+    apiClient.post<LegalityReportDto>(`/Pokemon/${id}/validate`, data),
 
   download: (saveFileId: string) =>
     apiClient.get(`/SaveFile/${saveFileId}/download`, {

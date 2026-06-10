@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography, Card, Input, Select, Switch, Row, Col, Pagination,
-  Tag, Empty, App, Button, Popconfirm, Space, Drawer, Descriptions, Image,
+  Tag, Empty, App, Button, Popconfirm, Space, Image,
   Checkbox, Modal, Radio,
 } from 'antd';
 import {
@@ -14,6 +14,7 @@ import type { PokemonDto } from '../api/saveFile';
 import { saveFileApi, type SaveFileInfo, type SaveFileDetail } from '../api/saveFile';
 import { bankApi, type BankListItem } from '../api/bank';
 import { useResourceStore } from '../stores/resourceStore';
+import BankEditDrawer from '../components/bank/BankEditDrawer';
 
 const { Title, Text } = Typography;
 
@@ -51,10 +52,10 @@ const BankPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
 
-  // Detail drawer
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [selectedPokemon, setSelectedPokemon] = useState<PokemonDto | null>(null);
-  const [selectedListItem, setSelectedListItem] = useState<BankListItem | null>(null);
+  // Edit drawer (C.4 BankEditDrawer)
+  const [editDrawerOpen, setEditDrawerOpen] = useState(false);
+  const [editingPokemon, setEditingPokemon] = useState<PokemonDto | null>(null);
+  const [editingBankId, setEditingBankId] = useState<string>('');
 
   // Move-to-save modal
   const [moveModalOpen, setMoveModalOpen] = useState(false);
@@ -207,9 +208,9 @@ const BankPage: React.FC = () => {
   const showDetail = async (p: BankListItem) => {
     try {
       const res = await bankApi.getDetail(p.id);
-      setSelectedPokemon(res.data);
-      setSelectedListItem(p);
-      setDetailOpen(true);
+      setEditingPokemon(res.data);
+      setEditingBankId(p.id);
+      setEditDrawerOpen(true);
     } catch {
       message.error('加载详情失败');
     }
@@ -559,49 +560,16 @@ const BankPage: React.FC = () => {
         </div>
       )}
 
-      {/* Detail Drawer */}
-      <Drawer
-        title={selectedPokemon?.nickname || selectedPokemon?.speciesName || '宝可梦详情'}
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        size="large"
-      >
-        {selectedPokemon && (
-          <>
-            <div style={{ textAlign: 'center', marginBottom: 16 }}>
-              <img
-                src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${selectedPokemon.species}.png`}
-                alt={selectedPokemon.speciesName}
-                style={{ width: 160, height: 160, objectFit: 'contain' }}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${selectedPokemon.species}.png`;
-                }}
-              />
-            </div>
-          <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="物种">{selectedPokemon.speciesName}</Descriptions.Item>
-            <Descriptions.Item label="等级">Lv.{selectedPokemon.level}</Descriptions.Item>
-            {selectedPokemon.nickname && (
-              <Descriptions.Item label="昵称">{selectedPokemon.nickname}</Descriptions.Item>
-            )}
-            <Descriptions.Item label="性格">{selectedPokemon.natureName || '-'}</Descriptions.Item>
-            <Descriptions.Item label="特性">{selectedPokemon.abilityName || '-'}</Descriptions.Item>
-            <Descriptions.Item label="世代">{selectedListItem ? GENERATION_OPTIONS.find(g => g.value === selectedListItem.generation)?.label || `Gen${selectedListItem.generation}` : '-'}</Descriptions.Item>
-            <Descriptions.Item label="闪光">
-              {selectedPokemon.isShiny ? <Tag color="gold">✨ 是</Tag> : '否'}
-            </Descriptions.Item>
-            <Descriptions.Item label="蛋">{selectedPokemon.isEgg ? '是 🥚' : '否'}</Descriptions.Item>
-            <Descriptions.Item label="来源">{selectedListItem?.source === 'save_import' ? '存档导入' : '手动添加'}</Descriptions.Item>
-            <Descriptions.Item label="添加时间" span={2}>
-              {selectedListItem?.createdAt ? new Date(selectedListItem.createdAt).toLocaleString('zh-CN') : '-'}
-            </Descriptions.Item>
-          </Descriptions>
-          </>
-        )}
-      </Drawer>
+      {/* C.4 Bank Edit Drawer */}
+      <BankEditDrawer
+        open={editDrawerOpen}
+        pokemon={editingPokemon}
+        bankId={editingBankId}
+        onClose={() => { setEditDrawerOpen(false); setEditingPokemon(null); setEditingBankId(''); }}
+        onSaved={fetchBank}
+      />
 
-      {/* Move-to-save Modal */}
+      {/* Batch Move-to-save Modal */}
       <Modal
         title="移动到存档"
         open={moveModalOpen}

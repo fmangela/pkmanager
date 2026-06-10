@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using PkManager.Server.Helpers;
+using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
 using PkManager.Server.Services;
 
@@ -175,6 +176,61 @@ public class BankController : ControllerBase
         {
             return BadRequest(ApiResponse<object>.Error(ex.ErrorCode, ex.Message));
         }
+    }
+
+    /// <summary>
+    /// 保存银行宝可梦编辑
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ApiResponse<EditResultDto>>> Edit(Guid id, [FromBody] PokemonEditRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<EditResultDto>.Error(401, "未登录"));
+
+        try
+        {
+            var result = await _bankService.SaveBankPokemon(id, userId.Value, request);
+            var msg = result.Status == LegalityStatus.Legal ? "修改已保存" : "已保存（⚠️ 不合法）";
+            return Ok(ApiResponse<EditResultDto>.Ok(result, msg));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<EditResultDto>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 单只宝可梦发送到存档
+    /// </summary>
+    [HttpPost("{id:guid}/move-to-save")]
+    public async Task<ActionResult<ApiResponse<object>>> MoveToSave(Guid id, [FromBody] MoveToSaveRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<object>.Error(401, "未登录"));
+
+        try
+        {
+            await _bankService.MoveSingleToSave(id, userId.Value, request.SaveFileId, request.TargetBoxIndex, request.TargetSlotIndex);
+            return Ok(ApiResponse<object>.Ok(new { }, "已发送到存档"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<object>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 历史数据回填：修复 generation=0 或 game_version IS NULL 的存量记录
+    /// </summary>
+    [HttpPost("backfill")]
+    public async Task<ActionResult<ApiResponse<BackfillResult>>> Backfill()
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<BackfillResult>.Error(401, "未登录"));
+
+        var result = await _bankService.Backfill(userId.Value);
+        return Ok(ApiResponse<BackfillResult>.Ok(result,
+            $"回填完成：修复 {result.Fixed} 条，跳过 {result.Skipped} 条（缺少原始数据），失败 {result.Failed} 条"));
     }
 }
 

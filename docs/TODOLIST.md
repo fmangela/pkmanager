@@ -353,10 +353,19 @@
 
 ### C.4 宝可梦详情页
 
-- [ ] **银行宝可梦详情 Drawer 升级**
-  - 复用编辑面板的 Tab 组件
-  - 所有字段只读展示（非所属存档的宝可梦不可编辑）
-  - 添加「发送到存档」按钮
+- [x] **银行宝可梦详情 Drawer 升级** ✅ 已完成
+  - 复用编辑面板的 7 个 Tab 组件（Main/Stats/Moves/Met/OTMisc/Cosmetic/Legality）
+  - PokemonDto 新增 Format 字段（PKM 格式号 3-7）
+  - 编辑保存（PUT /api/Bank/{id}，冗余列全量同步）
+  - 立合法性验证（POST /api/Pokemon/{id}/validate，走已有端点）
+  - 添加「发送到存档」按钮（弹窗选择存档+箱子）
+  - 合法性初始状态为"未验证"（不复用 EditPanel 的 IsValid=true bug）
+  - 无 pkmDataBase64 的旧记录降级为只读模式
+- [x] **前置 Bug 修复**
+  - Fix 0a: AddToBank/MoveFromSave generation 改为从 pkm.Format 派生，game_version 同步写入
+  - Fix 0b: PokemonDto 新增 Format 字段（前后端 + MapToPokemonDto）
+  - Fix 0c: MoveFromBank 修复（+GetCompatiblePKM + 空位检查 + 先 WriteBackSave 后 DELETE）+ WritePkmToBoxSlot 共享 helper
+  - Fix 0d: bank_pokemon 历史数据回填端点 POST /api/Bank/backfill
 
 ---
 
@@ -1121,7 +1130,7 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 |-------|---------|--------|--------|--------|
 | A: 编辑面板升级 | 29 | 29 | 0 | 0 |
 | B: 存档编辑器优化 | 13 | 13 | 0 | 0 |
-| C: 新增功能模块 | 12 | 11 | 0 | 1 |
+| C: 新增功能模块 | 12 | 12 | 0 | 0 |
 | D: 高级工具 | 14 | 0 | 0 | 14 |
 | E: 世代专属与打磨 | 17 | 5 | 0 | 12 |
 | F: 后端基础设施 | 8 | 3 | 0 | 5 |
@@ -1130,7 +1139,7 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 | I: 3DS Azahar集成 | 19 | 16 | 0 | 3 |
 | J: 前端错误诊断 | 17 | 15 | 0 | 2 |
 | K: GitHub发布解耦 | 15 | 0 | 0 | 15 |
-| **合计** | **199** | **144** | **0** | **55** |
+| **合计** | **199** | **145** | **0** | **54** |
 
 > **更新 (2026-06-07) — 本地模拟器人工验证 + 项目文档刷新**：
 >
@@ -1495,3 +1504,34 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - TypeScript 0 错误 + .NET Build 0 错误（仅 1 个预存 CS1998 warning）+ Vite 构建通过
 > - Phase C: 12/8 已完成 (+8)
 > - 合计: 199/141 (+8)
+>
+> **更新 (2026-06-09) — Phase C.4 银行宝可梦编辑面板 完结**：
+>
+> ### C.4 银行宝可梦编辑面板 — 完结 🎉
+>
+> - ✅ **BankEditDrawer** — 新建 `client/src/components/bank/BankEditDrawer.tsx`（~280 行），复用 7 个 Tab 组件
+>   - Drawer 顶部：精灵图 + 物种名/昵称/等级 + 世代 Tag（pokemon.format 派生）+ 闪光/蛋标记 + 合法性 Chip
+>   - 7 个 Tab：Main/Stats/Moves/Met/OTMisc/Cosmetic/Legality（直接复用 EditPanel 组件）
+>   - 保存按钮 → `PUT /api/Bank/{id}`（后端回写 PKM 二进制 + 同步 10+ 冗余列）
+>   - 合法性验证 → `POST /api/Pokemon/{id}/validate`（走已有端点，新建 validateById helper）
+>   - 「发送到存档」按钮 → MoveToSaveModal（选存档 + 箱子 + 世代兼容提示）
+>   - 只读降级：pkmDataBase64 为空时隐藏保存按钮 + 显示 Alert
+>   - 合法性初始状态为 null（"未验证"），不复用 EditPanel 的 IsValid=true bug
+> - ✅ **Bank.tsx** — 旧 Descriptions Drawer 替换为 BankEditDrawer
+> - ✅ **editHelpers.ts** — 从 EditPanel 提取 buildEditRequest / validateFields 共享工具
+> - ✅ **后端 3 个新端点**:
+>   - `PUT /api/Bank/{id}` — 保存银行宝可梦编辑（冗余列全量同步）
+>   - `POST /api/Bank/{id}/move-to-save` — 单只发送到存档（走 WritePkmToBoxSlot 共享 helper）
+>   - `POST /api/Bank/backfill` — 历史数据回填（修复 generation=0 / game_version=NULL）
+> - ✅ **前端 API 层**: bankApi.saveEdit / bankApi.sendToSave / saveFileApi.validateById / BankListItem 补 gameVersion+isValid / PokemonDto 补 format
+>
+> ### 前置 Bug 修复 (Fix 0a-0d)
+>
+> - ✅ **Fix 0a**: AddToBank/MoveFromSave — generation 从 pkm.Format（PKM 格式号 3-7）派生，game_version 从 pkm.Version 写入
+> - ✅ **Fix 0b**: PokemonDto 新增 Format 字段（C# + TypeScript + MapToPokemonDto）
+> - ✅ **Fix 0c**: MoveFromBank 修复 — +GetCompatiblePKM + 空位检查 + 先 WriteBackSave 后 DELETE（失败安全顺序）；提取 WritePkmToBoxSlot 共享 helper 供三条移动路径复用
+> - ✅ **Fix 0d**: bank_pokemon 历史数据回填端点（扫描 generation=0 OR game_version IS NULL → 从 pkm_data_base64 重新解析 → 全量回写）
+> - ✅ **旧 GET /api/Bank/{id} 同源化**: 优先从 pkm_data_base64 解析，回退 pokemon_json（兼容无原始数据的旧记录）
+> - TypeScript 0 错误 + .NET Build 0 错误 + Vite 构建通过
+> - Phase C: 12/12 已完成 (+1) ✅ **Phase C 全部完结**
+> - 合计: 199/145 (+4)

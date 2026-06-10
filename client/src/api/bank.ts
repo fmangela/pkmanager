@@ -1,5 +1,5 @@
 import apiClient from './axios';
-import type { PokemonDto } from './saveFile';
+import type { PokemonDto, EditResultDto } from './saveFile';
 
 // ── 列表摘要（GET /api/bank 返回）─────────────────────
 
@@ -12,8 +12,10 @@ export interface BankListItem {
   natureName?: string;
   abilityName?: string;
   generation: number;
+  gameVersion?: number;
   isShiny: boolean;
   isEgg: boolean;
+  isValid: boolean;
   isAlpha: boolean;
   canGigantamax: boolean;
   heldItemName?: string;
@@ -74,4 +76,11 @@ export const bankApi = {
     saveFileId: string;
     targetBoxIndex: number;
   }) => apiClient.post<{ movedCount: number; failedCount: number; failedIds: string[] }>('/bank/batch-move-to-save', data),
+
+  saveEdit: (id: string, data: Record<string, unknown>) =>
+    apiClient.put<EditResultDto>(`/bank/${id}`, data),
+
+  /** 单只发送到存档 (POST /api/Bank/{id}/move-to-save) */
+  sendToSave: (id: string, data: { saveFileId: string; targetBoxIndex: number; targetSlotIndex?: number }) =>
+    apiClient.post(`/bank/${id}/move-to-save`, data),
 };
