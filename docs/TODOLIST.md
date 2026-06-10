@@ -678,7 +678,7 @@
 - [x] **NDS ROM 入库** — 9 个 ROM 元数据导入 `rom_files`（128-306MB 走文件系统 `local_path`，不存 BYTEA）
 - [x] **`CreateNewGame` 扩展** — 支持 Gen4/5 游戏版本号（Diamond=10, Pearl=11, Platinum=12, HG=7, SS=8, Black=20, White=21, B2=22, W2=23）
 - [x] **ROM 下载端点扩展** — 大 ROM 从文件系统 Streaming 服务
-- [ ] **最小测试页验证** — 浏览器访问 `/emulator/nds/test.html`，确认 ROM 加载 + 双屏渲染 + 存档读写
+- [x] **最小测试页验证** — 浏览器访问 `/emulator/nds/test.html`，确认 ROM 加载 + 双屏渲染 + 存档读写
 
 ### H.2 TypeScript 封装
 
@@ -697,8 +697,8 @@
 
 ### H.4 后端扩展
 
-- [ ] **NDS ROM 导入** — `EmulatorController.ImportLocal` 扩展 NDS ROM 模式
-- [ ] **NDS_VERSION_MAP** — gameVersion → gameId 映射（Gen4/5 版本号）
+- [x] **NDS ROM 导入** — `EmulatorController.ImportLocal` 扩展 NDS ROM 模式
+- [x] **NDS_VERSION_MAP** — gameVersion → gameId 映射（Gen4/5 版本号）
 - [x] **存档兼容**
   - PKHeX.Core 可正确解析 NDS 原始 512KB save
   - DeSmuME `.dsv` 需保留外层 footer；服务端现已按 `.dsv -> 内核解析 -> 写回时拼回 footer` 处理
@@ -842,7 +842,7 @@
   - Gen6-7 存档行显示「本机」按钮（替代 WASM）
   - 未配置时引导至设置页；已配置时优先走 `pkmanager://` 协议
 
-- [ ] **3DS `main` 文件上传体验修复**
+- [x] **3DS `main` 文件上传体验修复**
   - 3DS 主存档通常为无扩展名 `main`
   - 当前上传控件 `accept` 仅含 `.sav/.dat/.dsv/.gci`，文件选择器默认看不到 `main`
   - 需支持无扩展名 `main` 的上传引导与前端限制策略
@@ -884,7 +884,7 @@
   - 需要改成当前真实实现：本地协议启动器 / 回退脚本启动 + 退出后自动同步 + 恢复本机旧存档
   - 避免后续开发 NDS/3DS 本地启动时继续被旧文档误导
 
-- [ ] **手动同步按钮**
+- [x] **手动同步按钮**不做
   - Saves 页 3DS 存档行添加「同步存档」按钮（Azahar 关闭后可用）
   - 点击 → 调用 `sync-from-local` → 成功后 Toast + 刷新存档列表
   - 按钮旁显示「上次同步时间」
@@ -942,7 +942,7 @@
   - `window.addEventListener('unhandledrejection', ...)` — 捕获未处理的 Promise 拒绝（当前此类异常完全静默丢失）
   - 所有捕获异常写入诊断 Store
 
-- [ ] **WASM/模拟器专用错误捕获**
+- [x] **WASM/模拟器专用错误捕获**不做
   - mGBA 和 melonDS 的 `console.error` / 异常 → 写入诊断 Store（当前仅 `console.error`，刷新后丢失）
   - WASM 加载失败（`.wasm` 404 / 内存不足 / SharedArrayBuffer 不可用）→ 诊断面板显示具体原因 + 解决建议
 
@@ -1165,11 +1165,11 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 | E: 世代专属与打磨 | 17 | 7 | 0 | 10 |
 | F: 后端基础设施 | 8 | 6 | 0 | 2 |
 | G: GBA在线模拟器 | 21 | 19 | 0 | 2 |
-| H: NDS在线模拟器 | 34 | 28 | 0 | 6 |
-| I: 3DS Azahar集成 | 19 | 16 | 0 | 3 |
-| J: 前端错误诊断 | 17 | 15 | 0 | 2 |
+| H: NDS在线模拟器 | 34 | 31 | 0 | 3 |
+| I: 3DS Azahar集成 | 19 | 18 | 0 | 1 |
+| J: 前端错误诊断 | 17 | 16 | 0 | 1 |
 | K: GitHub发布解耦 | 15 | 0 | 0 | 15 |
-| **合计** | **199** | **150** | **0** | **49** |
+| **合计** | **199** | **156** | **0** | **43** |
 
 > **更新 (2026-06-07) — 本地模拟器人工验证 + 项目文档刷新**：
 >
