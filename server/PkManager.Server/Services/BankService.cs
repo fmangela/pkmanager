@@ -18,13 +18,16 @@ public class BankService
     private readonly ParseService _parseService;
     private readonly SaveFileService _saveFileService;
     private readonly PokemonEditService _editService;
+    private readonly LegalityCacheService _legalityCache;
 
-    public BankService(NpgsqlConnection db, ParseService parseService, SaveFileService saveFileService, PokemonEditService editService)
+    public BankService(NpgsqlConnection db, ParseService parseService, SaveFileService saveFileService,
+        PokemonEditService editService, LegalityCacheService legalityCache)
     {
         _db = db;
         _parseService = parseService;
         _saveFileService = saveFileService;
         _editService = editService;
+        _legalityCache = legalityCache;
     }
 
     /// <summary>
@@ -211,6 +214,7 @@ public class BankService
             });
 
         result.UpdatedPokemon = dto;
+        _legalityCache.InvalidateBank(userId);
         return result;
     }
 
@@ -257,6 +261,7 @@ public class BankService
 
         // Only delete bank record after successful save write
         await _db.ExecuteAsync("DELETE FROM bank_pokemon WHERE id = @Id", new { Id = bankId });
+        _legalityCache.InvalidateBank(userId);
     }
 
     /// <summary>
@@ -326,6 +331,7 @@ public class BankService
             }
         }
 
+        _legalityCache.InvalidateBank(userId);
         return new BackfillResult { Fixed = fixed_, Skipped = skipped, Failed = failed };
     }
 
@@ -384,6 +390,7 @@ public class BankService
                 SourceSaveId = sourceSaveId
             });
 
+        _legalityCache.InvalidateBank(userId);
         return bankId;
     }
 
@@ -437,6 +444,7 @@ public class BankService
         await _saveFileService.ClearBoxSlot(saveFileId, userId, boxIndex, slotIndex);
 
         pokemon.Id = bankId;
+        _legalityCache.InvalidateBank(userId);
         return (bankId, pokemon);
     }
 
@@ -451,6 +459,7 @@ public class BankService
 
         if (deleted == 0)
             throw new BusinessException("宝可梦不存在", 404);
+        _legalityCache.InvalidateBank(userId);
     }
 
     /// <summary>
@@ -462,6 +471,7 @@ public class BankService
             "DELETE FROM bank_pokemon WHERE id = ANY(@Ids) AND user_id = @UserId",
             new { Ids = ids, UserId = userId });
 
+        _legalityCache.InvalidateBank(userId);
         return deleted;
     }
 
@@ -611,6 +621,8 @@ public class BankService
                 new { Ids = movedIds, UserId = userId });
         }
 
+        _legalityCache.InvalidateBank(userId);
+
         return new BatchMoveResult
         {
             MovedCount = moved,
@@ -627,6 +639,83 @@ public class BankService
         var invalid = Path.GetInvalidFileNameChars();
         var sanitized = new string(name.Where(c => !invalid.Contains(c)).ToArray());
         return string.IsNullOrWhiteSpace(sanitized) ? "pokemon" : sanitized;
+    }
+
+    /// <summary>
+    /// 银行宝可梦批量合法性扫描（全量，用于缓存 + 内存分页）。
+    /// </summary>
+    public async Task<BankBatchLegalityReportDto> BatchLegalityScan(Guid userId)
+    {
+        var report = new BankBatchLegalityReportDto();
+        var slots = new List<SlotLegalityDto>();
+        var strings = GameInfo.GetStrings("zh");
+
+        var records = (await _db.QueryAsync<BankScanRecord>(
+            @"SELECT id, species, species_name AS SpeciesName, nickname, level,
+                     is_shiny AS IsShiny, pkm_data_base64 AS PkmDataBase64
+              FROM bank_pokemon WHERE user_id = @UserId ORDER BY created_at DESC",
+            new { UserId = userId })).ToList();
+
+        report.Total = records.Count;
+
+        foreach (var rec in records)
+        {
+            if (string.IsNullOrEmpty(rec.PkmDataBase64))
+            {
+                slots.Add(new SlotLegalityDto
+                {
+                    SlotId = $"bank:{rec.Id}", BoxIndex = -1, SlotIndex = -1, IsParty = false,
+                    Species = rec.Species, SpeciesName = rec.SpeciesName ?? $"#{rec.Species}",
+                    Nickname = rec.Nickname, Level = rec.Level, IsShiny = rec.IsShiny,
+                    Status = LegalityStatus.Illegal, FirstIssue = "缺少PKM数据"
+                });
+                continue;
+            }
+
+            try
+            {
+                var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(rec.PkmDataBase64));
+                if (pkm == null) continue;
+
+                var la = new LegalityAnalysis(pkm);
+                var status = LegalizationService.ComputeLegalityStatus(la);
+                slots.Add(new SlotLegalityDto
+                {
+                    SlotId = $"bank:{rec.Id}", BoxIndex = -1, SlotIndex = -1, IsParty = false,
+                    Species = pkm.Species,
+                    SpeciesName = GetSafeString(strings.Species, pkm.Species, $"#{pkm.Species}"),
+                    Nickname = pkm.Nickname, Level = pkm.CurrentLevel, IsShiny = pkm.IsShiny,
+                    Status = status,
+                    FirstIssue = status != LegalityStatus.Legal
+                        ? LegalizationService.GetFirstIssue(la) : null
+                });
+            }
+            catch
+            {
+                slots.Add(new SlotLegalityDto
+                {
+                    SlotId = $"bank:{rec.Id}", BoxIndex = -1, SlotIndex = -1, IsParty = false,
+                    Species = rec.Species, SpeciesName = rec.SpeciesName ?? $"#{rec.Species}",
+                    Nickname = rec.Nickname, Level = rec.Level, IsShiny = rec.IsShiny,
+                    Status = LegalityStatus.Illegal, FirstIssue = "PKM解析失败"
+                });
+            }
+        }
+
+        report.LegalCount = slots.Count(s => s.Status == LegalityStatus.Legal);
+        report.FishyCount = slots.Count(s => s.Status == LegalityStatus.Fishy);
+        report.IllegalCount = slots.Count(s => s.Status == LegalityStatus.Illegal);
+        report.Slots = slots;
+        return report;
+    }
+
+    /// <summary>Invalidate bank legality cache.</summary>
+    public void InvalidateBankLegalityCache(Guid userId) => _legalityCache.InvalidateBank(userId);
+
+    private static string GetSafeString(IReadOnlyList<string> list, int index, string fallback)
+    {
+        if (index >= 0 && index < list.Count) return list[index];
+        return fallback;
     }
 }
 
@@ -696,4 +785,18 @@ public class MoveToSaveRequest
     public Guid SaveFileId { get; set; }
     public int TargetBoxIndex { get; set; }
     public int? TargetSlotIndex { get; set; }
+}
+
+/// <summary>
+/// 银行批量扫描的原始数据记录。
+/// </summary>
+public class BankScanRecord
+{
+    public Guid Id { get; set; }
+    public int Species { get; set; }
+    public string? SpeciesName { get; set; }
+    public string? Nickname { get; set; }
+    public int Level { get; set; }
+    public bool IsShiny { get; set; }
+    public string? PkmDataBase64 { get; set; }
 }

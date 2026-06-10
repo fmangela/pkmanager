@@ -22,15 +22,17 @@ public class EmulatorController : ControllerBase
     private readonly SaveFileService _saveFileService;
     private readonly ParseService _parseService;
     private readonly UserContext _userContext;
+    private readonly LegalityCacheService _legalityCache;
     private readonly string _baseSaveDir;
 
     private readonly SettingsService _settingsService;
 
-    public EmulatorController(NpgsqlConnection db, SaveFileService saveFileService, ParseService parseService, UserContext userContext, IWebHostEnvironment env, SettingsService settingsService)
+    public EmulatorController(NpgsqlConnection db, SaveFileService saveFileService, ParseService parseService, UserContext userContext, IWebHostEnvironment env, SettingsService settingsService, LegalityCacheService legalityCache)
     {
         _db = db; _saveFileService = saveFileService; _parseService = parseService; _userContext = userContext;
         _baseSaveDir = Path.Combine(env.ContentRootPath, "data", "saves");
         _settingsService = settingsService;
+        _legalityCache = legalityCache;
     }
 
     /// <summary>列出可用 ROM</summary>
@@ -210,6 +212,8 @@ public class EmulatorController : ControllerBase
                 new { Id = saveFileId, Size = (long)data.Length });
         }
 
+        _legalityCache.InvalidateSave(saveFileId);
+
         return Ok(ApiResponse<object>.Ok(new { saveFileId, trainerName, pokemonCount }, "存档已同步"));
     }
 
@@ -314,6 +318,8 @@ public class EmulatorController : ControllerBase
         if (usedSyncToken)
             _syncTokens.TryRemove(token, out _);
 
+        _legalityCache.InvalidateSave(saveFileId);
+
         return Ok(ApiResponse<object>.Ok(new { }, "存档已同步"));
     }
 
@@ -396,6 +402,8 @@ public class EmulatorController : ControllerBase
                 "UPDATE save_files SET file_size=@Size, is_modified=TRUE, updated_at=NOW() WHERE id=@Id",
                 new { Id = saveFileId, Size = (long)data.Length });
         }
+
+        _legalityCache.InvalidateSave(saveFileId);
 
         return Ok(ApiResponse<object>.Ok(new { saveFileId, trainerName, pokemonCount }, "存档已同步"));
     }

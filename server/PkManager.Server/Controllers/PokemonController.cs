@@ -19,6 +19,8 @@ public class PokemonController : ControllerBase
     private readonly ParseService _parseService;
     private readonly PokemonEditService _editService;
     private readonly SaveFileService _saveFileService;
+    private readonly LegalizationService _legalizationService;
+    private readonly LegalityCacheService _legalityCache;
     private readonly UserContext _userContext;
 
     public PokemonController(
@@ -26,12 +28,16 @@ public class PokemonController : ControllerBase
         ParseService parseService,
         PokemonEditService editService,
         SaveFileService saveFileService,
+        LegalizationService legalizationService,
+        LegalityCacheService legalityCache,
         UserContext userContext)
     {
         _db = db;
         _parseService = parseService;
         _editService = editService;
         _saveFileService = saveFileService;
+        _legalizationService = legalizationService;
+        _legalityCache = legalityCache;
         _userContext = userContext;
     }
 
@@ -217,6 +223,8 @@ public class PokemonController : ControllerBase
                 new { Id = saveFileId, Data = updatedData, Size = updatedData.Length });
         }
 
+        _legalityCache.InvalidateSave(saveFileId);
+
         return _saveFileService.ReadPartySlot(saveFileId, userId, slotIndex);
     }
 
@@ -306,7 +314,202 @@ public class PokemonController : ControllerBase
         return File(data, "application/octet-stream", $"pokemon_{id}.pk{Math.Max((int)1, (int)pkm.Format)}");
     }
 
+    // ── F.2 合法性引擎升级: 生成 + 修复 ─────────────────────
+
+    /// <summary>
+    /// 从模板自动生成合法宝可梦。
+    /// </summary>
+    [HttpPost("legalize")]
+    public async Task<ActionResult<ApiResponse<LegalizationResultDto>>> Legalize(
+        [FromBody] LegalizationRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<LegalizationResultDto>.Error(401, "未登录"));
+
+        if (request.Species < 1 || request.Species > 1025)
+            return BadRequest(ApiResponse<LegalizationResultDto>.Error(400, "物种ID无效"));
+
+        try
+        {
+            var trainerInfo = await ResolveTrainerInfo(request.TrainerSaveFileId,
+                (GameVersion)request.TargetGameVersion);
+
+            var (pkm, error, changes) = _legalizationService.GenerateFromTemplate(request, trainerInfo);
+
+            if (pkm == null)
+                return Ok(ApiResponse<LegalizationResultDto>.Ok(
+                    new LegalizationResultDto { Success = false, Error = error },
+                    error ?? "生成失败"));
+
+            var dto = ParseService.MapToPokemonDto(pkm);
+            var base64 = new byte[pkm.SIZE_PARTY];
+            pkm.WriteDecryptedDataParty(base64);
+
+            return Ok(ApiResponse<LegalizationResultDto>.Ok(
+                new LegalizationResultDto
+                {
+                    Success = true,
+                    Pokemon = dto,
+                    PkmDataBase64 = Convert.ToBase64String(base64),
+                    Changes = changes
+                }, "合法宝可梦已生成"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<LegalizationResultDto>.Error(ex.ErrorCode, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<LegalizationResultDto>.Error(400, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 从 Showdown 文本导入并生成合法宝可梦。
+    /// </summary>
+    [HttpPost("legalize-showdown")]
+    public async Task<ActionResult<ApiResponse<LegalizationResultDto>>> LegalizeShowdown(
+        [FromBody] ShowdownImportRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<LegalizationResultDto>.Error(401, "未登录"));
+
+        if (string.IsNullOrWhiteSpace(request.ShowdownText))
+            return BadRequest(ApiResponse<LegalizationResultDto>.Error(400, "Showdown文本为空"));
+
+        try
+        {
+            var trainerInfo = await ResolveTrainerInfo(request.TrainerSaveFileId,
+                (GameVersion)request.TargetGameVersion);
+
+            var (pkm, error, encounterType) = _legalizationService.GenerateFromShowdown(request, trainerInfo);
+
+            if (pkm == null)
+                return Ok(ApiResponse<LegalizationResultDto>.Ok(
+                    new LegalizationResultDto { Success = false, Error = error },
+                    error ?? "Showdown导入失败"));
+
+            var dto = ParseService.MapToPokemonDto(pkm);
+            var base64 = new byte[pkm.SIZE_PARTY];
+            pkm.WriteDecryptedDataParty(base64);
+
+            return Ok(ApiResponse<LegalizationResultDto>.Ok(
+                new LegalizationResultDto
+                {
+                    Success = true,
+                    Pokemon = dto,
+                    PkmDataBase64 = Convert.ToBase64String(base64),
+                    EncounterType = encounterType,
+                    Changes = { "Generated from Showdown" }
+                }, "Showdown导入成功"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<LegalizationResultDto>.Error(ex.ErrorCode, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<LegalizationResultDto>.Error(400, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 仅解析 Showdown 文本预览（不执行遭遇搜索生成）。
+    /// </summary>
+    [HttpPost("parse-showdown")]
+    public ActionResult<ApiResponse<ShowdownParseResultDto>> ParseShowdown(
+        [FromBody] ShowdownParseRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<ShowdownParseResultDto>.Error(401, "未登录"));
+
+        if (string.IsNullOrWhiteSpace(request.ShowdownText))
+            return BadRequest(ApiResponse<ShowdownParseResultDto>.Error(400, "Showdown文本为空"));
+
+        try
+        {
+            var sets = _legalizationService.ParseShowdownText(request.ShowdownText);
+            return Ok(ApiResponse<ShowdownParseResultDto>.Ok(
+                new ShowdownParseResultDto { Success = true, Sets = sets },
+                $"解析到 {sets.Count} 套配置"));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<ShowdownParseResultDto>.Error(400, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 对非法宝可梦应用自动修复（仅更新面板临时状态，不持久化）。
+    /// </summary>
+    [HttpPost("auto-fix")]
+    public async Task<ActionResult<ApiResponse<AutoFixResultDto>>> AutoFix(
+        [FromBody] AutoFixRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<AutoFixResultDto>.Error(401, "未登录"));
+
+        if (string.IsNullOrEmpty(request.PkmDataBase64))
+            return BadRequest(ApiResponse<AutoFixResultDto>.Error(400, "缺少宝可梦数据"));
+
+        try
+        {
+            var pkm = _parseService.RebuildPkm(request.PkmDataBase64);
+
+            var targetVersion = request.TargetGameVersion.HasValue
+                ? (GameVersion)request.TargetGameVersion.Value
+                : pkm.Version;
+
+            var trainerInfo = await ResolveTrainerInfo(request.TrainerSaveFileId, targetVersion);
+
+            var result = _legalizationService.AutoFix(pkm, request.EditSnapshot,
+                request.FixActions, trainerInfo);
+
+            return Ok(ApiResponse<AutoFixResultDto>.Ok(result,
+                result.Fixed ? $"修复完成: {string.Join(", ", result.AppliedFixes)}" : "无需修复"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<AutoFixResultDto>.Error(ex.ErrorCode, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<AutoFixResultDto>.Error(400, ex.Message));
+        }
+    }
+
     // ── 私有方法 ────────────────────────────────────────
+
+    /// <summary>
+    /// 解析 ITrainerInfo: 优先从存档提取（OT/TID/SID/Language/Gender），版本用目标版本覆盖。
+    /// 无存档时退化为 SimpleTrainerInfo(targetVersion)。
+    /// </summary>
+    private async Task<ITrainerInfo> ResolveTrainerInfo(Guid? trainerSaveFileId, GameVersion targetVersion)
+    {
+        if (trainerSaveFileId.HasValue)
+        {
+            var userId = _userContext.UserId;
+            if (userId == null) return new SimpleTrainerInfo(targetVersion);
+
+            var saveFile = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
+                "SELECT * FROM save_files WHERE id = @Id AND user_id = @UserId",
+                new { Id = trainerSaveFileId.Value, UserId = userId.Value });
+
+            if (saveFile != null)
+            {
+                byte[] rawData;
+                if (!string.IsNullOrEmpty(saveFile.SavePath) && System.IO.File.Exists(saveFile.SavePath))
+                    rawData = await System.IO.File.ReadAllBytesAsync(saveFile.SavePath);
+                else
+                    rawData = saveFile.RawSaveData;
+
+                var sav = ParseService.OpenSaveFile(rawData, saveFile.Filename);
+                return new SimpleTrainerInfo(sav, targetVersion);
+            }
+        }
+
+        return new SimpleTrainerInfo(targetVersion);
+    }
 
     private async Task<PKM?> FindPkm(Guid id, Guid userId)
     {

@@ -505,109 +505,22 @@ public class PokemonEditService
         var buf = new byte[pkm.SIZE_PARTY]; pkm.WriteDecryptedDataParty(buf); return buf;
     }
 
-    // ── 合法性辅助方法 ──────────────────────────────────
+    // ── 合法性辅助方法（委托到 LegalizationService 统一实现）──
 
-    private static LegalityStatus ComputeLegalityStatus(LegalityAnalysis la)
-    {
-        if (la.Valid) return LegalityStatus.Legal;
+    public static LegalityStatus ComputeLegalityStatus(LegalityAnalysis la)
+        => LegalizationService.ComputeLegalityStatus(la);
 
-        var hasInvalid = la.Results.Any(r => r.Judgement == Severity.Invalid)
-                         || !MoveResult.AllValid(la.Info.Moves)
-                         || !MoveResult.AllValid(la.Info.Relearn);
+    public static string GetFirstIssue(LegalityAnalysis la)
+        => LegalizationService.GetFirstIssue(la);
 
-        if (hasInvalid) return LegalityStatus.Illegal;
+    public static string GetHumanReadableIssue(CheckResult r)
+        => LegalizationService.GetHumanReadableIssue(r);
 
-        var hasFishy = la.Results.Any(r => r.Judgement == Severity.Fishy);
-        return hasFishy ? LegalityStatus.Fishy : LegalityStatus.Legal;
-    }
+    public static bool CanAutoFix(CheckResult r)
+        => LegalizationService.CanAutoFix(r);
 
-    private static string GetFirstIssue(LegalityAnalysis la)
-    {
-        // Prefer Invalid over Fishy
-        foreach (var r in la.Results)
-        {
-            if (r.Judgement == Severity.Invalid)
-                return GetHumanReadableIssue(r);
-        }
-        if (!MoveResult.AllValid(la.Info.Moves))
-            return "存在不合法招式";
-        if (!MoveResult.AllValid(la.Info.Relearn))
-            return "存在不合法回忆招式";
-        foreach (var r in la.Results)
-        {
-            if (r.Judgement == Severity.Fishy)
-                return GetHumanReadableIssue(r);
-        }
-        return string.Empty;
-    }
-
-    private static string GetHumanReadableIssue(CheckResult r)
-    {
-        var id = GetChineseCheckName(r.Identifier);
-        var comment = $"{id}校验失败";
-        return r.Judgement switch
-        {
-            Severity.Valid => string.Empty,
-            Severity.Fishy => $"⚠️ {id}: {comment}",
-            Severity.Invalid => $"❌ {id}: {comment}",
-            _ => comment
-        };
-    }
-
-    private static string GetChineseCheckName(CheckIdentifier id) => id switch
-    {
-        CheckIdentifier.Encounter => "遭遇",
-        CheckIdentifier.CurrentMove => "当前招式",
-        CheckIdentifier.RelearnMove => "回忆招式",
-        CheckIdentifier.Shiny => "闪光",
-        CheckIdentifier.Gender => "性别",
-        CheckIdentifier.Language => "语言",
-        CheckIdentifier.Nickname => "昵称",
-        CheckIdentifier.Trainer => "训练家",
-        CheckIdentifier.Level => "等级",
-        CheckIdentifier.Ball => "球种",
-        CheckIdentifier.Memory => "记忆",
-        CheckIdentifier.Geography => "地理",
-        CheckIdentifier.Form => "形态",
-        CheckIdentifier.Egg => "蛋",
-        CheckIdentifier.Misc => "杂项",
-        CheckIdentifier.Fateful => "命运邂逅",
-        CheckIdentifier.Ribbon => "缎带",
-        CheckIdentifier.Training => "训练",
-        CheckIdentifier.Ability => "特性",
-        CheckIdentifier.Evolution => "进化",
-        CheckIdentifier.Nature => "性格",
-        CheckIdentifier.GameOrigin => "来源版本",
-        CheckIdentifier.HeldItem => "持有道具",
-        CheckIdentifier.RibbonMark => "证章",
-        CheckIdentifier.Marking => "标记",
-        _ => id.ToString()
-    };
-
-    private static bool CanAutoFix(CheckResult r)
-    {
-        if (r.Judgement == Severity.Valid) return false;
-        return r.Identifier switch
-        {
-            CheckIdentifier.Ball => true,
-            CheckIdentifier.Encounter => true,
-            CheckIdentifier.CurrentMove => true,
-            CheckIdentifier.RelearnMove => true,
-            _ => false
-        };
-    }
-
-    private static string? GetFixAction(CheckResult r)
-    {
-        return r.Identifier switch
-        {
-            CheckIdentifier.Ball => "FixBall",
-            CheckIdentifier.Encounter => "FixMetLocation",
-            CheckIdentifier.CurrentMove => "FixMoves",
-            CheckIdentifier.RelearnMove => "FixRelearnMoves",
-            _ => null
-        };
-    }
+    public static string? GetFixAction(CheckResult r)
+        => LegalizationService.GetFixAction(r);
 
     private static string GetSafeString(IReadOnlyList<string> list, int index, string fallback)
     {

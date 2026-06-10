@@ -20,11 +20,14 @@ public class SaveFileService
 
     private readonly NpgsqlConnection _db;
     private readonly ParseService _parseService;
+    private readonly LegalityCacheService _legalityCache;
 
-    public SaveFileService(NpgsqlConnection db, ParseService parseService, IWebHostEnvironment env)
+    public SaveFileService(NpgsqlConnection db, ParseService parseService,
+        IWebHostEnvironment env, LegalityCacheService legalityCache)
     {
         _db = db;
         _parseService = parseService;
+        _legalityCache = legalityCache;
         _baseSaveDir = Path.Combine(env.ContentRootPath, "data", "saves");
     }
 
@@ -313,6 +316,7 @@ public class SaveFileService
 
         // 写成功后再删银行记录；删除失败宁可留重复不丢数据
         await _db.ExecuteAsync("DELETE FROM bank_pokemon WHERE id = @Id", new { Id = bankPkm.Id });
+        _legalityCache.InvalidateBank(userId);
     }
 
     public async Task SwapBoxes(Guid saveFileId, Guid userId, int boxA, int boxB)
@@ -489,6 +493,7 @@ public class SaveFileService
         // 恢复前先备份当前
         await CreateBackup(saveFileId, userId, "恢复前自动备份");
         await WriteSaveBytes(sf, userId, data);
+        _legalityCache.InvalidateSave(saveFileId);
     }
 
     // ═══ 下载 / 扫描 ════════════════════════════════════
@@ -504,8 +509,23 @@ public class SaveFileService
     {
         var saveFile = await LoadSaveFileEntity(saveFileId, userId);
         var rawData = ReadSaveBytes(saveFile);
+        var hash = ComputeContentHash(rawData);
+
+        // 查缓存
+        var cached = _legalityCache.GetSaveReport(saveFileId, hash);
+        if (cached != null) return cached;
+
         var sav = ParseService.OpenSaveFile(rawData, saveFile.Filename);
-        return pokemonEditService.BatchScan(sav);
+        var report = pokemonEditService.BatchScan(sav);
+
+        _legalityCache.SetSaveReport(saveFileId, report, hash);
+        return report;
+    }
+
+    private static string ComputeContentHash(byte[] data)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        return Convert.ToBase64String(sha.ComputeHash(data));
     }
 
     // ═══ 背包编辑（Bag Editor）════════════════════════════
@@ -961,6 +981,7 @@ public class SaveFileService
         var data = ParseService.FinalizeSaveBytes(sav, originalData);
         ValidateWrittenSave(data, sf.Filename);
         await WriteSaveBytes(sf, userId, data);
+        _legalityCache.InvalidateSave(sf.Id);
     }
 
     private byte[] ReadBackupBytes(SaveBackupEntity backup)

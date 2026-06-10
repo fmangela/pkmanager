@@ -209,6 +209,86 @@ export interface BatchLegalityReportDto {
   slots: SlotLegalityDto[];
 }
 
+// ── F.2 合法性引擎升级: 生成 + 修复 DTO ──────────────────
+
+export interface LegalizationRequest {
+  species: number;
+  targetGameVersion: number;
+  isShiny?: boolean;
+  nature?: number;
+  gender?: number;
+  ability?: number;
+  form?: number;
+  level?: number;
+  desiredMoves?: number[];
+  preserveOT?: boolean;
+  originalTrainerName?: string;
+  trainerSaveFileId?: string;
+}
+
+export interface ShowdownImportRequest {
+  showdownText: string;
+  targetGameVersion: number;
+  trainerSaveFileId?: string;
+}
+
+export interface AutoFixRequest {
+  pkmDataBase64: string;
+  editSnapshot: Record<string, unknown>;
+  fixActions?: string[];
+  trainerSaveFileId?: string;
+  targetGameVersion?: number;
+}
+
+export interface LegalizationResultDto {
+  success: boolean;
+  error?: string;
+  pokemon?: PokemonDto;
+  pkmDataBase64?: string;
+  changes: string[];
+  encounterType?: string;
+}
+
+export interface AutoFixResultDto {
+  fixed: boolean;
+  appliedFixes: string[];
+  failedFixes: string[];
+  updatedPokemon?: PokemonDto;
+  pkmDataBase64?: string;
+  status: LegalityStatus;
+  judgements: JudgementDto[];
+  report?: string;
+}
+
+export interface ShowdownParseResultDto {
+  success: boolean;
+  error?: string;
+  sets: ShowdownSetPreviewDto[];
+}
+
+export interface ShowdownSetPreviewDto {
+  species: string;
+  speciesId: number;
+  nickname?: string;
+  level: number;
+  shiny: boolean;
+  gender?: string;
+  ability?: string;
+  nature?: string;
+  item?: string;
+  moves: string[];
+  form?: string;
+  rawText: string;
+}
+
+export interface BankBatchLegalityReportDto {
+  total: number;
+  legalCount: number;
+  fishyCount: number;
+  illegalCount: number;
+  slots: SlotLegalityDto[];
+}
+
 export const saveFileApi = {
   list: () =>
     apiClient.get<SaveFileInfo[]>('/SaveFile'),
@@ -299,6 +379,24 @@ export const saveFileApi = {
 
   batchPokedex: (saveFileId: string, action: string) =>
     apiClient.post<PokedexDto>(`/SaveFile/${saveFileId}/pokedex/batch`, { action }),
+
+  // ── F.2 合法性引擎升级: 生成 + 修复 ──
+  legalize: (data: LegalizationRequest) =>
+    apiClient.post<LegalizationResultDto>('/Pokemon/legalize', data),
+
+  legalizeShowdown: (data: ShowdownImportRequest) =>
+    apiClient.post<LegalizationResultDto>('/Pokemon/legalize-showdown', data),
+
+  parseShowdown: (data: { showdownText: string }) =>
+    apiClient.post<ShowdownParseResultDto>('/Pokemon/parse-showdown', data),
+
+  autoFix: (data: AutoFixRequest) =>
+    apiClient.post<AutoFixResultDto>('/Pokemon/auto-fix', data),
+
+  bankLegalityReport: (page?: number, pageSize?: number) =>
+    apiClient.post<BankBatchLegalityReportDto>('/Bank/legality-report', null, {
+      params: { page: page ?? 1, pageSize: pageSize ?? 100 }
+    }),
 };
 
 // ── Bag types ─────────────────────────────────────────

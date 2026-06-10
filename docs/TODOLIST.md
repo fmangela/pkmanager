@@ -573,16 +573,23 @@
 
 ### F.2 合法性引擎升级
 
-- [ ] **Auto-Legality 后端服务**
-  - 从模板/Showdown 文本生成合法宝可梦
-  - 调用 PKHeX.Core `EncounterMovesetGenerator` + `ClassicEraRNG`
-  - 支持 Gen3-5 Method-1 PID↔IV 关联
-  - 保留原始 OT/Met/Ribbon 信息
-  - Legalization change report（返回变更字段清单）
+- [x] **Auto-Legality 后端服务**
+  - 从模板/Showdown 文本生成合法宝可梦 (`LegalizationService.GenerateFromTemplate` / `GenerateFromShowdown`)
+  - 调用 PKHeX.Core `EncounterMovesetGenerator` → `IEncounterConvertible.ConvertToPKM`
+  - 支持 Gen3-5 Method-1 PID↔IV 关联（严格分层：仅 wild slot + MethodFinder.Analyze == None 时触发）
+  - 保留原始 OT/Met/Ribbon 信息（PreserveOT 选项）
+  - Legalization change report（返回变更字段清单 `LegalizationResultDto.Changes`）
+  - **AutoFix 7 策略**：FixBall / FixMetLocation / FixMoves / FixRelearnMoves / FixAbility / FixNature / FixShiny（完整 Shiny 枚举处理）
+  - Showdown 导入: `ShowdownParsing.GetShowdownSets` → 字段投影（Ability是int, Gender是byte?, IsShiny只读→SetShiny）
+  - Ability ID→槽位映射: `IPersonalInfo.GetIndexOfAbility()`，不匹配直接fail（不降级Any12）
+  - TrainerInfo 包装: `new SimpleTrainerInfo(saveFile, targetGameVersion)` — 拷贝OT/TID/SID, 覆盖Version/Context
+  - AutoFix 语义: 仅更新面板临时状态（不自动持久化）, 前端 `buildEditRequest` 作为 editSnapshot 一起发送
 
-- [ ] **批量合法性重检**
-  - 后台任务全存档/全银行合法性扫描
-  - 结果缓存，避免每次打开都重新扫描
+- [x] **批量合法性重检**
+  - `LegalityCacheService`（Singleton, ConcurrentDictionary + 5min TTL + SHA-256 content hash）
+  - 银行全量批量扫描: `BankService.BatchLegalityScan` → `POST /api/Bank/legality-report?page=&pageSize=`（全库统计, 内存分页）
+  - 8 条缓存失效路径: WriteBackSave / WriteBoxSlot / PersistPartyEdit / SyncSave / SyncSaveBinary / SyncSaveBinaryNew / Bank mutations / MoveFromBank
+  - `PokemonEditService`: 合法性辅助方法委托到 `LegalizationService`（统一实现）; CanAutoFix 扩展为 7 项
 
 ### F.3 存档架构简化（重要）
 
@@ -1156,13 +1163,13 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 | C: 新增功能模块 | 12 | 12 | 0 | 0 |
 | D: 高级工具 | 14 | 0 | 0 | 14 |
 | E: 世代专属与打磨 | 17 | 7 | 0 | 10 |
-| F: 后端基础设施 | 8 | 4 | 0 | 4 |
+| F: 后端基础设施 | 8 | 6 | 0 | 2 |
 | G: GBA在线模拟器 | 21 | 19 | 0 | 2 |
 | H: NDS在线模拟器 | 34 | 28 | 0 | 6 |
 | I: 3DS Azahar集成 | 19 | 16 | 0 | 3 |
 | J: 前端错误诊断 | 17 | 15 | 0 | 2 |
 | K: GitHub发布解耦 | 15 | 0 | 0 | 15 |
-| **合计** | **199** | **148** | **0** | **51** |
+| **合计** | **199** | **150** | **0** | **49** |
 
 > **更新 (2026-06-07) — 本地模拟器人工验证 + 项目文档刷新**：
 >
@@ -1558,3 +1565,21 @@ Week 19-20: Phase I.4 存档联动（同步回传 + 冲突处理）
 > - TypeScript 0 错误 + .NET Build 0 错误 + Vite 构建通过
 > - Phase C: 12/12 已完成 (+1) ✅ **Phase C 全部完结**
 > - 合计: 199/145 (+4)
+
+> **更新 (2026-06-10) — Phase F.2 合法性引擎升级完成**：
+>
+> ### F.2 合法性引擎升级 — 生成 + 修复 + 缓存
+>
+> - ✅ **LegalizationService** — ShowdownSet → PKM 字段投影层（`ShowdownParsing.GetShowdownSets` + `EncounterMovesetGenerator.GenerateEncounters` + `IEncounterConvertible.ConvertToPKM`）。覆盖 Nickname/HeldItem/IVs/EVs/Friendship/Moves/Nature/Ability 全字段；DesiredMoves 显式写回并复验合法性；Friendship 仅在 Showdown 文本显式声明时覆盖；Ability ID→槽位映射（`IPersonalInfo.GetIndexOfAbility`，不匹配直接 fail）
+> - ✅ **Showdown 导入** — `POST /api/Pokemon/legalize-showdown` + `POST /api/Pokemon/parse-showdown`（解析预览）
+> - ✅ **模板生成** — `POST /api/Pokemon/legalize`，`EncounterCriteria` 约束，DesiredMoves 写回+复验
+> - ✅ **AutoFix 7 策略** — `POST /api/Pokemon/auto-fix`，临时状态不持久化。策略: FixBall / FixMetLocation / FixMoves / FixRelearnMoves / FixAbility / FixNature / FixShiny（完整 Shiny 枚举处理: Never/Always/AlwaysStar/AlwaysSquare/FixedValue）。前端 editSnapshot 一起发送（解决修旧 base64 问题）。Gen3-5 Method-1 PID/IV 严格分层触发。失败返回 Status=Illegal
+> - ✅ **TrainerInfo 包装** — `new SimpleTrainerInfo(saveFile, targetGameVersion)` 拷贝 OT/TID/SID，显式覆盖 Version/Context
+> - ✅ **CanAutoFix 4→7 项** — Ball/Encounter/CurrentMove/RelearnMove + Ability/Nature/Shiny。`PokemonEditService` 委托到 `LegalizationService` 统一实现（public static helpers 供 BankService 等复用）
+> - ✅ **LegalityCacheService**（Singleton）— ConcurrentDictionary + 5min TTL + SHA-256 content hash。存档缓存按 `(saveFileId, hash)` 自动失效；银行缓存按 `userId`（全量扫描 + 内存分页）
+> - ✅ **完整缓存失效矩阵** — 10 条路径: `WriteBackSave` / `WriteBoxSlot` / `PersistPartyEdit` / `SyncSave` / `SyncSaveBinary` / `SyncSaveBinaryNew` / `RestoreBackup` / `SaveBankPokemon` / `MoveSingleToSave` / `AddToBank` / `MoveFromSave` / `Delete` / `BatchDelete` / `BatchMoveToSave` / `Backfill` / `MoveFromBank`
+> - ✅ **银行批量扫描** — `POST /api/Bank/legality-report?page=&pageSize=`，全库统计 + 内存分页
+> - ✅ **前端** — `EditPanel.tsx` handleFix 替换为真实 API 调用；`ShowdownImportModal` 接线到编辑面板；`saveFile.ts` 新增 5 个 API 函数 + 全部 DTO 类型
+> - TypeScript 0 错误 + .NET Build 0 错误 + Vite 构建通过
+> - Phase F: 8/6 (+2)
+> - 合计: 199/150 (+2)

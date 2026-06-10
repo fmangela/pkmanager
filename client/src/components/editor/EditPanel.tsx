@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import {
   Drawer, Tabs, Button, App, Space,
 } from 'antd';
-import { SaveOutlined, BankOutlined, CopyOutlined } from '@ant-design/icons';
-import type { PokemonDto, LegalityStatus, JudgementDto, EditResultDto, LegalityReportDto } from '../../api/saveFile';
+import { SaveOutlined, BankOutlined, CopyOutlined, ImportOutlined } from '@ant-design/icons';
+import type { PokemonDto, LegalityStatus, JudgementDto, EditResultDto, LegalityReportDto, AutoFixResultDto } from '../../api/saveFile';
 import { saveFileApi } from '../../api/saveFile';
 import { useResourceStore } from '../../stores/resourceStore';
 import { buildEditRequest, validateFields } from './editHelpers';
+import ShowdownImportModal from './ShowdownImportModal';
 import MainTab from './MainTab';
 import MetTab from './MetTab';
 import StatsTab from './StatsTab';
@@ -38,8 +39,8 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
   // Counter for regular field edits (triggers re-render only)
   const [, forceUpdate] = useState(0);
   const notifyChange = () => forceUpdate(n => n + 1);
-  // Separate counter for post-save remount (forces clean state)
   const [saveKey, setSaveKey] = useState(0);
+  const [showImport, setShowImport] = useState(false);
 
   const { loadAll } = useResourceStore();
   const { message } = App.useApp();
@@ -102,8 +103,41 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
     }
   };
 
-  const handleFix = (fixAction: string) => {
-    message.info(`修复功能将在下一版本实现: ${fixAction}`);
+  const handleFix = async (fixAction: string) => {
+    const b64 = pokemon.pkmDataBase64;
+    if (!b64) { message.error('缺少宝可梦数据'); return; }
+    const editSnapshot = buildEditRequest(pokemon);
+    setLoading(true);
+    try {
+      const res = await saveFileApi.autoFix({
+        pkmDataBase64: b64,
+        editSnapshot,
+        fixActions: [fixAction],
+        trainerSaveFileId: saveFileId ?? undefined,
+      });
+      const result: AutoFixResultDto = res.data;
+      if (result.fixed && result.updatedPokemon) {
+        Object.assign(pokemon, result.updatedPokemon);
+        setLegality({
+          status: result.status,
+          report: result.report,
+          judgements: result.judgements,
+        });
+        notifyChange();
+        message.success(`修复完成: ${result.appliedFixes.join(', ')}`);
+        if (result.failedFixes.length > 0) {
+          message.warning(`部分修复失败: ${result.failedFixes.join(', ')}`);
+        }
+      } else {
+        message.warning(result.failedFixes.length > 0
+          ? `修复失败: ${result.failedFixes.join(', ')}`
+          : '修复不适用');
+      }
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || '修复失败');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleValidate = async () => {
@@ -192,6 +226,8 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
         <Space>
           <Button icon={<CopyOutlined />} size="small">复制</Button>
           <Button icon={<BankOutlined />} size="small">存入银行</Button>
+          <Button icon={<ImportOutlined />} size="small"
+            onClick={() => setShowImport(true)}>Showdown</Button>
           <Button onClick={onClose}>取消</Button>
           <Button type="primary" icon={<SaveOutlined />} loading={loading} onClick={handleSave}>
             保存修改
@@ -200,6 +236,18 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
       }
     >
       <Tabs key={`tabs-${saveKey}`} items={tabItems} defaultActiveKey="main" size="small" />
+      <ShowdownImportModal
+        open={showImport}
+        saveFileId={saveFileId}
+        onClose={() => setShowImport(false)}
+        onImported={(imported) => {
+          Object.assign(pokemon, imported);
+          notifyChange();
+          setLegality(null);
+          setShowImport(false);
+          message.success('Showdown 配置已导入，请检查并保存');
+        }}
+      />
     </Drawer>
   );
 };

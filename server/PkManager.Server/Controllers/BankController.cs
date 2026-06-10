@@ -12,11 +12,13 @@ public class BankController : ControllerBase
 {
     private readonly BankService _bankService;
     private readonly UserContext _userContext;
+    private readonly LegalityCacheService _legalityCache;
 
-    public BankController(BankService bankService, UserContext userContext)
+    public BankController(BankService bankService, UserContext userContext, LegalityCacheService legalityCache)
     {
         _bankService = bankService;
         _userContext = userContext;
+        _legalityCache = legalityCache;
     }
 
     /// <summary>
@@ -231,6 +233,55 @@ public class BankController : ControllerBase
         var result = await _bankService.Backfill(userId.Value);
         return Ok(ApiResponse<BackfillResult>.Ok(result,
             $"回填完成：修复 {result.Fixed} 条，跳过 {result.Skipped} 条（缺少原始数据），失败 {result.Failed} 条"));
+    }
+
+    /// <summary>
+    /// 银行宝可梦批量合法性扫描（全量扫描，缓存 5 分钟，内存分页返回）。
+    /// </summary>
+    [HttpPost("legality-report")]
+    public async Task<ActionResult<ApiResponse<BankBatchLegalityReportDto>>> BatchLegalityReport(
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 100)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<BankBatchLegalityReportDto>.Error(401, "未登录"));
+
+        try
+        {
+            // 查缓存（key=userId，全量扫描）
+            var cached = _legalityCache.GetBankReport(userId.Value);
+            if (cached != null)
+            {
+                var paged = new BankBatchLegalityReportDto
+                {
+                    Total = cached.Total,
+                    LegalCount = cached.LegalCount,
+                    FishyCount = cached.FishyCount,
+                    IllegalCount = cached.IllegalCount,
+                    Slots = cached.Slots.Skip((page - 1) * pageSize).Take(pageSize).ToList()
+                };
+                return Ok(ApiResponse<BankBatchLegalityReportDto>.Ok(paged, "来自缓存"));
+            }
+
+            var report = await _bankService.BatchLegalityScan(userId.Value);
+            _legalityCache.SetBankReport(userId.Value, report);
+
+            // 内存分页
+            var result = new BankBatchLegalityReportDto
+            {
+                Total = report.Total,
+                LegalCount = report.LegalCount,
+                FishyCount = report.FishyCount,
+                IllegalCount = report.IllegalCount,
+                Slots = report.Slots.Skip((page - 1) * pageSize).Take(pageSize).ToList()
+            };
+
+            return Ok(ApiResponse<BankBatchLegalityReportDto>.Ok(result,
+                $"银行扫描完成: {report.Total} 只宝可梦"));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<BankBatchLegalityReportDto>.Error(400, ex.Message));
+        }
     }
 }
 

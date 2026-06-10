@@ -65,6 +65,8 @@ builder.Services.AddScoped<SaveFileService>();
 builder.Services.AddScoped<BankService>();
 builder.Services.AddScoped<PokemonEditService>();
 builder.Services.AddScoped<SettingsService>();
+builder.Services.AddScoped<LegalizationService>();
+builder.Services.AddSingleton<LegalityCacheService>();
 
 // ── 控制器 & Swagger ────────────────────────────────────
 builder.Services.AddControllers()
