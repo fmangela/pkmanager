@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Drawer, Tabs, Button, App, Space, Tag, Modal, Select, Radio, Row, Col, Typography, Alert, Tooltip, Descriptions,
 } from 'antd';
@@ -7,6 +7,7 @@ import type { PokemonDto, LegalityStatus, JudgementDto, EditResultDto, LegalityR
 import { saveFileApi } from '../../api/saveFile';
 import { bankApi } from '../../api/bank';
 import { useResourceStore } from '../../stores/resourceStore';
+import { getPokemonSpriteUrl, getPokeApiSpriteUrl, getPokeApiArtworkUrl } from '../../lib/spriteUrl';
 import { buildEditRequest, validateFields } from '../editor/editHelpers';
 import MainTab from '../editor/MainTab';
 import MetTab from '../editor/MetTab';
@@ -40,6 +41,12 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
 
   const [, forceUpdate] = useState(0);
   const notifyChange = () => forceUpdate(n => n + 1);
+
+  // Fallback stage tracker for artwork → local standard → remote standard → SVG
+  const artFallbackStage = useRef(0);
+  useEffect(() => {
+    artFallbackStage.current = 0;
+  }, [pokemon?.species]);
 
   // Move-to-save modal
   const [moveModalOpen, setMoveModalOpen] = useState(false);
@@ -227,12 +234,20 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
         title={
           <Space wrap>
             <img
-              src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${pokemon.species}.png`}
+              src={getPokeApiArtworkUrl(pokemon.species)}
               alt={pokemon.speciesName}
               style={{ width: 40, height: 40, objectFit: 'contain' }}
               onError={(e) => {
-                (e.target as HTMLImageElement).src =
-                  `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.species}.png`;
+                const img = e.target as HTMLImageElement;
+                artFallbackStage.current += 1;
+                if (artFallbackStage.current === 1) {
+                  img.src = getPokemonSpriteUrl(pokemon.species);
+                } else if (artFallbackStage.current === 2) {
+                  img.src = getPokeApiSpriteUrl(pokemon.species);
+                } else {
+                  img.onerror = null; // Stage 3+ — 终止回退，杜绝死循环
+                  img.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect fill="%23f0f0f0" width="40" height="40"/><text x="20" y="20" text-anchor="middle" dy=".3em" fill="%23999" font-size="7">PK</text></svg>');
+                }
               }}
             />
             <span style={{ fontWeight: 600 }}>

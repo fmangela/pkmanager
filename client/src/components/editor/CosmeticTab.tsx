@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { InputNumber, Tag, Space } from 'antd';
 import type { PokemonDto } from '../../api/saveFile';
+import { getPokemonSpriteUrl } from '../../lib/spriteUrl';
 
 interface Props {
   pokemon: PokemonDto;
@@ -210,7 +211,7 @@ const SpindaCanvas: React.FC<{ pid: number }> = ({ pid }) => {
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/327.png`;
+    img.src = getPokemonSpriteUrl(327);
 
     img.onload = () => {
       // Draw sprite scaled 2x

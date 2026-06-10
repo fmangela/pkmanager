@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography, Card, Input, Select, Switch, Row, Col, Pagination,
-  Tag, Empty, App, Button, Popconfirm, Space, Image,
+  Tag, Empty, App, Button, Popconfirm, Space,
   Checkbox, Modal, Radio,
 } from 'antd';
 import {
@@ -15,6 +15,7 @@ import { saveFileApi, type SaveFileInfo, type SaveFileDetail } from '../api/save
 import { bankApi, type BankListItem } from '../api/bank';
 import { useResourceStore } from '../stores/resourceStore';
 import BankEditDrawer from '../components/bank/BankEditDrawer';
+import PokemonSprite from '../components/PokemonSprite';
 
 const { Title, Text } = Typography;
 
@@ -261,12 +262,11 @@ const BankPage: React.FC = () => {
 
         {/* Sprite with overlay icons */}
         <div style={{ padding: '8px 0 0', position: 'relative', display: 'inline-block' }}>
-          <Image
-            src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.species}.png`}
+          <PokemonSprite
+            speciesId={p.species}
             alt={p.speciesName}
-            preview={false}
-            style={{ width: 80, height: 80, imageRendering: 'pixelated' }}
-            fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNDAiIHk9IjQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSIgZmlsbD0iIzk5OSIgZm9udC1zaXplPSIxMiI+UGs8L3RleHQ+PC9zdmc+"
+            width={80} height={80}
+            style={{ imageRendering: 'pixelated' as React.CSSProperties['imageRendering'] }}
           />
           {/* Alpha badge — top-left */}
           {p.isAlpha && (
@@ -340,11 +340,11 @@ const BankPage: React.FC = () => {
             {/* Sprite */}
             <Col flex="52px">
               <div style={{ position: 'relative', display: 'inline-block' }}>
-                <Image
-                  src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.species}.png`}
-                  preview={false}
-                  style={{ width: 48, height: 48, imageRendering: 'pixelated' }}
-                  fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iMjQiIHk9IjI0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSIgZmlsbD0iIzk5OSIgZm9udC1zaXplPSI4Ij5QazwvdGV4dD48L3N2Zz4="
+                <PokemonSprite
+                  speciesId={p.species}
+                  alt={p.speciesName}
+                  width={48} height={48}
+                  style={{ imageRendering: 'pixelated' as React.CSSProperties['imageRendering'] }}
                 />
                 {p.isAlpha && (
                   <span style={{

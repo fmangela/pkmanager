@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Button, Typography, App, Tag, Tooltip, Space } from 'antd';
 import { SwapOutlined, StarFilled } from '@ant-design/icons';
 import { type BoxDto, type LegalityStatus, saveFileApi } from '../api/saveFile';
+import PokemonSprite from './PokemonSprite';
 
 const { Text } = Typography;
 
@@ -54,12 +55,10 @@ const MiniSlot: React.FC<{
       background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
       position: 'relative',
     }}>
-      <img
-        src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${species}.png`}
-        style={{ width: 22, height: 22, imageRendering: 'pixelated' }}
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.display = 'none';
-        }}
+      <PokemonSprite
+        speciesId={species!}
+        width={22} height={22}
+        style={{ imageRendering: 'pixelated' as React.CSSProperties['imageRendering'] }}
       />
       {isShiny && (
         <StarFilled style={{

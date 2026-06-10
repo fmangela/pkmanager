@@ -25,6 +25,7 @@ import PokedexPanel from '../components/editor/PokedexPanel';
 import AllBoxesModal from '../components/AllBoxesModal';
 import { useAuthStore } from '../stores/authStore';
 import GameCover from '../components/GameCover';
+import PokemonSprite from '../components/PokemonSprite';
 
 const { Title, Text } = Typography;
 
@@ -105,9 +106,8 @@ const DraggableSlot: React.FC<{
       ) : (
         <>
           <div style={{ position: 'relative' }}>
-            <img src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p!.species}.png`}
-              style={{ width: 32, height: 32, imageRendering: 'pixelated' }}
-              onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect fill="%23f0f0f0" width="32" height="32"/><text x="16" y="16" text-anchor="middle" dy=".3em" fill="%23999" font-size="7">PK</text></svg>'); }}
+            <PokemonSprite speciesId={p!.species} width={32} height={32}
+              style={{ imageRendering: 'pixelated' as React.CSSProperties['imageRendering'] }}
             />
             {/* Alpha badge — top-left */}
             {p!.isAlpha && (
@@ -173,9 +173,8 @@ const DraggableBankItem: React.FC<{ pokemon: BankListItem }> = ({ pokemon }) => 
         background: '#fff', opacity: isDragging ? 0.5 : 1, flexShrink: 0,
       }}
     >
-      <img src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.species}.png`}
-        style={{ width: 40, height: 40, imageRendering: 'pixelated' }}
-        onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect fill="%23f0f0f0" width="40" height="40"/><text x="20" y="20" text-anchor="middle" dy=".3em" fill="%23999" font-size="8">PK</text></svg>'); }}
+      <PokemonSprite speciesId={pokemon.species} width={40} height={40}
+        style={{ imageRendering: 'pixelated' as React.CSSProperties['imageRendering'] }}
       />
       <div style={{ fontSize: 10, lineHeight: 1.2 }}>{pokemon.nickname || pokemon.speciesName}</div>
       <Tag color="blue" style={{ fontSize: 9, margin: 0, padding: '0 4px', lineHeight: '16px' }}>Lv.{pokemon.level}</Tag>
@@ -448,24 +447,7 @@ const SaveEditor: React.FC = () => {
               style={{ minWidth: 0, minHeight: 0, padding: 0 }} />
             <Text type="secondary">Gen{saveData.generation} | {saveData.gameVersionName}</Text>
           </Space>
-          <Select size="small" value={activeBox} style={{ width: 210 }}
-            onChange={setActiveBox}
-            options={boxList.map(b => {
-              const used = b.slots.filter(s => !s.isEmpty).length;
-              return {
-                value: b.boxIndex,
-                label: `Box ${b.boxIndex + 1}: ${b.boxName} (${used}/${b.capacity})`,
-              };
-            })}
-          />
           <Space>
-            <Tooltip title="合法性批量扫描">
-              <Button icon={<SafetyCertificateOutlined />} onClick={handleBatchLegalityScan}
-                loading={legalityScanning}>合法性扫描</Button>
-            </Tooltip>
-            <Dropdown menu={sortMenu} trigger={['click']} disabled={sortingBoxes || saveData.boxes.length === 0}>
-              <Button icon={<SortAscendingOutlined />} loading={sortingBoxes}>全部排序</Button>
-            </Dropdown>
             <Tooltip title="手动创建备份"><Button icon={<SaveOutlined />} onClick={handleSave}>备份</Button></Tooltip>
             <Tooltip title="导出下载"><Button icon={<DownloadOutlined />} onClick={handleDownload}>导出</Button></Tooltip>
           </Space>
@@ -489,6 +471,34 @@ const SaveEditor: React.FC = () => {
         {/* Content area — switches based on active tab */}
         {activeTab === 'boxes' && (
         <div style={{ padding: 12 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+            background: '#fff', borderRadius: 8, padding: '10px 12px',
+            border: '1px solid #e8e8e8', marginBottom: 12,
+          }}>
+            <Text strong>箱子工具</Text>
+            <Select size="small" value={activeBox} style={{ width: 240, maxWidth: '100%' }}
+              onChange={setActiveBox}
+              options={boxList.map(b => {
+                const used = b.slots.filter(s => !s.isEmpty).length;
+                return {
+                  value: b.boxIndex,
+                  label: `Box ${b.boxIndex + 1}: ${b.boxName} (${used}/${b.capacity})`,
+                };
+              })}
+            />
+            <div style={{ flex: 1 }} />
+            <Tooltip title="扫描当前存档中所有箱子与队伍宝可梦的合法性">
+              <Button icon={<SafetyCertificateOutlined />} onClick={handleBatchLegalityScan}
+                loading={legalityScanning}>
+                合法性扫描
+              </Button>
+            </Tooltip>
+            <Dropdown menu={sortMenu} trigger={['click']} disabled={sortingBoxes || saveData.boxes.length === 0}>
+              <Button icon={<SortAscendingOutlined />} loading={sortingBoxes}>全部排序</Button>
+            </Dropdown>
+          </div>
+
           <div style={{ display: 'flex', gap: 12 }}>
             {/* Box List Sidebar — height matches box grid */}
             <div style={{
@@ -574,9 +584,8 @@ const SaveEditor: React.FC = () => {
                         borderRadius: 8, display: 'flex', flexDirection: 'column', cursor: 'pointer',
                         alignItems: 'center', justifyContent: 'center', background: '#fff', maxWidth: 80,
                       }} onClick={() => { if (slot.pokemon) { setEditingPokemon(slot.pokemon); setEditingBoxIndex(-1); setEditingSlotIndex(slot.slotIndex); setEditingIsParty(true); setEditPanelOpen(true); } }}>
-                        <img src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${slot.pokemon!.species}.png`}
-                          style={{ width: 32, height: 32, imageRendering: 'pixelated' }}
-                          onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect fill="%23f0f0f0" width="32" height="32"/><text x="16" y="16" text-anchor="middle" dy=".3em" fill="%23999" font-size="7">PK</text></svg>'); }}
+                        <PokemonSprite speciesId={slot.pokemon!.species} width={32} height={32}
+                          style={{ imageRendering: 'pixelated' as React.CSSProperties['imageRendering'] }}
                         />
                         <div style={{ fontSize: 10, lineHeight: 1.2, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                           {slot.pokemon!.nickname || slot.pokemon!.speciesName}
