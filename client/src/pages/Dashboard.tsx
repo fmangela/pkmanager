@@ -113,29 +113,29 @@ const DashboardPage: React.FC = () => {
         {/* 功能入口 */}
         <Col xs={24} sm={12} md={8} lg={6}>
           <Card hoverable onClick={() => navigate('/saves')}
-            style={{ textAlign: 'center', minHeight: 200 }}>
-            <SaveOutlined style={{ fontSize: 48, color: '#1890ff', marginBottom: 16 }} />
-            <Title level={4}>存档管理</Title>
-            <p>上传和管理你的游戏存档</p>
-            <Button type="primary">进入</Button>
+            style={{ textAlign: 'center', minHeight: 300, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <SaveOutlined style={{ fontSize: 56, color: '#1890ff', marginBottom: 12 }} />
+            <Title level={4} style={{ marginBottom: 4 }}>存档管理</Title>
+            <Text type="secondary">上传和管理你的游戏存档</Text>
+            <Button type="primary" style={{ marginTop: 16 }}>进入</Button>
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={6}>
           <Card hoverable onClick={() => navigate('/bank')}
-            style={{ textAlign: 'center', minHeight: 200 }}>
-            <BankOutlined style={{ fontSize: 48, color: '#52c41a', marginBottom: 16 }} />
-            <Title level={4}>我的银行</Title>
-            <p>在线宝可梦收藏管理</p>
-            <Button type="primary">进入</Button>
+            style={{ textAlign: 'center', minHeight: 300, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <BankOutlined style={{ fontSize: 56, color: '#52c41a', marginBottom: 12 }} />
+            <Title level={4} style={{ marginBottom: 4 }}>我的银行</Title>
+            <Text type="secondary">宝可梦在线收藏与交换</Text>
+            <Button type="primary" style={{ marginTop: 16 }}>进入</Button>
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={6}>
           <Card hoverable onClick={() => navigate('/settings')}
-            style={{ textAlign: 'center', minHeight: 200 }}>
-            <SettingOutlined style={{ fontSize: 48, color: '#722ed1', marginBottom: 16 }} />
-            <Title level={4}>设置</Title>
-            <p>配置本地模拟器与协议启动</p>
-            <Button type="primary">进入</Button>
+            style={{ textAlign: 'center', minHeight: 300, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <SettingOutlined style={{ fontSize: 56, color: '#722ed1', marginBottom: 12 }} />
+            <Title level={4} style={{ marginBottom: 4 }}>设置</Title>
+            <Text type="secondary">模拟器配置与启动偏好</Text>
+            <Button type="primary" style={{ marginTop: 16 }}>进入</Button>
           </Card>
         </Col>
 
