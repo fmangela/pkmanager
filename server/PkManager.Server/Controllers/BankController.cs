@@ -283,6 +283,29 @@ public class BankController : ControllerBase
             return BadRequest(ApiResponse<BankBatchLegalityReportDto>.Error(400, ex.Message));
         }
     }
+
+    /// <summary>
+    /// 高级搜索 — 在银行中按多条件筛选宝可梦。
+    /// </summary>
+    [HttpPost("search")]
+    public async Task<ActionResult<ApiResponse<PokemonSearchResultDto>>> Search(
+        [FromBody] PokemonSearchRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<PokemonSearchResultDto>.Error(401, "未登录"));
+
+        try
+        {
+            var result = await _bankService.SearchBank(userId.Value, request);
+            return Ok(ApiResponse<PokemonSearchResultDto>.Ok(result));
+        }
+        catch (BusinessException ex)
+        {
+            return ex.ErrorCode == 404
+                ? NotFound(ApiResponse<PokemonSearchResultDto>.Error(ex.ErrorCode, ex.Message))
+                : BadRequest(ApiResponse<PokemonSearchResultDto>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
 }
 
 public class MoveFromSaveRequest

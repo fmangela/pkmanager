@@ -5,6 +5,7 @@ using Npgsql;
 using PKHeX.Core;
 using PkManager.Server.Helpers;
 using PkManager.Server.Models.Entity;
+using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
 using SaveFileEntity = PkManager.Server.Models.Entity.SaveFile;
 
@@ -1375,5 +1376,184 @@ public class SaveFileService
         if (version == null) return null;
         try { return GameInfo.GetVersionName((GameVersion)version.Value); }
         catch { return $"Version {version}"; }
+    }
+
+    // ═══ 高级搜索 ═══════════════════════════════════════════
+
+    internal async Task<PokemonSearchResultDto> SearchSave(Guid saveFileId, Guid userId,
+        PokemonSearchRequest request)
+    {
+        var (sf, sav) = await LoadSave(saveFileId, userId);
+        var strings = GameInfo.GetStrings("zh");
+
+        var allMatches = new List<PokemonSearchItemDto>();
+
+        // Party slots
+        for (int i = 0; i < 6; i++)
+        {
+            var pkm = sav.GetPartySlotAtIndex(i);
+            if (pkm == null || pkm.Species == 0) continue;
+            if (MatchesFilter(pkm, request, strings))
+            {
+                allMatches.Add(MapSearchItem(pkm, strings, isParty: true, slotIndex: i));
+            }
+        }
+
+        // Box slots
+        for (int box = 0; box < sav.BoxCount; box++)
+        {
+            var boxData = sav.GetBoxData(box);
+            for (int slot = 0; slot < boxData.Length; slot++)
+            {
+                var pkm = boxData[slot];
+                if (pkm.Species == 0) continue;
+                if (MatchesFilter(pkm, request, strings))
+                {
+                    allMatches.Add(MapSearchItem(pkm, strings, isParty: false, boxIndex: box, slotIndex: slot));
+                }
+            }
+        }
+
+        var total = allMatches.Count;
+        var paged = allMatches
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToList();
+
+        return new PokemonSearchResultDto
+        {
+            Total = total,
+            Page = request.Page,
+            PageSize = request.PageSize,
+            Items = paged,
+        };
+    }
+
+    /// <summary>内存过滤器 — 直接访问 PKM 属性，无反射，无 LegalityAnalysis。</summary>
+    internal static bool MatchesFilter(PKM pk, PokemonSearchRequest f, GameStrings strings)
+    {
+        // Tier 1: 快速整型比较
+        if (f.SpeciesId.HasValue && pk.Species != f.SpeciesId.Value) return false;
+        if (f.MinLevel.HasValue && pk.CurrentLevel < f.MinLevel.Value) return false;
+        if (f.MaxLevel.HasValue && pk.CurrentLevel > f.MaxLevel.Value) return false;
+        if (f.IsShiny.HasValue && pk.IsShiny != f.IsShiny.Value) return false;
+        if (f.IsEgg.HasValue && pk.IsEgg != f.IsEgg.Value) return false;
+        if (f.Gender.HasValue && (int)pk.Gender != f.Gender.Value) return false;
+        if (f.Nature.HasValue && (int)pk.Nature != f.Nature.Value) return false;
+        if (f.Ability.HasValue && pk.Ability != f.Ability.Value) return false;
+        if (f.HeldItem.HasValue && pk.HeldItem != f.HeldItem.Value) return false;
+        if (f.Ball.HasValue && pk.Ball != f.Ball.Value) return false;
+        if (f.OriginGame.HasValue && (int)pk.Version != f.OriginGame.Value) return false;
+        if (f.Language.HasValue && pk.Language != f.Language.Value) return false;
+
+        // Tier 2: IV 范围
+        if (f.MinIV_HP.HasValue && pk.IV_HP < f.MinIV_HP.Value) return false;
+        if (f.MaxIV_HP.HasValue && pk.IV_HP > f.MaxIV_HP.Value) return false;
+        if (f.MinIV_ATK.HasValue && pk.IV_ATK < f.MinIV_ATK.Value) return false;
+        if (f.MaxIV_ATK.HasValue && pk.IV_ATK > f.MaxIV_ATK.Value) return false;
+        if (f.MinIV_DEF.HasValue && pk.IV_DEF < f.MinIV_DEF.Value) return false;
+        if (f.MaxIV_DEF.HasValue && pk.IV_DEF > f.MaxIV_DEF.Value) return false;
+        if (f.MinIV_SPA.HasValue && pk.IV_SPA < f.MinIV_SPA.Value) return false;
+        if (f.MaxIV_SPA.HasValue && pk.IV_SPA > f.MaxIV_SPA.Value) return false;
+        if (f.MinIV_SPD.HasValue && pk.IV_SPD < f.MinIV_SPD.Value) return false;
+        if (f.MaxIV_SPD.HasValue && pk.IV_SPD > f.MaxIV_SPD.Value) return false;
+        if (f.MinIV_SPE.HasValue && pk.IV_SPE < f.MinIV_SPE.Value) return false;
+        if (f.MaxIV_SPE.HasValue && pk.IV_SPE > f.MaxIV_SPE.Value) return false;
+        if (f.MinIVTotal.HasValue || f.MaxIVTotal.HasValue)
+        {
+            int ivTotal = pk.IV_HP + pk.IV_ATK + pk.IV_DEF + pk.IV_SPA + pk.IV_SPD + pk.IV_SPE;
+            if (f.MinIVTotal.HasValue && ivTotal < f.MinIVTotal.Value) return false;
+            if (f.MaxIVTotal.HasValue && ivTotal > f.MaxIVTotal.Value) return false;
+        }
+
+        // Tier 3: EV 范围
+        if (f.MinEV_HP.HasValue && pk.EV_HP < f.MinEV_HP.Value) return false;
+        if (f.MaxEV_HP.HasValue && pk.EV_HP > f.MaxEV_HP.Value) return false;
+        if (f.MinEV_ATK.HasValue && pk.EV_ATK < f.MinEV_ATK.Value) return false;
+        if (f.MaxEV_ATK.HasValue && pk.EV_ATK > f.MaxEV_ATK.Value) return false;
+        if (f.MinEV_DEF.HasValue && pk.EV_DEF < f.MinEV_DEF.Value) return false;
+        if (f.MaxEV_DEF.HasValue && pk.EV_DEF > f.MaxEV_DEF.Value) return false;
+        if (f.MinEV_SPA.HasValue && pk.EV_SPA < f.MinEV_SPA.Value) return false;
+        if (f.MaxEV_SPA.HasValue && pk.EV_SPA > f.MaxEV_SPA.Value) return false;
+        if (f.MinEV_SPD.HasValue && pk.EV_SPD < f.MinEV_SPD.Value) return false;
+        if (f.MaxEV_SPD.HasValue && pk.EV_SPD > f.MaxEV_SPD.Value) return false;
+        if (f.MinEV_SPE.HasValue && pk.EV_SPE < f.MinEV_SPE.Value) return false;
+        if (f.MaxEV_SPE.HasValue && pk.EV_SPE > f.MaxEV_SPE.Value) return false;
+        if (f.MinEVTotal.HasValue || f.MaxEVTotal.HasValue)
+        {
+            int evTotal = pk.EV_HP + pk.EV_ATK + pk.EV_DEF + pk.EV_SPA + pk.EV_SPD + pk.EV_SPE;
+            if (f.MinEVTotal.HasValue && evTotal < f.MinEVTotal.Value) return false;
+            if (f.MaxEVTotal.HasValue && evTotal > f.MaxEVTotal.Value) return false;
+        }
+
+        // Tier 4: 招式
+        if (f.RequiredMoves is { Count: > 0 })
+        {
+            foreach (var m in f.RequiredMoves)
+                if (!pk.HasMove((ushort)m)) return false;
+        }
+        if (f.AnyMoves is { Count: > 0 })
+        {
+            if (!f.AnyMoves.Any(m => pk.HasMove((ushort)m))) return false;
+        }
+
+        // Tier 5: 训练家
+        if (!string.IsNullOrEmpty(f.OT_Name))
+        {
+            if (!pk.OriginalTrainerName.Contains(f.OT_Name, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        if (f.TID.HasValue && pk.TID16 != f.TID.Value) return false;
+
+        // Tier 6: 文本搜索（物种名/昵称）
+        if (!string.IsNullOrEmpty(f.SearchText))
+        {
+            var speciesName = pk.Species >= 0 && pk.Species < strings.Species.Count
+                ? strings.Species[pk.Species] : null;
+            var nickMatch = pk.Nickname.Contains(f.SearchText, StringComparison.OrdinalIgnoreCase);
+            var speciesMatch = speciesName != null
+                && speciesName.Contains(f.SearchText, StringComparison.OrdinalIgnoreCase);
+            if (!nickMatch && !speciesMatch)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static PokemonSearchItemDto MapSearchItem(PKM pk, GameStrings strings,
+        bool isParty, int slotIndex, int? boxIndex = null)
+    {
+        return new PokemonSearchItemDto
+        {
+            SpeciesId = pk.Species,
+            SpeciesName = GetSafeString(strings.Species, pk.Species, $"#{pk.Species}"),
+            Nickname = pk.Nickname,
+            Level = pk.CurrentLevel,
+            Nature = (int)pk.Nature,
+            NatureName = GetSafeString(strings.Natures, (int)pk.Nature, $"Nature {(int)pk.Nature}"),
+            Ability = pk.Ability,
+            AbilityName = GetSafeString(strings.Ability, pk.Ability, $"Ability {pk.Ability}"),
+            HeldItem = pk.HeldItem > 0 ? pk.HeldItem : null,
+            HeldItemName = pk.HeldItem > 0 ? GetSafeString(strings.Item, pk.HeldItem, "") : null,
+            IsShiny = pk.IsShiny,
+            IsEgg = pk.IsEgg,
+            PkmDataBase64 = ParseService.GetPkmBase64(pk),
+            BoxIndex = boxIndex,
+            SlotIndex = slotIndex,
+            IsParty = isParty,
+            LocationLabel = isParty
+                ? $"同行 · 槽 {slotIndex + 1}"
+                : $"Box {boxIndex!.Value + 1} · 槽 {slotIndex + 1}",
+        };
+    }
+
+    private static string GetSafeString(IReadOnlyList<string> list, int index, string fallback)
+    {
+        if (index >= 0 && index < list.Count)
+        {
+            var s = list[index];
+            if (!string.IsNullOrEmpty(s)) return s;
+        }
+        return fallback;
     }
 }

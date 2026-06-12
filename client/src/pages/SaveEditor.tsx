@@ -24,6 +24,7 @@ import BagPanel from '../components/editor/BagPanel';
 import TrainerPanel from '../components/editor/TrainerPanel';
 import PokedexPanel from '../components/editor/PokedexPanel';
 import GenToolsPanel from '../components/editor/GenToolsPanel';
+import SearchPanel from '../components/editor/SearchPanel';
 import AllBoxesModal from '../components/AllBoxesModal';
 import { useAuthStore } from '../stores/authStore';
 import GameCover from '../components/GameCover';
@@ -432,12 +433,47 @@ const SaveEditor: React.FC = () => {
     onClick: ({ key }) => { void handleSortCurrentBox(key as SaveBoxSortBy); },
   };
 
+  const openPokemonFromLocation = useCallback((boxIndex: number, slotIndex: number, isParty: boolean) => {
+    if (!saveData) return;
+
+    if (isParty) {
+      const slot = saveData.party[slotIndex];
+      if (!slot?.pokemon) {
+        message.warning('未找到对应的同行宝可梦');
+        return;
+      }
+
+      setActiveTab('boxes');
+      setEditingPokemon(slot.pokemon);
+      setEditingBoxIndex(-1);
+      setEditingSlotIndex(slotIndex);
+      setEditingIsParty(true);
+      setEditPanelOpen(true);
+      return;
+    }
+
+    const slot = saveData.boxes[boxIndex]?.slots[slotIndex];
+    if (!slot?.pokemon) {
+      message.warning('未找到对应的箱子宝可梦');
+      return;
+    }
+
+    setActiveTab('boxes');
+    setActiveBox(boxIndex);
+    setEditingPokemon(slot.pokemon);
+    setEditingBoxIndex(boxIndex);
+    setEditingSlotIndex(slotIndex);
+    setEditingIsParty(false);
+    setEditPanelOpen(true);
+  }, [message, saveData]);
+
   const tabItems = useMemo(() => {
     const items: Array<{ key: string; label: string }> = [
       { key: 'boxes', label: '📦 箱子' },
       { key: 'bag', label: '🎒 背包' },
       { key: 'trainer', label: '👤 训练家' },
       { key: 'pokedex', label: '📖 图鉴' },
+      { key: 'search', label: '🔍 搜索' },
     ];
     // Gen7: 支持具体版本 30-33，以及历史复合版本 71/72；排除 LGPE 42/43/73
     const isGen7SMUSUM = saveData?.gameVersion != null
@@ -685,6 +721,12 @@ const SaveEditor: React.FC = () => {
           <div style={{ padding: 12 }}>
             <GenToolsPanel key={id} saveFileId={id!} />
           </div>
+        )}
+        {activeTab === 'search' && id && saveData && (
+          <SearchPanel
+            saveFileId={id}
+            onJumpToSlot={openPokemonFromLocation}
+          />
         )}
       </div>
 

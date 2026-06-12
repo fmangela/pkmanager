@@ -431,6 +431,10 @@ export const saveFileApi = {
 
   saveGenTools: (saveFileId: string, data: GenToolsDto) =>
     apiClient.put(`/SaveFile/${saveFileId}/gen-tools`, data),
+
+  // ── 高级搜索 ──
+  searchSave: (saveFileId: string, request: PokemonSearchRequest) =>
+    apiClient.post<PokemonSearchResultDto>(`/SaveFile/${saveFileId}/search`, request),
 };
 
 // ── GenTools types ────────────────────────────────────
@@ -639,4 +643,82 @@ export interface SaveBackupDto {
   playTime: string;
   gameVersion: string;
   boxCount: number;
+}
+
+// ── 高级搜索 types ────────────────────────────────────
+
+export interface PokemonSearchRequest {
+  // 基础
+  speciesId?: number;
+  isShiny?: boolean;
+  isEgg?: boolean;
+  gender?: number;
+  minLevel?: number;
+  maxLevel?: number;
+  // 性格/特性/道具/球种
+  nature?: number;
+  ability?: number;
+  heldItem?: number;
+  ball?: number;
+  // 来源
+  originGame?: number;
+  language?: number;
+  // IV
+  minIV_HP?: number; maxIV_HP?: number;
+  minIV_ATK?: number; maxIV_ATK?: number;
+  minIV_DEF?: number; maxIV_DEF?: number;
+  minIV_SPA?: number; maxIV_SPA?: number;
+  minIV_SPD?: number; maxIV_SPD?: number;
+  minIV_SPE?: number; maxIV_SPE?: number;
+  minIVTotal?: number; maxIVTotal?: number;
+  // EV
+  minEV_HP?: number; maxEV_HP?: number;
+  minEV_ATK?: number; maxEV_ATK?: number;
+  minEV_DEF?: number; maxEV_DEF?: number;
+  minEV_SPA?: number; maxEV_SPA?: number;
+  minEV_SPD?: number; maxEV_SPD?: number;
+  minEV_SPE?: number; maxEV_SPE?: number;
+  minEVTotal?: number; maxEVTotal?: number;
+  // 招式
+  requiredMoves?: number[];
+  anyMoves?: number[];
+  // 训练家
+  ot_Name?: string;
+  tid?: number;
+  // 合法性(仅银行)
+  isLegal?: boolean;
+  // 文本搜索
+  searchText?: string;
+  // 分页
+  page: number;
+  pageSize: number;
+}
+
+export interface PokemonSearchItemDto {
+  speciesId: number;
+  speciesName: string;
+  nickname: string;
+  level: number;
+  nature: number;
+  natureName: string;
+  ability: number;
+  abilityName: string;
+  heldItem?: number;
+  heldItemName?: string;
+  isShiny: boolean;
+  isEgg: boolean;
+  isValid?: boolean;
+  pkmDataBase64?: string;
+  boxIndex?: number;
+  slotIndex?: number;
+  isParty: boolean;
+  locationLabel?: string;
+  bankId?: string;
+}
+
+export interface PokemonSearchResultDto {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: PokemonSearchItemDto[];
 }

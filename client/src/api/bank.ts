@@ -1,5 +1,5 @@
 import apiClient from './axios';
-import type { PokemonDto, EditResultDto } from './saveFile';
+import type { PokemonDto, EditResultDto, PokemonSearchRequest, PokemonSearchResultDto } from './saveFile';
 
 // ── 列表摘要（GET /api/bank 返回）─────────────────────
 
@@ -83,4 +83,8 @@ export const bankApi = {
   /** 单只发送到存档 (POST /api/Bank/{id}/move-to-save) */
   sendToSave: (id: string, data: { saveFileId: string; targetBoxIndex: number; targetSlotIndex?: number }) =>
     apiClient.post(`/bank/${id}/move-to-save`, data),
+
+  /** 高级搜索 — 在银行中按多条件筛选宝可梦 */
+  searchBank: (request: PokemonSearchRequest) =>
+    apiClient.post<PokemonSearchResultDto>('/bank/search', request),
 };

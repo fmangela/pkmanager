@@ -717,6 +717,184 @@ public class BankService
         if (index >= 0 && index < list.Count) return list[index];
         return fallback;
     }
+
+    // ═══ 高级搜索 ═══════════════════════════════════════════
+
+    public async Task<PokemonSearchResultDto> SearchBank(Guid userId, PokemonSearchRequest request)
+    {
+        // ── 第一层: SQL 粗筛（仅冗余列）──
+        var where = "WHERE user_id = @UserId";
+        var parameters = new DynamicParameters();
+        parameters.Add("UserId", userId);
+
+        if (request.SpeciesId.HasValue)
+        {
+            where += " AND species = @SpeciesId";
+            parameters.Add("SpeciesId", request.SpeciesId.Value);
+        }
+        if (request.IsShiny.HasValue)
+        {
+            where += " AND is_shiny = @IsShiny";
+            parameters.Add("IsShiny", request.IsShiny.Value);
+        }
+        if (request.IsEgg.HasValue)
+        {
+            where += " AND is_egg = @IsEgg";
+            parameters.Add("IsEgg", request.IsEgg.Value);
+        }
+        if (request.Nature.HasValue)
+        {
+            where += " AND nature = @Nature";
+            parameters.Add("Nature", request.Nature.Value);
+        }
+        if (request.Ability.HasValue)
+        {
+            where += " AND ability = @Ability";
+            parameters.Add("Ability", request.Ability.Value);
+        }
+        if (request.OriginGame.HasValue)
+        {
+            where += " AND game_version = @GameVersion";
+            parameters.Add("GameVersion", request.OriginGame.Value);
+        }
+        if (request.IsLegal.HasValue)
+        {
+            where += " AND is_valid = @IsLegal";
+            parameters.Add("IsLegal", request.IsLegal.Value);
+        }
+
+        // 文本搜索兜底：species_name ILIKE 或 nickname ILIKE
+        if (!string.IsNullOrEmpty(request.SearchText))
+        {
+            where += " AND (species_name ILIKE @SearchText OR nickname ILIKE @SearchText)";
+            parameters.Add("SearchText", $"%{request.SearchText}%");
+        }
+
+        // ── 查询全部匹配行（不分页，拿全量做内存过滤）──
+        var sql = $@"
+            SELECT id, species, species_name AS SpeciesName, nickname, level,
+                   nature, nature_name AS NatureName,
+                   ability, ability_name AS AbilityName,
+                   is_shiny AS IsShiny, is_egg AS IsEgg, is_valid AS IsValid,
+                   NULLIF(pokemon_json->>'heldItemName', '') AS HeldItemName,
+                   COALESCE((pokemon_json->>'heldItem')::int, 0) AS HeldItem,
+                   pkm_data_base64 AS PkmDataBase64
+            FROM bank_pokemon {where}
+            ORDER BY created_at DESC";
+
+        var rows = (await _db.QueryAsync<BankSearchRow>(sql, parameters)).ToList();
+
+        // ── 第二层: C# 内存精确过滤 ──
+        var strings = GameInfo.GetStrings("zh");
+        var allMatches = new List<PokemonSearchItemDto>();
+
+        foreach (var row in rows)
+        {
+            // 先做 SQL 层未覆盖的快速字段过滤
+            if (request.MinLevel.HasValue && row.Level < request.MinLevel.Value) continue;
+            if (request.MaxLevel.HasValue && row.Level > request.MaxLevel.Value) continue;
+            if (request.HeldItem.HasValue && row.HeldItem != request.HeldItem.Value) continue;
+
+            // 检测需要深度过滤的条件（字段不在冗余列中，必须反序列化 PKM 才能判断）
+            bool needDeepFilter =
+                // IV 单项 (12 fields)
+                request.MinIV_HP.HasValue || request.MaxIV_HP.HasValue
+                || request.MinIV_ATK.HasValue || request.MaxIV_ATK.HasValue
+                || request.MinIV_DEF.HasValue || request.MaxIV_DEF.HasValue
+                || request.MinIV_SPA.HasValue || request.MaxIV_SPA.HasValue
+                || request.MinIV_SPD.HasValue || request.MaxIV_SPD.HasValue
+                || request.MinIV_SPE.HasValue || request.MaxIV_SPE.HasValue
+                // EV 单项 (12 fields)
+                || request.MinEV_HP.HasValue || request.MaxEV_HP.HasValue
+                || request.MinEV_ATK.HasValue || request.MaxEV_ATK.HasValue
+                || request.MinEV_DEF.HasValue || request.MaxEV_DEF.HasValue
+                || request.MinEV_SPA.HasValue || request.MaxEV_SPA.HasValue
+                || request.MinEV_SPD.HasValue || request.MaxEV_SPD.HasValue
+                || request.MinEV_SPE.HasValue || request.MaxEV_SPE.HasValue
+                // IV/EV totals
+                || request.MinIVTotal.HasValue || request.MaxIVTotal.HasValue
+                || request.MinEVTotal.HasValue || request.MaxEVTotal.HasValue
+                // 其他不在冗余列中的字段
+                || request.Ball.HasValue || request.Language.HasValue
+                || request.Gender.HasValue
+                || request.RequiredMoves is { Count: > 0 }
+                || request.AnyMoves is { Count: > 0 }
+                || !string.IsNullOrEmpty(request.OT_Name)
+                || request.TID.HasValue;
+
+            if (needDeepFilter && !string.IsNullOrEmpty(row.PkmDataBase64))
+            {
+                try
+                {
+                    var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(row.PkmDataBase64));
+                    if (pkm != null && SaveFileService.MatchesFilter(pkm, request, strings))
+                    {
+                        allMatches.Add(MapBankRowToSearchItem(row, strings));
+                    }
+                }
+                catch { /* 跳过无法解析的行 */ }
+            }
+            else if (!needDeepFilter)
+            {
+                allMatches.Add(MapBankRowToSearchItem(row, strings));
+            }
+        }
+
+        var total = allMatches.Count;
+        var paged = allMatches
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToList();
+
+        return new PokemonSearchResultDto
+        {
+            Total = total,
+            Page = request.Page,
+            PageSize = request.PageSize,
+            Items = paged,
+        };
+    }
+
+    private static PokemonSearchItemDto MapBankRowToSearchItem(BankSearchRow row, GameStrings strings)
+    {
+        return new PokemonSearchItemDto
+        {
+            SpeciesId = row.Species,
+            SpeciesName = row.SpeciesName ?? $"#{row.Species}",
+            Nickname = row.Nickname ?? "",
+            Level = row.Level,
+            Nature = row.Nature,
+            NatureName = row.NatureName ?? "",
+            Ability = row.Ability,
+            AbilityName = row.AbilityName ?? "",
+            HeldItem = row.HeldItem > 0 ? row.HeldItem : null,
+            HeldItemName = row.HeldItem > 0 ? row.HeldItemName : null,
+            IsShiny = row.IsShiny,
+            IsEgg = row.IsEgg,
+            IsValid = row.IsValid,
+            PkmDataBase64 = row.PkmDataBase64,
+            BankId = row.Id.ToString(),
+        };
+    }
+
+    private class BankSearchRow
+    {
+        public Guid Id { get; set; }
+        public int Species { get; set; }
+        public string? SpeciesName { get; set; }
+        public string? Nickname { get; set; }
+        public int Level { get; set; }
+        public int Nature { get; set; }
+        public string? NatureName { get; set; }
+        public int Ability { get; set; }
+        public string? AbilityName { get; set; }
+        public bool IsShiny { get; set; }
+        public bool IsEgg { get; set; }
+        public bool IsValid { get; set; }
+        public string? HeldItemName { get; set; }
+        public int HeldItem { get; set; }
+        public string? PkmDataBase64 { get; set; }
+    }
 }
 
 // ── 辅助类型 ────────────────────────────────────────────

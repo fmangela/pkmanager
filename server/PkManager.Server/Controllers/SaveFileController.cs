@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using PkManager.Server.Helpers;
+using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
 using PkManager.Server.Services;
 
@@ -514,6 +515,29 @@ public class SaveFileController : ControllerBase
         "name" => "名称",
         _ => "指定方式",
     };
+
+    /// <summary>
+    /// 高级搜索 — 在当前存档中按多条件筛选宝可梦。
+    /// </summary>
+    [HttpPost("{id:guid}/search")]
+    public async Task<ActionResult<ApiResponse<PokemonSearchResultDto>>> Search(Guid id,
+        [FromBody] PokemonSearchRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<PokemonSearchResultDto>.Error(401, "未登录"));
+
+        try
+        {
+            var result = await _saveFileService.SearchSave(id, userId.Value, request);
+            return Ok(ApiResponse<PokemonSearchResultDto>.Ok(result));
+        }
+        catch (BusinessException ex)
+        {
+            return ex.ErrorCode == 404
+                ? NotFound(ApiResponse<PokemonSearchResultDto>.Error(ex.ErrorCode, ex.Message))
+                : BadRequest(ApiResponse<PokemonSearchResultDto>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
 }
 
 public class MoveFromBankRequest

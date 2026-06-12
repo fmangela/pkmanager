@@ -812,7 +812,7 @@ public class ParseService
     // ── 辅助方法 ────────────────────────────────────────
 
     /// <summary>PKM → Base64（v26 中 DecryptedPartyData 已移除，改用 WriteDecryptedDataParty）</summary>
-    private static string GetPkmBase64(PKM pkm)
+    internal static string GetPkmBase64(PKM pkm)
     {
         var buffer = new byte[pkm.SIZE_PARTY];
         pkm.WriteDecryptedDataParty(buffer);
