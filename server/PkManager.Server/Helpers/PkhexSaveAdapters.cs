@@ -111,4 +111,17 @@ internal static class PkhexSaveAdapters
         if (sav is SAV8SWSH swsh)
             swsh.TrainerCard.Number = value.Length > 3 ? value[..3] : value;
     }
+
+    // ═══ Gen3 RTC ════════════════════════════════════════
+
+    /// <summary>
+    /// 获取 Gen3 Hoenn 存档的 RTC3 时钟对。
+    /// 仅在 RS/Emerald 上返回非 null（FRLG 的 SmallBlock 不实现 ISaveBlock3SmallHoenn）。
+    /// </summary>
+    public static (RTC3? initial, RTC3? elapsed) GetRTC3(SaveFile sav)
+    {
+        if (sav is SAV3 { SmallBlock: ISaveBlock3SmallHoenn hoenn })
+            return (hoenn.ClockInitial, hoenn.ClockElapsed);
+        return (null, null);
+    }
 }

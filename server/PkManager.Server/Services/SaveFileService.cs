@@ -960,6 +960,76 @@ public class SaveFileService
         return await GetPokedex(saveFileId, userId);
     }
 
+    // ═══ 世代专属工具（Gen Tools）════════════════════════
+
+    /// <summary>
+    /// 获取存档世代专属工具数据 — 当前仅 RTC（Gen3 RS/Emerald）。
+    /// </summary>
+    public async Task<GenToolsDto> GetGenTools(Guid saveFileId, Guid userId)
+    {
+        var (_, sav) = await LoadSave(saveFileId, userId);
+        var dto = new GenToolsDto();
+        var cap = new GenToolsCapability();
+
+        var (clockInitial, clockElapsed) = PkhexSaveAdapters.GetRTC3(sav);
+        cap.HasRtc = clockInitial != null;
+
+        if (cap.HasRtc)
+        {
+            dto.RtcEntries =
+            [
+                new Rtc3EntryDto
+                {
+                    Key = "initial", Label = "初始时钟",
+                    Day = clockInitial!.Day, Hour = clockInitial.Hour,
+                    Minute = clockInitial.Minute, Second = clockInitial.Second,
+                },
+                new Rtc3EntryDto
+                {
+                    Key = "elapsed", Label = "已流逝时钟",
+                    Day = clockElapsed!.Day, Hour = clockElapsed.Hour,
+                    Minute = clockElapsed.Minute, Second = clockElapsed.Second,
+                },
+            ];
+        }
+
+        dto.Capability = cap;
+        return dto;
+    }
+
+    /// <summary>
+    /// 保存世代专属工具数据 — 当前仅 RTC。
+    /// </summary>
+    public async Task SaveGenTools(Guid saveFileId, Guid userId, GenToolsDto dto)
+    {
+        // 空值保护（ASP.NET 自动 400 已禁用，需手动校验）
+        if (dto == null)
+            throw new BusinessException("请求体不能为空", 400);
+
+        var (sf, sav) = await LoadSave(saveFileId, userId);
+
+        if (dto.RtcEntries is { Count: > 0 })
+        {
+            var (clockInitial, clockElapsed) = PkhexSaveAdapters.GetRTC3(sav);
+            foreach (var entry in dto.RtcEntries)
+            {
+                RTC3? target = entry.Key switch
+                {
+                    "initial" => clockInitial,
+                    "elapsed" => clockElapsed,
+                    _ => null,
+                };
+                if (target == null) continue;
+                target.Day    = Math.Clamp(entry.Day,    0, 65535);
+                target.Hour   = Math.Clamp(entry.Hour,   0, 23);
+                target.Minute = Math.Clamp(entry.Minute, 0, 59);
+                target.Second = Math.Clamp(entry.Second, 0, 59);
+            }
+        }
+
+        await WriteBackSave(sf, userId, sav);
+    }
+
     // ── Trainer 辅助 ──────────────────────────────────
 
     /// <summary>语言 ID → 中文名称</summary>

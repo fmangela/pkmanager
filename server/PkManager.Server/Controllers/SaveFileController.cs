@@ -466,6 +466,46 @@ public class SaveFileController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 获取存档世代专属工具数据（当前仅 RTC 时钟）
+    /// </summary>
+    [HttpGet("{id:guid}/gen-tools")]
+    public async Task<ActionResult<ApiResponse<GenToolsDto>>> GetGenTools(Guid id)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<GenToolsDto>.Error(401, "未登录"));
+
+        try
+        {
+            var result = await _saveFileService.GetGenTools(id, userId.Value);
+            return Ok(ApiResponse<GenToolsDto>.Ok(result));
+        }
+        catch (BusinessException ex)
+        {
+            return NotFound(ApiResponse<GenToolsDto>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 保存世代专属工具数据（当前仅 RTC 时钟）
+    /// </summary>
+    [HttpPut("{id:guid}/gen-tools")]
+    public async Task<ActionResult<ApiResponse<object>>> SaveGenTools(Guid id, [FromBody] GenToolsDto dto)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<object>.Error(401, "未登录"));
+
+        try
+        {
+            await _saveFileService.SaveGenTools(id, userId.Value, dto);
+            return Ok(ApiResponse<object>.Ok(new { }, "RTC 时钟已保存"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<object>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
+
     private static string GetSortLabel(string? sortBy) => sortBy?.Trim().ToLowerInvariant() switch
     {
         "species" => "物种编号",

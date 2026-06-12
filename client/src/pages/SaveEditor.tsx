@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Typography, Button, App, Spin, Tag, Tooltip, Space, Popconfirm, Dropdown, Select,
@@ -23,6 +23,7 @@ import EditPanel from '../components/editor/EditPanel';
 import BagPanel from '../components/editor/BagPanel';
 import TrainerPanel from '../components/editor/TrainerPanel';
 import PokedexPanel from '../components/editor/PokedexPanel';
+import GenToolsPanel from '../components/editor/GenToolsPanel';
 import AllBoxesModal from '../components/AllBoxesModal';
 import { useAuthStore } from '../stores/authStore';
 import GameCover from '../components/GameCover';
@@ -430,8 +431,27 @@ const SaveEditor: React.FC = () => {
     items: BOX_SORT_MENU_ITEMS,
     onClick: ({ key }) => { void handleSortCurrentBox(key as SaveBoxSortBy); },
   };
+
+  const tabItems = useMemo(() => {
+    const items: Array<{ key: string; label: string }> = [
+      { key: 'boxes', label: '📦 箱子' },
+      { key: 'bag', label: '🎒 背包' },
+      { key: 'trainer', label: '👤 训练家' },
+      { key: 'pokedex', label: '📖 图鉴' },
+    ];
+    if (saveData?.generation === 3) {
+      items.push({ key: 'gen-tools', label: '🔧 专用工具' });
+    }
+    return items;
+  }, [saveData?.generation]);
+
+  const visibleActiveTab = activeTab === 'gen-tools' && saveData?.generation !== 3
+    ? 'boxes'
+    : activeTab;
+
   if (!isAuthenticated) return <div style={{ padding: 48, textAlign: 'center' }}>请先登录</div>;
   if (loading) return <div style={{ padding: 48, textAlign: 'center' }}><Spin size="large" /></div>;
+
   if (!saveData) return <div style={{ padding: 48, textAlign: 'center' }}><Title level={4}>存档不存在</Title><Button onClick={() => navigate('/saves')}>返回</Button></div>;
 
   const currentBox = saveData.boxes[activeBox];
@@ -484,20 +504,15 @@ const SaveEditor: React.FC = () => {
         {/* Tab navigation — archive-level features */}
         <div style={{ background: 'var(--bg-toolbar, #fff)', padding: '0 24px', borderBottom: '1px solid var(--border-color, #e8e8e8)' }}>
           <Tabs
-            activeKey={activeTab}
+            activeKey={visibleActiveTab}
             onChange={setActiveTab}
             size="small"
-            items={[
-              { key: 'boxes', label: '📦 箱子' },
-              { key: 'bag', label: '🎒 背包' },
-              { key: 'trainer', label: '👤 训练家' },
-              { key: 'pokedex', label: '📖 图鉴' },
-            ]}
+            items={tabItems}
           />
         </div>
 
         {/* Content area — switches based on active tab */}
-        {activeTab === 'boxes' && (
+        {visibleActiveTab === 'boxes' && (
         <div style={{ padding: 12 }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
@@ -645,21 +660,26 @@ const SaveEditor: React.FC = () => {
         </div>
         )}
 
-        {activeTab === 'bag' && (
+        {visibleActiveTab === 'bag' && (
           <div style={{ padding: 12, background: 'var(--bg-surface, #fff)', borderRadius: 8, margin: 12, border: '1px solid var(--border-color, #e8e8e8)' }}>
             <BagPanel saveFileId={id!} />
           </div>
         )}
 
-        {activeTab === 'trainer' && (
+        {visibleActiveTab === 'trainer' && (
           <div style={{ padding: 12, background: 'var(--bg-surface, #fff)', borderRadius: 8, margin: 12, border: '1px solid var(--border-color, #e8e8e8)' }}>
             <TrainerPanel saveFileId={id!} />
           </div>
         )}
 
-        {activeTab === 'pokedex' && (
+        {visibleActiveTab === 'pokedex' && (
           <div style={{ background: 'var(--bg-surface, #fff)', borderRadius: 8, margin: 12, border: '1px solid var(--border-color, #e8e8e8)', overflow: 'hidden' }}>
             <PokedexPanel saveFileId={id!} />
+          </div>
+        )}
+        {visibleActiveTab === 'gen-tools' && (
+          <div style={{ padding: 12 }}>
+            <GenToolsPanel key={id} saveFileId={id!} />
           </div>
         )}
       </div>

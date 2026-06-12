@@ -341,13 +341,13 @@ export const saveFileApi = {
   save: (saveFileId: string) =>
     apiClient.post(`/SaveFile/${saveFileId}/save`),
 
-  updateSaveSlot: (pkmDataBase64: string, saveFileId: string, boxIndex: number, slotIndex: number, isParty: boolean, data: any) =>
+  updateSaveSlot: (pkmDataBase64: string, saveFileId: string, boxIndex: number, slotIndex: number, isParty: boolean, data: Record<string, unknown>) =>
     apiClient.put<EditResultDto>('/Pokemon/save-slot', { ...data, pkmDataBase64, saveFileId, boxIndex, slotIndex, isParty }),
 
   generateQR: (pkmDataBase64: string) =>
     apiClient.post<string>('/Pokemon/qr', { pkmDataBase64 }),
 
-  validatePokemon: (pkmDataBase64: string, data: any) =>
+  validatePokemon: (pkmDataBase64: string, data: Record<string, unknown>) =>
     apiClient.post<LegalityReportDto>('/Pokemon/validate-party', { ...data, pkmDataBase64 }),
 
   /** 按 ID 验证宝可梦合法性（支持银行和存档宝可梦） */
@@ -424,7 +424,34 @@ export const saveFileApi = {
     apiClient.post<BankBatchLegalityReportDto>('/Bank/legality-report', null, {
       params: { page: page ?? 1, pageSize: pageSize ?? 100 }
     }),
+
+  // ── 世代专属工具（Gen Tools）──
+  getGenTools: (saveFileId: string) =>
+    apiClient.get<GenToolsDto>(`/SaveFile/${saveFileId}/gen-tools`),
+
+  saveGenTools: (saveFileId: string, data: GenToolsDto) =>
+    apiClient.put(`/SaveFile/${saveFileId}/gen-tools`, data),
 };
+
+// ── GenTools types ────────────────────────────────────
+
+export interface GenToolsCapability {
+  hasRtc: boolean;
+}
+
+export interface Rtc3EntryDto {
+  key: string;
+  label: string;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+export interface GenToolsDto {
+  capability: GenToolsCapability;
+  rtcEntries?: Rtc3EntryDto[];
+}
 
 // ── Bag types ─────────────────────────────────────────
 
@@ -546,7 +573,7 @@ export interface LaunchLocalResult {
 
 export const emulatorApi = {
   checkLocal: (data: CheckLocalRequest) =>
-    apiClient.post<Record<string, any>>('/Emulator/check-local', data),
+    apiClient.post<Record<string, unknown>>('/Emulator/check-local', data),
 
   launchLocal: (saveFileId: string) =>
     apiClient.post<LaunchLocalResult>(`/Emulator/launch-local/${saveFileId}`),
