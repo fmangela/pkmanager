@@ -21,6 +21,7 @@ public class PokemonController : ControllerBase
     private readonly SaveFileService _saveFileService;
     private readonly LegalizationService _legalizationService;
     private readonly LegalityCacheService _legalityCache;
+    private readonly EvolutionService _evolutionService;
     private readonly UserContext _userContext;
 
     public PokemonController(
@@ -30,6 +31,7 @@ public class PokemonController : ControllerBase
         SaveFileService saveFileService,
         LegalizationService legalizationService,
         LegalityCacheService legalityCache,
+        EvolutionService evolutionService,
         UserContext userContext)
     {
         _db = db;
@@ -38,6 +40,7 @@ public class PokemonController : ControllerBase
         _saveFileService = saveFileService;
         _legalizationService = legalizationService;
         _legalityCache = legalityCache;
+        _evolutionService = evolutionService;
         _userContext = userContext;
     }
 
@@ -667,6 +670,84 @@ public class PokemonController : ControllerBase
         catch (Exception ex)
         {
             return BadRequest(ApiResponse<EncounterGenerateResultDto>.Error(400, ex.Message));
+        }
+    }
+
+    // ── D.4 一键进化 ──────────────────────────────────
+
+    /// <summary>
+    /// 获取进化路径（含 TryEvolve 可用性判定，基于当前编辑态）。
+    /// 使用 POST 以支持 editSnapshot body。
+    /// </summary>
+    [HttpPost("evolutions")]
+    public ActionResult<ApiResponse<EvolutionPathDto>> GetEvolutions(
+        [FromBody] GetEvolutionsRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<EvolutionPathDto>.Error(401, "未登录"));
+
+        if (string.IsNullOrEmpty(request.PkmDataBase64))
+            return BadRequest(ApiResponse<EvolutionPathDto>.Error(400, "缺少宝可梦数据"));
+
+        try
+        {
+            var pkm = _parseService.RebuildPkm(request.PkmDataBase64);
+            var paths = _evolutionService.GetEvolutionPaths(pkm, request.EditSnapshot);
+            return Ok(ApiResponse<EvolutionPathDto>.Ok(paths));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<EvolutionPathDto>.Error(ex.ErrorCode, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<EvolutionPathDto>.Error(400, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 执行进化（含当前编辑态应用、昵称/等级同步、脱壳忍者生成）。
+    /// 基于编辑器当前未保存修改执行进化并持久化到存档。
+    /// </summary>
+    [HttpPost("evolve")]
+    public async Task<ActionResult<ApiResponse<EvolveResultDto>>> Evolve(
+        [FromBody] EvolveRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<EvolveResultDto>.Error(401, "未登录"));
+
+        if (string.IsNullOrEmpty(request.PkmDataBase64))
+            return BadRequest(ApiResponse<EvolveResultDto>.Error(400, "缺少宝可梦数据"));
+        if (request.SaveFileId == Guid.Empty)
+            return BadRequest(ApiResponse<EvolveResultDto>.Error(400, "缺少存档ID"));
+        if (request.TargetSpecies < 1 || request.TargetSpecies > 1025)
+            return BadRequest(ApiResponse<EvolveResultDto>.Error(400, "目标物种无效"));
+
+        try
+        {
+            // 加载存档
+            var (sf, sav) = await _saveFileService.LoadSave(request.SaveFileId, userId.Value);
+
+            // 重建 PKM
+            var pkm = _parseService.RebuildPkm(request.PkmDataBase64);
+
+            // 执行进化（含 editSnapshot 应用、状态同步、写回槽位）
+            var result = _evolutionService.ExecuteEvolve(pkm, sav, request);
+            if (!result.Success)
+                return Ok(ApiResponse<EvolveResultDto>.Ok(result, result.Error ?? "进化失败"));
+
+            // 持久化（WriteBackSave 内部自带备份 + 缓存失效）
+            await _saveFileService.WriteBackSave(sf, userId.Value, sav);
+
+            return Ok(ApiResponse<EvolveResultDto>.Ok(result, "进化成功"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<EvolveResultDto>.Error(ex.ErrorCode, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<EvolveResultDto>.Error(400, ex.Message));
         }
     }
 

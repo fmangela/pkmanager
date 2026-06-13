@@ -125,6 +125,7 @@ builder.Services.AddScoped<ParseService>();
 builder.Services.AddScoped<SaveFileService>();
 builder.Services.AddScoped<BankService>();
 builder.Services.AddScoped<PokemonEditService>();
+builder.Services.AddScoped<EvolutionService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<LegalizationService>();
 builder.Services.AddSingleton<LegalityCacheService>();

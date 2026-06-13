@@ -1,14 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { Select, Input, InputNumber, Switch, Space, Tag } from 'antd';
+import { Select, Input, InputNumber, Switch, Space, Tag, Button } from 'antd';
+import { RocketOutlined } from '@ant-design/icons';
 import type { PokemonDto } from '../../api/saveFile';
+import type { EvolveResultDto } from '../../api/evolution';
 import { useResourceStore } from '../../stores/resourceStore';
 import { resourceApi, type ResourceItem } from '../../api/resource';
 import { useDiagnosticStore } from '../../stores/diagnosticStore';
+import EvolutionModal from './EvolutionModal';
 
 interface Props {
   pokemon: PokemonDto;
   generation: number;
   onChange?: () => void;
+  saveFileId?: string;
+  boxIndex?: number;
+  slotIndex?: number;
+  isParty?: boolean;
+  editSnapshot?: Record<string, unknown>;
+  onEvolved?: (result: EvolveResultDto) => void;
 }
 
 const LANGUAGES = [
@@ -29,11 +38,12 @@ const getLevelFromExp = (exp: number, table: number[]) => {
   return level;
 };
 
-const MainTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
+const MainTab: React.FC<Props> = ({ pokemon, generation, onChange, saveFileId, boxIndex, slotIndex, isParty, editSnapshot, onEvolved }) => {
   const { species, abilities, natures, items, balls } = useResourceStore();
   const isGen12 = generation <= 2;
   const isGen8Plus = generation >= 8;
   const ch = () => onChange?.();
+  const [showEvolution, setShowEvolution] = useState(false);
 
   const [speciesAbilities, setSpeciesAbilities] = useState<ResourceItem[]>([]);
   const [expTable, setExpTable] = useState<number[]>([]);
@@ -100,6 +110,21 @@ const MainTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
           </Space.Compact>
         </div>
       </Space>
+
+      <div style={{ marginTop: 8, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+        <Button
+          danger
+          size="small"
+          icon={<RocketOutlined />}
+          disabled={!saveFileId || !pokemon.pkmDataBase64}
+          onClick={() => setShowEvolution(true)}
+        >
+          一键进化（无法回退）
+        </Button>
+        <span style={{ fontSize: 11, color: '#bbb', marginLeft: 8 }}>
+          PKHeX 进化树分析
+        </span>
+      </div>
 
       <Space style={{ width: '100%', marginTop: 8 }}>
         <div>
@@ -239,6 +264,24 @@ const MainTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
           </div>
         </Space>
       )}
+
+      <EvolutionModal
+        open={showEvolution}
+        pokemon={pokemon}
+        saveFileId={saveFileId}
+        boxIndex={boxIndex}
+        slotIndex={slotIndex}
+        isParty={isParty}
+        editSnapshot={editSnapshot ?? {}}
+        onClose={() => setShowEvolution(false)}
+        onEvolved={(result) => {
+          if (result.evolvedPokemon) {
+            Object.assign(pokemon, result.evolvedPokemon);
+          }
+          setShowEvolution(false);
+          onEvolved?.(result);
+        }}
+      />
     </div>
   );
 };

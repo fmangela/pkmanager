@@ -5,6 +5,7 @@ import {
 import { SaveOutlined, BankOutlined, CopyOutlined, ImportOutlined } from '@ant-design/icons';
 import type { PokemonDto, LegalityStatus, JudgementDto, EditResultDto, LegalityReportDto, AutoFixResultDto } from '../../api/saveFile';
 import { saveFileApi } from '../../api/saveFile';
+import type { EvolveResultDto } from '../../api/evolution';
 import { useResourceStore } from '../../stores/resourceStore';
 import { buildEditRequest, validateFields } from './editHelpers';
 import ShowdownImportModal from './ShowdownImportModal';
@@ -46,6 +47,9 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
 
   const { loadAll } = useResourceStore();
   const { message } = App.useApp();
+
+  // editSnapshot 在每次渲染时重新计算（pokemon 是 mutate-in-place 的同一引用）
+  const editSnapshot = pokemon ? buildEditRequest(pokemon) : {};
 
   useEffect(() => {
     if (open) loadAll();
@@ -164,7 +168,22 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
     {
       key: 'main',
       label: '基本信息',
-      children: <MainTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
+      children: <MainTab pokemon={pokemon} generation={generation} onChange={notifyChange}
+        saveFileId={saveFileId} boxIndex={boxIndex} slotIndex={slotIndex} isParty={isParty}
+        editSnapshot={editSnapshot}
+        onEvolved={(result: EvolveResultDto) => {
+          if (result.evolvedPokemon) {
+            Object.assign(pokemon, result.evolvedPokemon);
+            setLegality(null);
+          }
+          notifyChange();
+          // 触发父层刷新箱子/队伍列表 + 脱壳忍者出现
+          onSaved();
+          if (result.shedinja) {
+            message.success(`脱壳忍者已生成至 ${result.shedinjaLocation}`);
+          }
+        }}
+      />,
     },
     {
       key: 'met',
