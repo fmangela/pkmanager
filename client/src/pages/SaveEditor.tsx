@@ -746,6 +746,7 @@ const SaveEditor: React.FC = () => {
         boxIndex={editingBoxIndex}
         slotIndex={editingSlotIndex}
         isParty={editingIsParty}
+        boxCount={saveData.boxes.length}
         onClose={() => { setEditPanelOpen(false); setEditingPokemon(null); setEditingBoxIndex(undefined); setEditingSlotIndex(undefined); }}
         onSaved={fetchData}
       />

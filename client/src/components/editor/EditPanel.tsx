@@ -25,11 +25,12 @@ interface Props {
   boxIndex?: number;
   slotIndex?: number;
   isParty?: boolean;
+  boxCount?: number;
   onClose: () => void;
   onSaved: () => void;
 }
 
-const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, boxIndex, slotIndex, isParty, onClose, onSaved }) => {
+const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, boxIndex, slotIndex, isParty, boxCount, onClose, onSaved }) => {
   const [loading, setLoading] = useState(false);
   const [legality, setLegality] = useState<{
     status: LegalityStatus;
@@ -168,7 +169,7 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
     {
       key: 'met',
       label: '相遇信息',
-      children: <MetTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
+      children: <MetTab pokemon={pokemon} generation={generation} onChange={notifyChange} saveFileId={saveFileId} boxCount={boxCount} onGenerated={onSaved} />,
     },
     {
       key: 'stats',

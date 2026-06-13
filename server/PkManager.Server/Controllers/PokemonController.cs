@@ -462,6 +462,214 @@ public class PokemonController : ControllerBase
         }
     }
 
+    // ── D.2 遭遇数据库 ──────────────────────────────────
+
+    /// <summary>
+    /// 搜索合法遭遇模板。
+    /// </summary>
+    [HttpPost("search-encounters")]
+    public async Task<ActionResult<ApiResponse<EncounterSearchResultDto>>> SearchEncounters(
+        [FromBody] EncounterSearchRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<EncounterSearchResultDto>.Error(401, "未登录"));
+
+        if (request.Species < 1 || request.Species > 1025)
+            return BadRequest(ApiResponse<EncounterSearchResultDto>.Error(400, "物种ID无效"));
+
+        try
+        {
+            // 加载目标存档
+            var saveFile = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
+                "SELECT * FROM save_files WHERE id = @Id AND user_id = @UserId",
+                new { Id = request.SaveFileId, UserId = userId.Value });
+            if (saveFile == null)
+                return NotFound(ApiResponse<EncounterSearchResultDto>.Error(404, "存档不存在"));
+
+            var rawData = _saveFileService.ReadSaveBytes(saveFile, userId.Value);
+            var sav = ParseService.OpenSaveFile(rawData, saveFile.Filename);
+
+            // 优先使用 DB 归一化后的具体版本号
+            var targetVersion = saveFile.GameVersion.HasValue
+                ? (GameVersion)saveFile.GameVersion.Value
+                : sav.Version;
+
+            var trainerInfo = new SimpleTrainerInfo(sav, targetVersion);
+
+            var result = _legalizationService.SearchEncounters(request, trainerInfo);
+            return Ok(ApiResponse<EncounterSearchResultDto>.Ok(result,
+                $"找到 {result.TotalCount} 条合法遭遇"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<EncounterSearchResultDto>.Error(ex.ErrorCode, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<EncounterSearchResultDto>.Error(400, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 将遭遇模板的约束字段应用到当前编辑中的宝可梦（不写盘）。
+    /// </summary>
+    [HttpPost("apply-encounter")]
+    public async Task<ActionResult<ApiResponse<EncounterApplyResultDto>>> ApplyEncounter(
+        [FromBody] EncounterApplyRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<EncounterApplyResultDto>.Error(401, "未登录"));
+
+        if (string.IsNullOrEmpty(request.PkmDataBase64))
+            return BadRequest(ApiResponse<EncounterApplyResultDto>.Error(400, "缺少宝可梦数据"));
+        if (string.IsNullOrEmpty(request.RecomputeToken))
+            return BadRequest(ApiResponse<EncounterApplyResultDto>.Error(400, "缺少遭遇Token"));
+        if (request.EditSnapshot == null)
+            return BadRequest(ApiResponse<EncounterApplyResultDto>.Error(400, "缺少编辑快照"));
+
+        try
+        {
+            // 加载目标存档以构造 ITrainerInfo
+            var saveFile = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
+                "SELECT * FROM save_files WHERE id = @Id AND user_id = @UserId",
+                new { Id = request.SaveFileId, UserId = userId.Value });
+            if (saveFile == null)
+                return NotFound(ApiResponse<EncounterApplyResultDto>.Error(404, "存档不存在"));
+
+            var rawData = _saveFileService.ReadSaveBytes(saveFile, userId.Value);
+            var sav = ParseService.OpenSaveFile(rawData, saveFile.Filename);
+
+            var targetVersion = saveFile.GameVersion.HasValue
+                ? (GameVersion)saveFile.GameVersion.Value
+                : sav.Version;
+
+            var trainerInfo = new SimpleTrainerInfo(sav, targetVersion);
+
+            var result = _legalizationService.ApplyEncounter(request, trainerInfo, sav);
+
+            if (!result.Success)
+                return Ok(ApiResponse<EncounterApplyResultDto>.Ok(result, result.Error ?? "应用失败"));
+
+            return Ok(ApiResponse<EncounterApplyResultDto>.Ok(result,
+                $"已应用遭遇约束: {string.Join(", ", result.AppliedFields)}"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<EncounterApplyResultDto>.Error(ex.ErrorCode, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<EncounterApplyResultDto>.Error(400, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 从遭遇模板生成全新宝可梦并写入存档槽位。
+    /// </summary>
+    [HttpPost("generate-from-encounter")]
+    public async Task<ActionResult<ApiResponse<EncounterGenerateResultDto>>> GenerateFromEncounter(
+        [FromBody] EncounterGenerateRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<EncounterGenerateResultDto>.Error(401, "未登录"));
+
+        if (string.IsNullOrEmpty(request.RecomputeToken))
+            return BadRequest(ApiResponse<EncounterGenerateResultDto>.Error(400, "缺少遭遇Token"));
+
+        try
+        {
+            // 加载目标存档
+            var saveFile = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
+                "SELECT * FROM save_files WHERE id = @Id AND user_id = @UserId",
+                new { Id = request.SaveFileId, UserId = userId.Value });
+            if (saveFile == null)
+                return NotFound(ApiResponse<EncounterGenerateResultDto>.Error(404, "存档不存在"));
+
+            var rawData = _saveFileService.ReadSaveBytes(saveFile, userId.Value);
+            var sav = ParseService.OpenSaveFile(rawData, saveFile.Filename);
+
+            var targetVersion = saveFile.GameVersion.HasValue
+                ? (GameVersion)saveFile.GameVersion.Value
+                : sav.Version;
+
+            var trainerInfo = new SimpleTrainerInfo(sav, targetVersion);
+
+            // 生成 PKM
+            var (pkm, error) = _legalizationService.GenerateFromEncounter(request, trainerInfo);
+            if (pkm == null)
+                return Ok(ApiResponse<EncounterGenerateResultDto>.Ok(
+                    new EncounterGenerateResultDto { Success = false, Error = error },
+                    error ?? "生成失败"));
+
+            // 兼容转换
+            var compat = sav.GetCompatiblePKM(pkm);
+            if (compat == null)
+                return Ok(ApiResponse<EncounterGenerateResultDto>.Ok(
+                    new EncounterGenerateResultDto { Success = false, Error = "宝可梦格式与目标存档不兼容" },
+                    "生成失败"));
+
+            // 在兼容实体上跑合法性分析
+            var la = new LegalityAnalysis(compat);
+            var isLegal = la.Valid;
+            var report = isLegal ? null : la.Report();
+            if (!isLegal)
+            {
+                return Ok(ApiResponse<EncounterGenerateResultDto>.Ok(
+                    new EncounterGenerateResultDto
+                    {
+                        Success = false,
+                        Error = "生成结果未通过合法性校验",
+                        Pokemon = ParseService.MapToPokemonDto(compat),
+                        PkmDataBase64 = ParseService.GetPkmBase64(compat),
+                        IsLegal = false,
+                        LegalityReport = report
+                    },
+                    "生成失败（合法性校验未通过）"));
+            }
+
+            // 写入槽位（空槽检查 + 兼容转换）
+            try
+            {
+                _saveFileService.WritePkmToBoxSlot(sav, request.BoxIndex, request.SlotIndex,
+                    pkm, allowOverwrite: request.AllowOverwrite);
+            }
+            catch (BusinessException ex)
+            {
+                return Ok(ApiResponse<EncounterGenerateResultDto>.Ok(
+                    new EncounterGenerateResultDto { Success = false, Error = ex.Message },
+                    ex.Message));
+            }
+
+            // 持久化存档（WriteBackSave 内置自动备份 + 预校验 + 缓存失效）
+            await _saveFileService.WriteBackSave(saveFile, userId.Value, sav);
+
+            // 从磁盘回读以确保返回实际落盘的数据
+            var persisted = _saveFileService.ReadBoxSlot(request.SaveFileId, userId.Value,
+                request.BoxIndex, request.SlotIndex);
+            var dto = persisted != null ? ParseService.MapToPokemonDto(persisted) : ParseService.MapToPokemonDto(compat);
+            var base64 = new byte[(persisted ?? compat).SIZE_PARTY];
+            (persisted ?? compat).WriteDecryptedDataParty(base64);
+
+            return Ok(ApiResponse<EncounterGenerateResultDto>.Ok(
+                new EncounterGenerateResultDto
+                {
+                    Success = true,
+                    Pokemon = dto,
+                    PkmDataBase64 = Convert.ToBase64String(base64),
+                    IsLegal = isLegal,
+                    LegalityReport = report
+                }, isLegal ? "宝可梦已生成并写入存档" : "已生成（⚠️ 不合法）"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<EncounterGenerateResultDto>.Error(ex.ErrorCode, ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<EncounterGenerateResultDto>.Error(400, ex.Message));
+        }
+    }
+
     // ── 私有方法 ────────────────────────────────────────
 
     /// <summary>

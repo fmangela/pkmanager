@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using PKHeX.Core;
 using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
@@ -706,5 +708,484 @@ public class LegalizationService
             CheckIdentifier.Shiny => "FixShiny",
             _ => null
         };
+    }
+
+    // ── D.2 遭遇数据库 ──────────────────────────────────────
+
+    /// <summary>
+    /// 搜索合法遭遇模板。需要 ITrainerInfo 提供目标上下文（由 Controller 从存档构造）。
+    /// </summary>
+    public EncounterSearchResultDto SearchEncounters(EncounterSearchRequest request, ITrainerInfo trainerInfo)
+    {
+        var result = new EncounterSearchResultDto();
+        var strings = GameInfo.GetStrings("zh");
+
+        // 1. 创建空白 PKM
+        var blank = EntityBlank.GetBlank(trainerInfo);
+        blank.Species = (ushort)request.Species;
+        blank.Form = (byte)request.Form;
+
+        // 2. 搜索遭遇（空招式 = 无招式约束，返回全部遭遇）
+        IEnumerable<IEncounterable> allEncounters;
+        try
+        {
+            allEncounters = EncounterMovesetGenerator.GenerateEncounters(
+                blank, trainerInfo, ReadOnlyMemory<ushort>.Empty);
+        }
+        catch (Exception ex)
+        {
+            throw new BusinessException($"遭遇搜索失败: {ex.Message}", 400);
+        }
+
+        // 3. 准备过滤条件
+        var typeFilter = request.EncounterTypes is { Length: > 0 }
+            ? new HashSet<string>(request.EncounterTypes, StringComparer.OrdinalIgnoreCase)
+            : null;
+
+        // 4. 迭代构建结果
+        int index = 0;
+        foreach (var enc in allEncounters)
+        {
+            var encounterType = ClassifyEncounterType(enc);
+            if (typeFilter != null && !typeFilter.Contains(encounterType))
+                continue;
+            if (request.LevelMin.HasValue && enc.LevelMax < request.LevelMin.Value)
+                continue;
+            if (request.LevelMax.HasValue && enc.LevelMin > request.LevelMax.Value)
+                continue;
+
+            var item = BuildEncounterItem(enc, encounterType, strings, request, index);
+            result.Items.Add(item);
+            index++;
+        }
+
+        result.TotalCount = result.Items.Count;
+        return result;
+    }
+
+    /// <summary>
+    /// 将遭遇模板的约束字段应用到当前编辑中的宝可梦（不写盘）。
+    /// 先投影 editSnapshot → 再覆写遭遇约束字段 → 返回更新后的 PokemonDto（含新 base64）。
+    /// </summary>
+    public EncounterApplyResultDto ApplyEncounter(
+        EncounterApplyRequest request, ITrainerInfo trainerInfo, PKHeX.Core.SaveFile sav)
+    {
+        var result = new EncounterApplyResultDto();
+
+        // 1. 重建 PKM
+        PKM pkm;
+        try
+        {
+            var data = Convert.FromBase64String(request.PkmDataBase64);
+            pkm = EntityFormat.GetFromBytes(data)
+                ?? throw new BusinessException("无法解析宝可梦数据", 400);
+        }
+        catch (BusinessException) { throw; }
+        catch (Exception ex)
+        {
+            throw new BusinessException($"宝可梦数据解析失败: {ex.Message}", 400);
+        }
+
+        // 2. 应用当前编辑面板快照
+        try
+        {
+            _editService.ApplyEditsToPkm(pkm, request.EditSnapshot);
+        }
+        catch (Exception ex)
+        {
+            throw new BusinessException($"应用编辑状态失败: {ex.Message}", 400);
+        }
+
+        // 3. 定位遭遇
+        var enc = RecomputeEncounter(request.RecomputeToken, trainerInfo, request.SaveFileId);
+        if (enc == null)
+        {
+            result.Error = "无法定位遭遇模板（搜索结果可能已过期，请重新搜索）";
+            return result;
+        }
+
+        // 4. 按约束字段规则表逐字段覆写
+        ApplyEncounterConstraints(pkm, enc, trainerInfo, result.AppliedFields);
+
+        // 5. 返回更新后的 DTO（含新 base64）
+        result.Success = true;
+        result.Pokemon = ParseService.MapToPokemonDto(pkm);
+        return result;
+    }
+
+    /// <summary>
+    /// 从遭遇模板生成宝可梦（不写盘，返回 PKM 供 Controller 做兼容转换+写入）。
+    /// </summary>
+    public (PKM? Pkm, string? Error) GenerateFromEncounter(
+        EncounterGenerateRequest request, ITrainerInfo trainerInfo)
+    {
+        // 1. 定位遭遇
+        var enc = RecomputeEncounter(request.RecomputeToken, trainerInfo, request.SaveFileId);
+        if (enc == null)
+            return (null, "无法定位遭遇模板（搜索结果可能已过期，请重新搜索）");
+
+        // 2. 检查是否可转换
+        if (enc is not IEncounterConvertible convertible)
+            return (null, $"该遭遇类型 ({enc.GetType().Name}) 不支持生成宝可梦");
+
+        // 3. 构建 EncounterCriteria
+        var criteria = EncounterCriteria.Unrestricted;
+        if (request.ForceShiny == true)
+            criteria = criteria with { Shiny = Shiny.Always };
+        if (request.Nature.HasValue)
+            criteria = criteria with { Nature = (Nature)request.Nature.Value };
+        if (request.Gender.HasValue)
+            criteria = criteria with { Gender = (Gender)request.Gender.Value };
+        if (request.Level.HasValue)
+            criteria = criteria with { LevelMin = (byte)request.Level.Value, LevelMax = (byte)request.Level.Value };
+
+        // 4. 生成
+        PKM pkm;
+        try
+        {
+            pkm = convertible.ConvertToPKM(trainerInfo, criteria);
+            if (pkm == null)
+                return (null, "遭遇模板生成失败（ConvertToPKM 返回 null）");
+        }
+        catch (Exception ex)
+        {
+            return (null, $"遭遇模板生成异常: {ex.Message}");
+        }
+
+        return (pkm, null);
+    }
+
+    // ── D.2 私有辅助方法 ──────────────────────────────────
+
+    /// <summary>
+    /// 遭遇分类：Egg / Mystery / Static / Trade / Slot
+    /// </summary>
+    private static string ClassifyEncounterType(IEncounterable enc)
+    {
+        if (enc is IEncounterEgg) return "Egg";
+        if (enc is MysteryGift) return "Mystery";
+        var typeName = enc.GetType().Name;
+        if (typeName.StartsWith("EncounterStatic") || typeName.StartsWith("EncounterTera")
+            || typeName.StartsWith("EncounterDist") || typeName.StartsWith("EncounterMight")
+            || typeName.StartsWith("EncounterOutbreak") || typeName.StartsWith("EncounterFixed")
+            || typeName.StartsWith("EncounterGift"))
+            return "Static";
+        if (typeName.StartsWith("EncounterTrade")) return "Trade";
+        return "Slot";
+    }
+
+    /// <summary>闪光规格 → 可读字符串</summary>
+    private static string ShinyToString(Shiny shiny) => shiny switch
+    {
+        Shiny.Never => "Never",
+        Shiny.Random => "Random",
+        Shiny.Always => "Always",
+        Shiny.AlwaysStar => "AlwaysStar",
+        Shiny.AlwaysSquare => "AlwaysSquare",
+        Shiny.FixedValue => "FixedValue",
+        _ => shiny.ToString()
+    };
+
+    /// <summary>提取遭遇地点中文名（处理 MetLocation / EggLocation 选择）</summary>
+    private static string? GetEncounterLocationName(IEncounterable enc)
+    {
+        ushort location;
+        bool isEgg;
+
+        if (enc is ILocation loc)
+        {
+            if (loc.Location != 0)
+            {
+                location = (ushort)loc.Location;
+                isEgg = false;
+            }
+            else if (loc.EggLocation != 0)
+            {
+                location = (ushort)loc.EggLocation;
+                isEgg = true;
+            }
+            else
+            {
+                return null;
+            }
+        }
+        else
+        {
+            return null;
+        }
+
+        var gen = (byte)enc.Generation;
+        return GameInfo.GetLocationName(isEgg, location, gen, gen, enc.Version);
+    }
+
+    /// <summary>构建单条遭遇信息 DTO</summary>
+    private EncounterItemDto BuildEncounterItem(IEncounterable enc, string encounterType,
+        IBasicStrings strings, EncounterSearchRequest request, int index)
+    {
+        var item = new EncounterItemDto
+        {
+            Index = index,
+            EncounterType = encounterType,
+            TypeName = enc.GetType().Name,
+            LongName = enc.LongName ?? enc.Name,
+            Version = (int)enc.Version,
+            VersionName = GameInfo.GetVersionName(enc.Version),
+            Generation = enc.Generation,
+            LocationName = GetEncounterLocationName(enc),
+            LevelMin = enc.LevelMin,
+            LevelMax = enc.LevelMax,
+            Shiny = ShinyToString(enc.Shiny),
+            Ability = enc.Ability.ToString(),
+            RecomputeToken = BuildRecomputeToken(request, index),
+        };
+
+        // Moves
+        if (enc is IMoveset { Moves: { HasMoves: true } } ms)
+        {
+            var moves = new[] { (int)ms.Moves.Move1, (int)ms.Moves.Move2, (int)ms.Moves.Move3, (int)ms.Moves.Move4 };
+            item.Moves = moves.Where(m => m != 0).ToArray();
+            item.MoveNames = item.Moves
+                .Select(m => m < strings.Move.Count ? strings.Move[m] : $"#{m}")
+                .ToArray();
+        }
+
+        // RelearnMoves
+        if (enc is IRelearn { Relearn: { HasMoves: true } } rl)
+        {
+            item.RelearnMoves = new[] { (int)rl.Relearn.Move1, (int)rl.Relearn.Move2, (int)rl.Relearn.Move3, (int)rl.Relearn.Move4 };
+        }
+
+        // Ball
+        if (enc is IFixedBall fb && fb.FixedBall != Ball.None)
+        {
+            item.FixedBall = (int)fb.FixedBall;
+            var ballId = (int)fb.FixedBall;
+            item.FixedBallName = ballId < strings.Item.Count ? strings.Item[ballId] : $"Ball#{ballId}";
+        }
+
+        // Nature
+        if (enc is IFixedNature fn)
+            item.FixedNature = (int)fn.Nature;
+
+        // Gender
+        if (enc is IFixedGender fg && fg.IsFixedGender)
+            item.Gender = fg.Gender;
+
+        return item;
+    }
+
+    /// <summary>
+    /// 按约束字段规则表逐字段覆写（仅可单值表达的约束）。
+    /// 规则：
+    ///   - IFixedAbilityNumber: 仅 Ability.IsSingleValue 时写
+    ///   - IFixedGender: 仅 Gender != 0xFF (IsFixedGender) 时写
+    ///   - IShiny: Never/Always/AlwaysStar/AlwaysSquare → 应用；FixedValue/Random → 跳过
+    /// </summary>
+    private static void ApplyEncounterConstraints(PKM pkm, IEncounterable enc,
+        ITrainerInfo trainerInfo, List<string> appliedFields)
+    {
+        // MetLocation
+        if (enc is ILocation { Location: not 0 } loc)
+        {
+            pkm.MetLocation = (ushort)loc.Location;
+            appliedFields.Add("MetLocation");
+        }
+
+        // MetLevel
+        if (enc.LevelMin > 0)
+        {
+            pkm.MetLevel = (byte)enc.LevelMin;
+            appliedFields.Add("MetLevel");
+        }
+
+        // Version
+        pkm.Version = enc.Version;
+        appliedFields.Add("Version");
+
+        // Ball
+        if (enc is IFixedBall fb && fb.FixedBall != Ball.None)
+        {
+            pkm.Ball = (byte)fb.FixedBall;
+            appliedFields.Add("Ball");
+        }
+
+        // Ability — 仅单值时应用（RefreshAbility 将槽位索引 0/1/2 映射为正确位值 1/2/4）
+        if (enc.Ability.IsSingleValue(out int abilitySlot))
+        {
+            pkm.RefreshAbility(abilitySlot);
+            appliedFields.Add("Ability");
+        }
+
+        // Nature
+        if (enc is IFixedNature fn)
+        {
+            pkm.SetNature(fn.Nature);
+            appliedFields.Add("Nature");
+        }
+
+        // Gender — 仅固定性别时应用
+        if (enc is IFixedGender fg && fg.IsFixedGender)
+        {
+            pkm.Gender = fg.Gender;
+            appliedFields.Add("Gender");
+        }
+
+        // Shiny — 仅 Never/Always/AlwaysStar/AlwaysSquare；跳过 FixedValue 和 Random
+        switch (enc.Shiny)
+        {
+            case Shiny.Never:
+                if (pkm.IsShiny)
+                {
+                    pkm.PID ^= 0x8000_0000;
+                    if (pkm.IsShiny) pkm.PID ^= 0x1000_0000;
+                }
+                appliedFields.Add("Shiny=Never");
+                break;
+            case Shiny.Always:
+                if (!pkm.IsShiny)
+                    pkm.SetShiny();
+                appliedFields.Add("Shiny=Always");
+                break;
+            case Shiny.AlwaysStar:
+                pkm.SetShiny();
+                if (pkm.ShinyXor != 1) pkm.SetShinySID(Shiny.AlwaysStar);
+                appliedFields.Add("Shiny=AlwaysStar");
+                break;
+            case Shiny.AlwaysSquare:
+                pkm.SetShiny();
+                if (pkm.ShinyXor != 0) pkm.PID ^= 0x8000_0000;
+                appliedFields.Add("Shiny=AlwaysSquare");
+                break;
+            // FixedValue: 跳过（需要固定 PID，超出 D.2 范围）
+            // Random: 跳过（无约束）
+        }
+
+        // Moves
+        if (enc is IMoveset { Moves: { HasMoves: true } } moveset)
+        {
+            var m = moveset.Moves;
+            pkm.SetMove(0, m.Move1);
+            pkm.SetMove(1, m.Move2);
+            pkm.SetMove(2, m.Move3);
+            pkm.SetMove(3, m.Move4);
+            appliedFields.Add("Moves");
+        }
+
+        // RelearnMoves
+        if (enc is IRelearn { Relearn: { HasMoves: true } } rl)
+        {
+            var r = rl.Relearn;
+            var dst = pkm.RelearnMoves;
+            if (dst != null)
+            {
+                dst[0] = r.Move1;
+                dst[1] = r.Move2;
+                dst[2] = r.Move3;
+                dst[3] = r.Move4;
+                appliedFields.Add("RelearnMoves");
+            }
+        }
+
+        // Egg encounter
+        if (enc is IEncounterEgg)
+        {
+            pkm.IsEgg = true;
+            if (enc is ILocation eggLoc && eggLoc.EggLocation != 0)
+                pkm.EggLocation = (ushort)eggLoc.EggLocation;
+            pkm.EggMetDate = pkm.MetDate;
+            appliedFields.Add("EggData");
+        }
+        else if (enc.IsEgg && enc is ILocation eggLoc2 && eggLoc2.EggLocation != 0)
+        {
+            // 非 IEncounterEgg 但 IsEgg=true（如 Gen2 赠蛋）
+            pkm.EggLocation = (ushort)eggLoc2.EggLocation;
+            appliedFields.Add("EggLocation");
+        }
+
+        // FatefulEncounter — 读取遭遇模板实际值（部分模板为 false）
+        if (enc is IFatefulEncounterReadOnly fe)
+        {
+            pkm.FatefulEncounter = fe.FatefulEncounter;
+            appliedFields.Add($"FatefulEncounter={fe.FatefulEncounter}");
+        }
+    }
+
+    // ── Token 序列化 ──────────────────────────────────────
+
+    private record EncounterTokenData(
+        int Species, int Form, Guid SaveFileId,
+        int? LevelMin, int? LevelMax, string[]? EncounterTypes,
+        int ResultIndex);
+
+    private static string BuildRecomputeToken(EncounterSearchRequest request, int index)
+    {
+        var data = new EncounterTokenData(
+            request.Species, request.Form, request.SaveFileId,
+            request.LevelMin, request.LevelMax, request.EncounterTypes, index);
+        var json = JsonSerializer.Serialize(data);
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+    }
+
+    private static EncounterTokenData ParseRecomputeToken(string token)
+    {
+        try
+        {
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(token));
+            return JsonSerializer.Deserialize<EncounterTokenData>(json)
+                ?? throw new BusinessException("Token 反序列化失败", 400);
+        }
+        catch (BusinessException) { throw; }
+        catch (Exception ex)
+        {
+            throw new BusinessException($"Token 解析失败: {ex.Message}", 400);
+        }
+    }
+
+    /// <summary>
+    /// 从 Token 重算并定位遭遇模板（确定性：PKHeX 静态数组迭代顺序固定）。
+    /// </summary>
+    private IEncounterable? RecomputeEncounter(string token, ITrainerInfo trainerInfo, Guid saveFileId)
+    {
+        var tokenData = ParseRecomputeToken(token);
+        if (tokenData.SaveFileId != saveFileId)
+            return null;
+
+        var blank = EntityBlank.GetBlank(trainerInfo);
+        blank.Species = (ushort)tokenData.Species;
+        blank.Form = (byte)tokenData.Form;
+
+        IEnumerable<IEncounterable> allEncounters;
+        try
+        {
+            allEncounters = EncounterMovesetGenerator.GenerateEncounters(
+                blank, trainerInfo, ReadOnlyMemory<ushort>.Empty);
+        }
+        catch
+        {
+            return null;
+        }
+
+        var typeFilter = tokenData.EncounterTypes is { Length: > 0 }
+            ? new HashSet<string>(tokenData.EncounterTypes, StringComparer.OrdinalIgnoreCase)
+            : null;
+
+        int currentIndex = 0;
+        foreach (var enc in allEncounters)
+        {
+            var encounterType = ClassifyEncounterType(enc);
+            if (typeFilter != null && !typeFilter.Contains(encounterType))
+                continue;
+            if (tokenData.LevelMin.HasValue && enc.LevelMax < tokenData.LevelMin.Value)
+                continue;
+            if (tokenData.LevelMax.HasValue && enc.LevelMin > tokenData.LevelMax.Value)
+                continue;
+
+            if (currentIndex == tokenData.ResultIndex)
+                return enc;
+
+            currentIndex++;
+        }
+
+        return null;
     }
 }
