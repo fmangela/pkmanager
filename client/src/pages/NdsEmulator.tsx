@@ -1,12 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Button, Space, Tag, Slider, Modal } from 'antd';
+import { Button, Space, Tag, Slider, Modal, Switch } from 'antd';
 import { ArrowLeftOutlined, ReloadOutlined, SettingOutlined, SaveOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { createNdsEmulator, type NdsEmulator, NDS_VERSION_MAP, NDS_ROM_NAMES } from '../lib/melonds';
 import type { DsInputButton } from '../lib/melonds';
+import {
+  cloneGamepadBinds,
+  codeLabel,
+  DEFAULT_NDS_GAMEPAD_BINDS,
+  emptyGamepadBinds,
+  errorMessage,
+  formatGamepadButtons,
+  getFirstGamepad,
+  getPressedGamepadButtons,
+  GAMEPAD_DEADZONE_DEFAULT,
+  loadGamepadBinds,
+  loadNumberSetting,
+  saveGamepadBinds,
+  saveNumberSetting,
+  toArrayBuffer,
+} from '../lib/inputUtil';
 
 type ScreenScale = 1 | 2;
 const SZ: Record<ScreenScale, { w: number; h: number }> = { 1: { w: 256, h: 192 }, 2: { w: 512, h: 384 } };
+type GamepadBindingMode = 'replace' | 'add';
 
 const NDS_BTNS: DsInputButton[] = ['DPAD_UP','DPAD_DOWN','DPAD_LEFT','DPAD_RIGHT','A','B','X','Y','L','R','START','SELECT'];
 const BTN_LABEL: Record<string,string> = {
@@ -17,13 +34,16 @@ const DEFAULT_KEYS: Record<string,string> = {
   DPAD_UP:'ArrowUp',DPAD_DOWN:'ArrowDown',DPAD_LEFT:'ArrowLeft',DPAD_RIGHT:'ArrowRight',
   A:'KeyZ',B:'KeyX',X:'KeyA',Y:'KeyS',L:'KeyQ',R:'KeyW',START:'Enter',SELECT:'Backspace',
 };
+const NDS_GAMEPAD_KEY = 'nds_gp_km';
+const NDS_GAMEPAD_DEADZONE_KEY = 'nds_gp_deadzone';
+const NDS_GAMEPAD_RUMBLE_KEY = 'nds_gp_rumble';
+const NDS_GAMEPAD_RUMBLE_INTENSITY_KEY = 'nds_gp_rumble_intensity';
+const WEBMELON_AXIS_DISABLED = -1;
 
-function loadKM(): Record<string,string> { try { const s=localStorage.getItem('nds_km'); if(s) return JSON.parse(s); } catch{} return {...DEFAULT_KEYS}; }
+function loadKM(): Record<string,string> { try { const s=localStorage.getItem('nds_km'); if(s) return JSON.parse(s); } catch { /* ignore invalid saved keyboard mapping */ } return {...DEFAULT_KEYS}; }
 function saveKM(m: Record<string,string>) { localStorage.setItem('nds_km', JSON.stringify(m)); }
-function codeLabel(c: string): string {
-  const m: Record<string,string> = { ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→',Enter:'Enter',Backspace:'Bksp',Space:'␣',ShiftLeft:'L⇧',ShiftRight:'R⇧' };
-  return m[c] || c.replace('Key','').replace('Digit','');
-}
+function loadGamepadKM(): Record<string, number[]> { return loadGamepadBinds(NDS_GAMEPAD_KEY, DEFAULT_NDS_GAMEPAD_BINDS); }
+function saveGamepadKM(m: Record<string, number[]>) { saveGamepadBinds(NDS_GAMEPAD_KEY, m); }
 
 // webmelon keybinds 使用 event.key → NDS bitmask
 // bitmask: A=1,B=2,SELECT=4,START=8,RIGHT=16,LEFT=32,UP=64,DOWN=128,R=256,L=512,X=1024,Y=2048
@@ -61,13 +81,24 @@ const NdsEmulatorPage: React.FC = () => {
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState('初始化中...');
   const [keyMap, setKeyMap] = useState<Record<string,string>>(loadKM);
+  const [gamepadMap, setGamepadMap] = useState<Record<string, number[]>>(loadGamepadKM);
+  const [gamepadDeadzone, setGamepadDeadzone] = useState<number>(() => loadNumberSetting(NDS_GAMEPAD_DEADZONE_KEY, GAMEPAD_DEADZONE_DEFAULT));
+  const [gamepadRumble, setGamepadRumble] = useState<boolean>(() => localStorage.getItem(NDS_GAMEPAD_RUMBLE_KEY) !== 'false');
+  const [gamepadRumbleIntensity, setGamepadRumbleIntensity] = useState<number>(() => loadNumberSetting(NDS_GAMEPAD_RUMBLE_INTENSITY_KEY, 0.5));
   const [keyDlg, setKeyDlg] = useState(false);
   const [binding, setBinding] = useState<string|null>(null);
+  const [gamepadBindingMode, setGamepadBindingMode] = useState<GamepadBindingMode>('replace');
   const [micOn, setMicOn] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [synced, setSynced] = useState(false);
   const emuRef = useRef<NdsEmulator|null>(null);
   const initDone = useRef(false);
+  const [gpConnected, setGpConnected] = useState(false);
+  const [gpId, setGpId] = useState<string | null>(null);
+  const initialGamepadMapRef = useRef(gamepadMap);
+  const initialGamepadDeadzoneRef = useRef(gamepadDeadzone);
+  const initialGamepadRumbleRef = useRef(gamepadRumble);
+  const initialGamepadRumbleIntensityRef = useRef(gamepadRumbleIntensity);
 
   // Init emulator
   useEffect(() => {
@@ -106,6 +137,17 @@ const NdsEmulatorPage: React.FC = () => {
         setStatus('启动模拟器...');
         const emu = await createNdsEmulator(topRef.current!, bottomRef.current!);
         emuRef.current = emu;
+        const savedSettings = emu.getInputSettings?.();
+        if (savedSettings) {
+          emu.setInputSettings({
+            ...savedSettings,
+            keybinds: savedSettings.keybinds ?? {},
+            gamepadBinds: initialGamepadMapRef.current,
+            gamepadAxisSensitivity: 1 - initialGamepadDeadzoneRef.current,
+            rumbleEnabled: initialGamepadRumbleRef.current,
+            gamepadRumbleIntensity: initialGamepadRumbleIntensityRef.current,
+          });
+        }
         // 加载已有存档到模拟器
         if (saveFileId) {
           const rawRes = await fetch(`/api/SaveFile/${saveFileId}/raw`, { headers: { Authorization: auth } });
@@ -113,9 +155,29 @@ const NdsEmulatorPage: React.FC = () => {
         }
         await emu.loadRom(rom);
         setReady(true); setStatus('就绪');
-      } catch (err: any) { setStatus(`失败: ${err.message||err}`); }
+      } catch (err: unknown) { setStatus(`失败: ${errorMessage(err)}`); }
     })();
   }, [saveFileId, gameId]);
+
+  useEffect(() => {
+    saveKM(keyMap);
+  }, [keyMap]);
+
+  useEffect(() => {
+    saveGamepadKM(gamepadMap);
+  }, [gamepadMap]);
+
+  useEffect(() => {
+    saveNumberSetting(NDS_GAMEPAD_DEADZONE_KEY, gamepadDeadzone);
+  }, [gamepadDeadzone]);
+
+  useEffect(() => {
+    localStorage.setItem(NDS_GAMEPAD_RUMBLE_KEY, String(gamepadRumble));
+  }, [gamepadRumble]);
+
+  useEffect(() => {
+    saveNumberSetting(NDS_GAMEPAD_RUMBLE_INTENSITY_KEY, gamepadRumbleIntensity);
+  }, [gamepadRumbleIntensity]);
 
   // FPS counter
   useEffect(() => {
@@ -136,7 +198,7 @@ const NdsEmulatorPage: React.FC = () => {
     setSyncing(true); setSynced(false);
     try {
       const encoded = u8b64(sd);
-      const body: any = {
+      const body: { saveFileId: string; saveDataBase64: string; gameId?: string } = {
         saveFileId: effectiveSaveId.current || '00000000-0000-0000-0000-000000000000',
         saveDataBase64: encoded,
       };
@@ -187,7 +249,7 @@ const NdsEmulatorPage: React.FC = () => {
       const token = localStorage.getItem('access_token');
       if (!token) return;
       const id = effectiveSaveId.current;
-      const blob = new Blob([sd] as any, { type: 'application/octet-stream' });
+      const blob = new Blob([toArrayBuffer(sd)], { type: 'application/octet-stream' });
       if (id) {
         navigator.sendBeacon(`/api/Emulator/sync-save/${id}?token=${encodeURIComponent(token)}`, blob);
       } else if (isNewGame && gameId) {
@@ -196,25 +258,95 @@ const NdsEmulatorPage: React.FC = () => {
     };
     window.addEventListener('beforeunload', unload);
     return () => { window.removeEventListener('beforeunload', unload); };
-  }, [ready, saveFileId, keyMap]);
+  }, [ready, saveFileId, keyMap, isNewGame, gameId]);
 
-  // Key binding listener
+  useEffect(() => {
+    if (!ready) return;
+    const current = emuRef.current?.getInputSettings?.();
+    if (!current) return;
+    emuRef.current?.setInputSettings({
+      ...current,
+      gamepadBinds: binding ? emptyGamepadBinds(DEFAULT_NDS_GAMEPAD_BINDS) : gamepadMap,
+      gamepadAxisSensitivity: binding ? WEBMELON_AXIS_DISABLED : 1 - gamepadDeadzone,
+      rumbleEnabled: gamepadRumble,
+      gamepadRumbleIntensity,
+    });
+  }, [ready, binding, gamepadMap, gamepadDeadzone, gamepadRumble, gamepadRumbleIntensity]);
+
+  // Key / gamepad binding listener
   useEffect(() => {
     if (!binding) return;
     const h = (e: KeyboardEvent) => {
       e.preventDefault(); e.stopPropagation();
       if (e.code === 'Escape') { setBinding(null); return; }
+      if (e.repeat) return;
+      if (gamepadBindingMode === 'add') return;
       // 清除其他按键对此键码的旧绑定
       const nm = { ...keyMap };
       for (const [btn, code] of Object.entries(nm)) {
         if (code === e.code) delete nm[btn];
       }
       nm[binding] = e.code;
-      setKeyMap(nm); saveKM(nm); setBinding(null);
+      setKeyMap(nm);
+      setBinding(null);
     };
     window.addEventListener('keydown', h, true);
-    return () => window.removeEventListener('keydown', h, true);
-  }, [binding, keyMap]);
+    let previousPressed = getPressedGamepadButtons();
+    const poll = window.setInterval(() => {
+      if (!binding) {
+        return;
+      }
+      const pad = getFirstGamepad();
+      if (!pad) {
+        previousPressed = new Set<number>();
+        return;
+      }
+      const currentPressed = new Set<number>();
+      let pressed: number | null = null;
+      for (const [idx, btn] of pad.buttons.entries()) {
+        if (btn?.pressed) {
+          currentPressed.add(idx);
+          if (pressed == null && !previousPressed.has(idx)) {
+            pressed = idx;
+          }
+        }
+      }
+      previousPressed = currentPressed;
+      if (pressed != null) {
+        const nm: Record<string, number[]> = {};
+        for (const [btn, indices] of Object.entries(gamepadMap)) {
+          nm[btn] = indices.filter((index) => index !== pressed);
+        }
+        nm[binding] = gamepadBindingMode === 'add'
+          ? [...(nm[binding] || []), pressed]
+          : [pressed];
+        setGamepadMap(nm);
+        setBinding(null);
+      }
+    }, 33);
+    return () => {
+      window.removeEventListener('keydown', h, true);
+      window.clearInterval(poll);
+    };
+  }, [binding, keyMap, gamepadMap, gamepadBindingMode]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const syncPrimaryGamepad = () => {
+      const pad = getFirstGamepad();
+      setGpConnected(!!pad);
+      setGpId(pad?.id || null);
+    };
+    const onConnected = () => syncPrimaryGamepad();
+    const onDisconnected = () => syncPrimaryGamepad();
+    syncPrimaryGamepad();
+    window.addEventListener('gamepadconnected', onConnected);
+    window.addEventListener('gamepaddisconnected', onDisconnected);
+    return () => {
+      window.removeEventListener('gamepadconnected', onConnected);
+      window.removeEventListener('gamepaddisconnected', onDisconnected);
+    };
+  }, [ready]);
 
   const { w, h } = SZ[scale];
 
@@ -255,6 +387,7 @@ const NdsEmulatorPage: React.FC = () => {
             onClick={() => { const next = !micOn; setMicOn(next); emuRef.current?.setMicNoise(next); }}
             type={micOn ? 'primary' : 'default'}
             style={{ padding: '0 6px', fontSize: 11 }}>🎤</Button>
+          {gpConnected && <Tag color="cyan" style={{ fontSize: 11 }} title={gpId || undefined}>🎮 已连接</Tag>}
           <Button ghost size="small" icon={<SettingOutlined />} disabled={!ready} onClick={() => setKeyDlg(true)}>按键</Button>
           <Tag color="green" style={{ fontSize: 11 }}>{fps} FPS</Tag>
         </Space>
@@ -298,19 +431,44 @@ const NdsEmulatorPage: React.FC = () => {
 
       {/* Key Mapping Modal */}
       <Modal title="NDS 按键映射设置" open={keyDlg} onCancel={() => setKeyDlg(false)} footer={null} width={420}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>
+          按下按键或手柄按钮，先捕获到的绑定生效。
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
           {NDS_BTNS.map(btn => (
-            <div key={btn} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: '#f5f5f5', borderRadius: 4 }}>
+            <div key={btn} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#f5f5f5', borderRadius: 6, gap: 8 }}>
               <span style={{ fontWeight: 600 }}>{BTN_LABEL[btn]}</span>
-              <Button size="small" type={binding === btn ? 'primary' : 'default'}
-                onClick={() => setBinding(binding === btn ? null : btn)}>
-                {binding === btn ? '按下新按键...' : codeLabel(keyMap[btn] || '?')}
+              <Button size="small" type={binding === btn ? 'primary' : 'default'} onClick={() => { setGamepadBindingMode('replace'); setBinding(binding === btn ? null : btn); }} style={{ minWidth: 170, textAlign: 'left', height: 'auto', whiteSpace: 'normal' }}>
+                {binding === btn ? '按下按键或手柄按钮...' : (
+                  <span>
+                    <span>{codeLabel(keyMap[btn] || '?')}</span>
+                    <span style={{ display: 'block', fontSize: 11, opacity: 0.8 }}>{formatGamepadButtons(gamepadMap[btn])}</span>
+                  </span>
+                )}
               </Button>
+              <Button size="small" onClick={() => { setGamepadBindingMode('add'); setBinding(btn); }}>追加手柄</Button>
+              <Button size="small" danger onClick={() => setGamepadMap((prev) => ({ ...prev, [btn]: [] }))}>清除手柄</Button>
             </div>
           ))}
         </div>
         <div style={{ marginTop: 12 }}>
-          <Button size="small" onClick={() => { setKeyMap({...DEFAULT_KEYS}); saveKM({...DEFAULT_KEYS}); }}>恢复默认</Button>
+          <Button size="small" onClick={() => {
+            setKeyMap({...DEFAULT_KEYS});
+            setGamepadMap(cloneGamepadBinds(DEFAULT_NDS_GAMEPAD_BINDS));
+            setGamepadDeadzone(GAMEPAD_DEADZONE_DEFAULT);
+            setGamepadRumble(true);
+            setGamepadRumbleIntensity(0.5);
+          }}>恢复默认</Button>
+        </div>
+        <div style={{ marginTop: 12, background: '#fafafa', borderRadius: 6, padding: 10 }}>
+          <div style={{ fontSize: 12, marginBottom: 6 }}>手柄 deadzone: {gamepadDeadzone.toFixed(2)}</div>
+          <Slider min={0} max={1} step={0.05} value={gamepadDeadzone} onChange={setGamepadDeadzone} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+            <span style={{ fontSize: 12 }}>震动</span>
+            <Switch checked={gamepadRumble} onChange={setGamepadRumble} />
+          </div>
+          <div style={{ fontSize: 12, marginTop: 12, marginBottom: 6 }}>震动强度: {gamepadRumbleIntensity.toFixed(2)}</div>
+          <Slider min={0} max={1} step={0.05} value={gamepadRumbleIntensity} onChange={setGamepadRumbleIntensity} disabled={!gamepadRumble} />
         </div>
       </Modal>
 
@@ -318,7 +476,8 @@ const NdsEmulatorPage: React.FC = () => {
       <div style={{ textAlign: 'center', color: '#555', fontSize: 11, marginTop: 4 }}>
         {NDS_BTNS.slice(0,4).map(b=>codeLabel(keyMap[b]||'?')).join('')} 方向 |
         A={codeLabel(keyMap['A']||'?')} B={codeLabel(keyMap['B']||'?')} X={codeLabel(keyMap['X']||'?')} Y={codeLabel(keyMap['Y']||'?')} |
-        L={codeLabel(keyMap['L']||'?')} R={codeLabel(keyMap['R']||'?')}
+        L={codeLabel(keyMap['L']||'?')} R={codeLabel(keyMap['R']||'?')} |
+        {formatGamepadButtons(gamepadMap['A'])} A {formatGamepadButtons(gamepadMap['B'])} B
       </div>
 
       {/* Mobile touch gamepad */}
@@ -327,33 +486,33 @@ const NdsEmulatorPage: React.FC = () => {
           {/* D-Pad */}
           <div style={{ display: 'grid', gridTemplateColumns: '40px 40px 40px', gridTemplateRows: '40px 40px 40px', gap: 2 }}>
             <div />
-            <NdsTouchBtn label="↑" btn="DPAD_UP" emu={emuRef.current} />
+            <NdsTouchBtn label="↑" onPress={() => emuRef.current?.pressButton('DPAD_UP')} onRelease={() => emuRef.current?.releaseButton('DPAD_UP')} />
             <div />
-            <NdsTouchBtn label="←" btn="DPAD_LEFT" emu={emuRef.current} />
+            <NdsTouchBtn label="←" onPress={() => emuRef.current?.pressButton('DPAD_LEFT')} onRelease={() => emuRef.current?.releaseButton('DPAD_LEFT')} />
             <div style={{ background: '#222', borderRadius: 4 }} />
-            <NdsTouchBtn label="→" btn="DPAD_RIGHT" emu={emuRef.current} />
+            <NdsTouchBtn label="→" onPress={() => emuRef.current?.pressButton('DPAD_RIGHT')} onRelease={() => emuRef.current?.releaseButton('DPAD_RIGHT')} />
             <div />
-            <NdsTouchBtn label="↓" btn="DPAD_DOWN" emu={emuRef.current} />
+            <NdsTouchBtn label="↓" onPress={() => emuRef.current?.pressButton('DPAD_DOWN')} onRelease={() => emuRef.current?.releaseButton('DPAD_DOWN')} />
             <div />
           </div>
           {/* Center: Select/Start */}
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
-            <NdsTouchBtn label="Sel" btn="SELECT" emu={emuRef.current} small />
-            <NdsTouchBtn label="Start" btn="START" emu={emuRef.current} small />
+            <NdsTouchBtn label="Sel" onPress={() => emuRef.current?.pressButton('SELECT')} onRelease={() => emuRef.current?.releaseButton('SELECT')} small />
+            <NdsTouchBtn label="Start" onPress={() => emuRef.current?.pressButton('START')} onRelease={() => emuRef.current?.releaseButton('START')} small />
           </div>
           {/* Action buttons */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
             <div style={{ display: 'flex', gap: 12 }}>
-              <NdsTouchBtn label="L" btn="L" emu={emuRef.current} />
-              <NdsTouchBtn label="R" btn="R" emu={emuRef.current} />
+              <NdsTouchBtn label="L" onPress={() => emuRef.current?.pressButton('L')} onRelease={() => emuRef.current?.releaseButton('L')} />
+              <NdsTouchBtn label="R" onPress={() => emuRef.current?.pressButton('R')} onRelease={() => emuRef.current?.releaseButton('R')} />
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <NdsTouchBtn label="X" btn="X" emu={emuRef.current} style={{ background: '#1a3a6a' }} />
-              <NdsTouchBtn label="Y" btn="Y" emu={emuRef.current} style={{ background: '#1a6a3a' }} />
+              <NdsTouchBtn label="X" onPress={() => emuRef.current?.pressButton('X')} onRelease={() => emuRef.current?.releaseButton('X')} style={{ background: '#1a3a6a' }} />
+              <NdsTouchBtn label="Y" onPress={() => emuRef.current?.pressButton('Y')} onRelease={() => emuRef.current?.releaseButton('Y')} style={{ background: '#1a6a3a' }} />
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <NdsTouchBtn label="B" btn="B" emu={emuRef.current} style={{ background: '#c41a1a' }} />
-              <NdsTouchBtn label="A" btn="A" emu={emuRef.current} style={{ background: '#1a7a1a' }} />
+              <NdsTouchBtn label="B" onPress={() => emuRef.current?.pressButton('B')} onRelease={() => emuRef.current?.releaseButton('B')} style={{ background: '#c41a1a' }} />
+              <NdsTouchBtn label="A" onPress={() => emuRef.current?.pressButton('A')} onRelease={() => emuRef.current?.releaseButton('A')} style={{ background: '#1a7a1a' }} />
             </div>
           </div>
         </div>
@@ -364,11 +523,11 @@ const NdsEmulatorPage: React.FC = () => {
 
 /** Touch button for mobile gamepad */
 const NdsTouchBtn: React.FC<{
-  label: string; btn: string; emu: NdsEmulator|null; small?: boolean; style?: React.CSSProperties;
-}> = ({ label, btn, emu, small, style }) => {
+  label: string; onPress: () => void; onRelease: () => void; small?: boolean; style?: React.CSSProperties;
+}> = ({ label, onPress, onRelease, small, style }) => {
   const pressing = useRef(false);
-  const press = (e: React.TouchEvent) => { e.preventDefault(); if (!pressing.current) { emu?.pressButton(btn as DsInputButton); pressing.current = true; } };
-  const release = (e: React.TouchEvent) => { e.preventDefault(); if (pressing.current) { emu?.releaseButton(btn as DsInputButton); pressing.current = false; } };
+  const press = (e: React.TouchEvent) => { e.preventDefault(); if (!pressing.current) { onPress(); pressing.current = true; } };
+  const release = (e: React.TouchEvent) => { e.preventDefault(); if (pressing.current) { onRelease(); pressing.current = false; } };
   const size = small ? 36 : 40;
   return (
     <div

@@ -699,7 +699,13 @@
       processGamepadInput: () => {
         let gamepads = navigator.getGamepads();
         if (gamepads.length === 0) return;
-        let gamepad = gamepads[0];
+        let gamepad = null;
+        for (let candidate of gamepads) {
+          if (candidate) {
+            gamepad = candidate;
+            break;
+          }
+        }
         if (!gamepad) return;
 
         let axisSensitivity = 1 - WebMelon._internal.inputSettings.gamepadAxisSensitivity;
@@ -725,7 +731,7 @@
 
         // Process button inputs
         for (let buttonName in DsButtonInput) {
-          for (let button of WebMelon._internal.inputSettings.gamepadBinds[buttonName]) {
+          for (let button of (WebMelon._internal.inputSettings.gamepadBinds[buttonName] || [])) {
             if (gamepad.buttons[button] && gamepad.buttons[button].pressed) {
               gamepadInput |= DsButtonInput[buttonName];
             }
@@ -746,7 +752,14 @@
         if (WebMelon._internal.emulatorUsingGamepad) {
           let gamepads = navigator.getGamepads();
           if (gamepads.length === 0) return;
-          let gamepad = gamepads[0];
+          let gamepad = null;
+          for (let candidate of gamepads) {
+            if (candidate) {
+              gamepad = candidate;
+              break;
+            }
+          }
+          if (!gamepad || !gamepad.vibrationActuator) return;
           gamepad.vibrationActuator.playEffect('dual-rumble', {
             startDelay: 0,
             duration: WebMelon.constants.DEFAULT_EMULATOR_FRAME_SPEED,

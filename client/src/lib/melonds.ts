@@ -94,6 +94,8 @@ export interface NdsEmulator {
   setMicNoise(enabled: boolean): void;
   /** 写入 webmelon 原生 keybinds (event.key → bitmask) */
   setKeyBinds(keybinds: Record<string, number>): void;
+  setInputSettings(settings: any): void;
+  getInputSettings(): any;
   pressButton(button: DsInputButton): void;
   releaseButton(button: DsInputButton): void;
 }
@@ -545,6 +547,20 @@ export async function createNdsEmulator(
             const settings = window.WebMelon.input.getInputSettings();
             window.WebMelon.input.setInputSettings({ ...settings, keybinds });
           } catch { /* input not ready */ }
+        },
+
+        setInputSettings(settings: any): void {
+          try {
+            window.WebMelon.input.setInputSettings(settings);
+          } catch { /* input not ready */ }
+        },
+
+        getInputSettings(): any {
+          try {
+            return window.WebMelon.input.getInputSettings();
+          } catch {
+            return null;
+          }
         },
 
         pressButton(button: DsInputButton): void {
