@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button, Space, Tag, Slider, Modal } from 'antd';
-import { PauseCircleOutlined, PlayCircleOutlined, ArrowLeftOutlined, ReloadOutlined, SettingOutlined, SaveOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { PauseCircleOutlined, PlayCircleOutlined, ArrowLeftOutlined, ReloadOutlined, SettingOutlined, SaveOutlined, CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { createMGBA, type MGBAEmulator, GBA_VERSION_MAP, ROM_DISPLAY_NAMES } from '../lib/mgba';
 import {
   cloneGamepadBinds,
@@ -19,6 +19,7 @@ import {
   toArrayBuffer,
 } from '../lib/inputUtil';
 import { useGamepad } from '../hooks/useGamepad';
+import CheatsModal from '../components/CheatsModal';
 
 type ScreenScale = 1 | 2 | 4;
 const SZ: Record<ScreenScale, { w: number; h: number }> = { 1: { w: 240, h: 160 }, 2: { w: 480, h: 320 }, 4: { w: 960, h: 640 } };
@@ -57,6 +58,7 @@ const EmulatorPage: React.FC = () => {
   const [gamepadBindingMode, setGamepadBindingMode] = useState<GamepadBindingMode>('replace');
   const [syncing, setSyncing] = useState(false);
   const [synced, setSynced] = useState(false);
+  const [cheatsOpen, setCheatsOpen] = useState(false);
   const emuRef = useRef<MGBAEmulator|null>(null);
   const initDone = useRef(false);
 
@@ -136,7 +138,11 @@ const EmulatorPage: React.FC = () => {
     const emu = emuRef.current;
     if (!emu) return false;
     const sd = emu.getSave();
-    if (!sd?.length) return false;
+    if (!sd?.length) {
+      setStatus('尚未在游戏中存档，未创建存档');
+      setTimeout(() => { if (ready) setStatus('就绪'); }, 2500);
+      return false;
+    }
     const token = localStorage.getItem('access_token');
     if (!token) return false;
     setSyncing(true); setSynced(false);
@@ -155,6 +161,11 @@ const EmulatorPage: React.FC = () => {
       });
       if (r.ok) {
         const resp = await r.json();
+        if (resp.data?.skipped) {
+          setStatus(resp.message || '尚未在游戏中存档，未创建存档');
+          setTimeout(() => { if (ready) setStatus('就绪'); }, 2500);
+          return false;
+        }
         // 新游戏首次同步: 服务器返回新创建的 saveFileId，存储供后续使用
         if (resp.data?.saveFileId && !effectiveSaveId.current) {
           effectiveSaveId.current = resp.data.saveFileId;
@@ -292,6 +303,7 @@ const EmulatorPage: React.FC = () => {
             {paused ? '继续' : '暂停'}
           </Button>
           <Button ghost size="small" icon={<ReloadOutlined />} onClick={() => emuRef.current?.quickReload()} disabled={!ready}>重置</Button>
+          <Button ghost size="small" icon={<ThunderboltOutlined />} onClick={() => setCheatsOpen(true)} disabled={!ready}>金手指</Button>
           <div style={{ width: 80, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ fontSize: 11, color: '#888' }}>🔊</span>
             <Slider min={0} max={100} value={volume} onChange={v => { emuRef.current?.setVolume(v/100); setVolume(v); }} disabled={!ready} style={{ width: 60, margin: 0 }} tooltip={{formatter:v=>`${v}%`}} />
@@ -340,6 +352,14 @@ const EmulatorPage: React.FC = () => {
           <Slider min={0} max={1} step={0.05} value={gamepadDeadzone} onChange={setGamepadDeadzone} />
         </div>
       </Modal>
+
+      <CheatsModal
+        open={cheatsOpen}
+        onClose={() => setCheatsOpen(false)}
+        emu={emuRef.current}
+        romName={romName || saveName || 'GBA'}
+        romFileName="game.gba"
+      />
 
       <div style={{ textAlign: 'center', color: '#555', fontSize: 11, marginTop: 4 }}>
         {GBA_BTNS.slice(0,4).map(b=>codeLabel(keyMap[b]||'?')).join('')} 方向 | {codeLabel(keyMap['A']||'?')}=A {codeLabel(keyMap['B']||'?')}=B | {formatGamepadButtons(gamepadMap['A'])}=🎮A {formatGamepadButtons(gamepadMap['B'])}=🎮B

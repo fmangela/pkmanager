@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Button, Space, Tag, Slider, Modal, Switch } from 'antd';
-import { ArrowLeftOutlined, ReloadOutlined, SettingOutlined, SaveOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { Button, Space, Tag, Slider, Modal, Switch, Tooltip } from 'antd';
+import { ArrowLeftOutlined, ReloadOutlined, SettingOutlined, SaveOutlined, CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { createNdsEmulator, type NdsEmulator, NDS_VERSION_MAP, NDS_ROM_NAMES } from '../lib/melonds';
 import type { DsInputButton } from '../lib/melonds';
 import {
@@ -211,6 +211,11 @@ const NdsEmulatorPage: React.FC = () => {
       });
       if (r.ok) {
         const resp = await r.json();
+        if (resp.data?.skipped) {
+          setStatus(resp.message || '尚未在游戏中存档，未创建存档');
+          setTimeout(() => { if (ready) setStatus('就绪'); }, 2500);
+          return false;
+        }
         if (resp.data?.saveFileId && !effectiveSaveId.current) {
           effectiveSaveId.current = resp.data.saveFileId;
           setSaveName(`存档 - ${resp.data.trainerName || '训练家'}`);
@@ -376,6 +381,11 @@ const NdsEmulatorPage: React.FC = () => {
             {paused ? '继续' : '暂停'}
           </Button>
           <Button ghost size="small" icon={<ReloadOutlined />} onClick={() => { /* NDS restart requires reload */ window.location.reload(); }} disabled={!ready}>重置</Button>
+          <Tooltip title="melonDS WASM 当前未暴露金手指接口，请使用桌面版模拟器">
+            <span>
+              <Button ghost size="small" icon={<ThunderboltOutlined />} disabled>金手指</Button>
+            </span>
+          </Tooltip>
           <div style={{ width: 80, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ fontSize: 11, color: '#888', cursor: 'pointer' }} onClick={() => { const v = volume > 0 ? 0 : 100; setVolume(v); emuRef.current?.setVolume(v); }}>
               {volume > 0 ? '🔊' : '🔇'}

@@ -22,6 +22,9 @@ export interface MGBAEmulator {
   savePath: string;
   gamePath: string;
   writeSave(data: Uint8Array, filename: string): void;
+  uploadCheats(file: File): Promise<void>;
+  autoLoadCheats(): boolean;
+  getCheatsPath(): string;
 }
 
 export const KEY_MAP: Record<string, string> = {
@@ -79,5 +82,20 @@ export async function createMGBA(canvas: HTMLCanvasElement): Promise<MGBAEmulato
     saveState(s: number) { return module.saveState?.(s) ?? false; },
     loadState(s: number) { return module.loadState?.(s) ?? false; },
     quickReload() { module.quickReload?.(); },
+    uploadCheats(file: File) {
+      return new Promise<void>((resolve, reject) => {
+        try {
+          if (!module.uploadCheats) {
+            reject(new Error('mGBA cheats API 不可用'));
+            return;
+          }
+          module.uploadCheats(file, () => resolve());
+        } catch (err) {
+          reject(err);
+        }
+      });
+    },
+    autoLoadCheats() { return module.autoLoadCheats?.() ?? false; },
+    getCheatsPath() { return module.filePaths?.().cheatsPath || '/data/cheats'; },
   };
 }

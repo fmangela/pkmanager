@@ -18,6 +18,7 @@ namespace PkManager.Server.Controllers;
 public class EmulatorController : ControllerBase
 {
     private static readonly TimeSpan SyncTokenLifetime = TimeSpan.FromHours(12);
+    private const string NewGameSaveSkippedMessage = "未检测到游戏内有效存档，已跳过同步";
     private readonly NpgsqlConnection _db;
     private readonly SaveFileService _saveFileService;
     private readonly ParseService _parseService;
@@ -142,11 +143,16 @@ public class EmulatorController : ControllerBase
             return BadRequest(ApiResponse<object>.Error(400, "缺少存档数据"));
 
         var data = Convert.FromBase64String(request.SaveDataBase64);
+        SaveFileDetailDto? parsedNewGameSave = null;
 
         // ── 新游戏首次同步: 自动创建存档记录 ──
         Guid saveFileId;
         if (request.SaveFileId == Guid.Empty && !string.IsNullOrEmpty(request.GameId))
         {
+            parsedNewGameSave = TryParseNewGameSave(data, $"{request.GameId}.sav");
+            if (parsedNewGameSave == null)
+                return Ok(ApiResponse<object>.Ok(new { skipped = true, created = false }, NewGameSaveSkippedMessage));
+
             var result = await _saveFileService.CreateNewGame(userId.Value, request.GameId);
             saveFileId = result.SaveFileId;
         }
@@ -175,38 +181,11 @@ public class EmulatorController : ControllerBase
         await _saveFileService.WriteSaveBytes(saveFile, userId.Value, data);
 
         // 解析存档更新元数据
-        string? trainerName = null;
-        int? pokemonCount = null;
-        try
-        {
-            var parsed = _parseService.ParseSaveFile(data, saveFile.Filename);
-            trainerName = parsed.TrainerName;
-            pokemonCount = parsed.PokemonCount;
-            await _db.ExecuteAsync(@"
-                UPDATE save_files SET
-                    file_size = @Size, is_modified = TRUE, updated_at = NOW(),
-                    trainer_name = @TN, trainer_id = @TID, secret_id = @SID,
-                    play_time = @PT, box_count = @BC, pokemon_count = @PC,
-                    generation = @G, game_version = @GV
-                WHERE id = @Id",
-                new
-                {
-                    Id = saveFileId, Size = (long)data.Length,
-                    TN = parsed.TrainerName, TID = parsed.TrainerId, SID = parsed.SecretId,
-                    PT = parsed.PlayTime, BC = parsed.BoxCount, PC = parsed.PokemonCount,
-                    G = parsed.Generation, GV = GameVersionNormalizer.NormalizeOrKeepExisting(parsed.GameVersion, saveFile.GameVersion)
-                });
-        }
-        catch
-        {
-            await _db.ExecuteAsync(
-                "UPDATE save_files SET file_size=@Size, is_modified=TRUE, updated_at=NOW() WHERE id=@Id",
-                new { Id = saveFileId, Size = (long)data.Length });
-        }
+        var metadata = await UpdateSaveMetadata(saveFileId, saveFile, data, parsedNewGameSave);
 
         _legalityCache.InvalidateSave(saveFileId);
 
-        return Ok(ApiResponse<object>.Ok(new { saveFileId, trainerName, pokemonCount }, "存档已同步"));
+        return Ok(ApiResponse<object>.Ok(new { saveFileId, metadata.TrainerName, metadata.PokemonCount }, "存档已同步"));
     }
 
     /// <summary>
@@ -340,6 +319,10 @@ public class EmulatorController : ControllerBase
         }
         if (data.Length == 0) return BadRequest(ApiResponse<object>.Error(400, "存档数据为空"));
 
+        var parsedNewGameSave = TryParseNewGameSave(data, $"{gameId}.sav");
+        if (parsedNewGameSave == null)
+            return Ok(ApiResponse<object>.Ok(new { skipped = true, created = false }, NewGameSaveSkippedMessage));
+
         var created = await _saveFileService.CreateNewGame(userId.Value, gameId);
         var saveFileId = created.SaveFileId;
 
@@ -351,13 +334,37 @@ public class EmulatorController : ControllerBase
         // 写入文件系统（规范路径，自动修复 DB save_path）
         await _saveFileService.WriteSaveBytes(saveFile, userId.Value, data);
 
-        string? trainerName = null;
-        int? pokemonCount = null;
+        var metadata = await UpdateSaveMetadata(saveFileId, saveFile, data, parsedNewGameSave);
+
+        _legalityCache.InvalidateSave(saveFileId);
+
+        return Ok(ApiResponse<object>.Ok(new { saveFileId, metadata.TrainerName, metadata.PokemonCount }, "存档已同步"));
+    }
+
+    private SaveFileDetailDto? TryParseNewGameSave(byte[] data, string fileName)
+    {
         try
         {
-            var parsed = _parseService.ParseSaveFile(data, $"{gameId}.sav");
-            trainerName = parsed.TrainerName;
-            pokemonCount = parsed.PokemonCount;
+            var parsed = _parseService.ParseSaveFile(data, fileName);
+            if (string.IsNullOrWhiteSpace(parsed.TrainerName) || parsed.BoxCount <= 0)
+                return null;
+            return parsed;
+        }
+        catch (BusinessException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<(string? TrainerName, int? PokemonCount)> UpdateSaveMetadata(
+        Guid saveFileId,
+        SaveFile saveFile,
+        byte[] data,
+        SaveFileDetailDto? parsed = null)
+    {
+        try
+        {
+            parsed ??= _parseService.ParseSaveFile(data, saveFile.Filename);
             await _db.ExecuteAsync(@"
                 UPDATE save_files SET
                     file_size = @Size, is_modified = TRUE, updated_at = NOW(),
@@ -372,17 +379,15 @@ public class EmulatorController : ControllerBase
                     PT = parsed.PlayTime, BC = parsed.BoxCount, PC = parsed.PokemonCount,
                     G = parsed.Generation, GV = GameVersionNormalizer.NormalizeOrKeepExisting(parsed.GameVersion, saveFile.GameVersion)
                 });
+            return (parsed.TrainerName, parsed.PokemonCount);
         }
         catch
         {
             await _db.ExecuteAsync(
                 "UPDATE save_files SET file_size=@Size, is_modified=TRUE, updated_at=NOW() WHERE id=@Id",
                 new { Id = saveFileId, Size = (long)data.Length });
+            return (null, null);
         }
-
-        _legalityCache.InvalidateSave(saveFileId);
-
-        return Ok(ApiResponse<object>.Ok(new { saveFileId, trainerName, pokemonCount }, "存档已同步"));
     }
 
     /// <summary>保存即时存档状态</summary>
