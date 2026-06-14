@@ -240,6 +240,30 @@ public class PokemonController : ControllerBase
     }
 
     /// <summary>
+    /// 导出宝可梦为 Showdown 对战配置文本。
+    /// </summary>
+    [HttpPost("export-showdown")]
+    public ActionResult<ApiResponse<string>> ExportShowdown([FromBody] ShowdownExportRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return Unauthorized(ApiResponse<string>.Error(401, "未登录"));
+
+        if (string.IsNullOrEmpty(request.PkmDataBase64))
+            return BadRequest(ApiResponse<string>.Error(400, "缺少宝可梦数据"));
+
+        try
+        {
+            var pkm = _parseService.RebuildPkm(request.PkmDataBase64);
+            var showdownText = _legalizationService.ExportShowdown(pkm, request.EditSnapshot);
+            return Ok(ApiResponse<string>.Ok(showdownText, "Showdown 导出成功"));
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ApiResponse<string>.Error(400, $"导出失败: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
     /// 仅校验，不保存
     /// </summary>
     [HttpPost("{id:guid}/validate")]

@@ -5,13 +5,14 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps } from 'antd';
-import { SearchOutlined, ReloadOutlined, SaveOutlined, FolderOpenOutlined, DeleteOutlined } from '@ant-design/icons';
+import { SearchOutlined, ReloadOutlined, SaveOutlined, FolderOpenOutlined, DeleteOutlined, ExportOutlined } from '@ant-design/icons';
 import { saveFileApi, type PokemonSearchRequest, type PokemonSearchItemDto, type PokemonDto } from '../../api/saveFile';
 import { bankApi } from '../../api/bank';
 import { useResourceStore } from '../../stores/resourceStore';
 import PokemonSprite from '../PokemonSprite';
 import { getStoredSpriteStyle } from '../../lib/spriteUrl';
 import BankEditDrawer from '../bank/BankEditDrawer';
+import ShowdownExportModal from './ShowdownExportModal';
 
 const { Text } = Typography;
 
@@ -77,6 +78,19 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
   // ── 已保存筛选器 ──
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(loadSavedFilters);
 
+  // ── 批量导出 ──
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [rowCacheByKey, setRowCacheByKey] = useState<Record<string, PokemonSearchItemDto>>({});
+  const [batchExportModalOpen, setBatchExportModalOpen] = useState(false);
+  const [batchExportText, setBatchExportText] = useState('');
+  const [batchExportLoading, setBatchExportLoading] = useState(false);
+
+  const getRowKey = (row: PokemonSearchItemDto) => String(row.bankId ?? `${row.boxIndex}-${row.slotIndex}-${row.isParty}`);
+  const clearSelection = useCallback(() => {
+    setSelectedRowKeys([]);
+    setRowCacheByKey({});
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadAll(); }, 0);
     return () => window.clearTimeout(timer);
@@ -96,7 +110,8 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
     setResults([]);
     setTotal(0);
     setPage(1);
-  }, []);
+    clearSelection();
+  }, [clearSelection]);
 
   // 执行搜索
   const doSearch = useCallback(async (searchPage?: number) => {
@@ -119,6 +134,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
 
   // 搜索按钮
   const handleSearch = () => {
+    clearSelection();
     setPage(1);
     doSearch(1);
   };
@@ -190,6 +206,28 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
     setDrawerOpen(false);
     setDrawerPokemon(null);
     setDrawerBankId('');
+  };
+
+  // ── 批量导出 ──
+  const handleBatchExportShowdown = async () => {
+    const items = selectedRowKeys
+      .map(key => rowCacheByKey[String(key)])
+      .filter((item): item is PokemonSearchItemDto => !!item?.pkmDataBase64);
+    if (items.length === 0) { message.warning('没有可导出的条目'); return; }
+    setBatchExportLoading(true);
+    try {
+      const texts: string[] = [];
+      for (const item of items) {
+        const res = await saveFileApi.exportShowdown({
+          pkmDataBase64: item.pkmDataBase64!,
+        });
+        texts.push(res.data);
+      }
+      setBatchExportText(texts.join('\n\n'));
+      setBatchExportModalOpen(true);
+    } catch (err: unknown) {
+      message.error(getErrorMessage(err, '批量导出失败'));
+    } finally { setBatchExportLoading(false); }
   };
 
   // ── 结果点击 ──
@@ -267,10 +305,11 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
         <Segmented
           value={scope}
           onChange={(v) => {
-            setScope(v as 'save' | 'bank');
-            setResults([]);
-            setTotal(0);
-          }}
+          setScope(v as 'save' | 'bank');
+          setResults([]);
+          setTotal(0);
+          clearSelection();
+        }}
           options={[
             { value: 'save', label: '当前存档' },
             { value: 'bank', label: '银行' },
@@ -550,6 +589,12 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
           搜索
         </Button>
         <Button icon={<ReloadOutlined />} onClick={resetAll}>重置</Button>
+        {selectedRowKeys.length > 0 && (
+          <Button icon={<ExportOutlined />} loading={batchExportLoading}
+            onClick={handleBatchExportShowdown}>
+            Showdown 导出 (已选 {selectedRowKeys.length})
+          </Button>
+        )}
         <div style={{ flex: 1 }} />
         {total > 0 && <Text type="secondary">共 {total} 个结果</Text>}
       </div>
@@ -564,7 +609,20 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
             loading={loading}
             dataSource={results}
             columns={columns}
-            rowKey={(r) => r.bankId ?? `${r.boxIndex}-${r.slotIndex}-${r.isParty}`}
+            rowKey={getRowKey}
+            rowSelection={{
+              selectedRowKeys,
+              onChange: (keys, rows) => {
+                setSelectedRowKeys(keys.map(String));
+                setRowCacheByKey(prev => {
+                  const next = { ...prev };
+                  rows.forEach(row => {
+                    next[getRowKey(row)] = row;
+                  });
+                  return next;
+                });
+              },
+            }}
             pagination={{
               current: page,
               pageSize: filters.pageSize,
@@ -590,8 +648,23 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
         onClose={handleDrawerClose}
         onSaved={() => { handleDrawerClose(); doSearch(page); }}
       />
+
+      {/* ── Batch Showdown Export ── */}
+      <ShowdownExportModal
+        open={batchExportModalOpen}
+        showdownText={batchExportText}
+        onClose={() => setBatchExportModalOpen(false)}
+      />
     </div>
   );
 };
 
 export default SearchPanel;
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (typeof err === 'object' && err && 'response' in err) {
+    const response = (err as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
+}

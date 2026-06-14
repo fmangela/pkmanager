@@ -108,7 +108,7 @@ const ShowdownImportModal: React.FC<Props> = ({ open, saveFileId, onClose, onImp
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
         <TextArea
-          placeholder={`粘贴 Showdown 格式配置，例如：\nGarchomp @ Life Orb\nAbility: Rough Skin\nEVs: 252 Atk / 4 SpD / 252 Spe\nJolly Nature\n- Earthquake\n- Dragon Claw\n- Swords Dance\n- Stone Edge`}
+          placeholder={`粘贴 Showdown 格式配置或 PokePaste 链接（如 https://pokepast.es/...），例如：\nGarchomp @ Life Orb\nAbility: Rough Skin\nEVs: 252 Atk / 4 SpD / 252 Spe\nJolly Nature\n- Earthquake\n- Dragon Claw\n- Swords Dance\n- Stone Edge`}
           value={text}
           onChange={e => { setText(e.target.value); setPreview(null); }}
           rows={10}

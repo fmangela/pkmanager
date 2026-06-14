@@ -19,6 +19,27 @@ public class LegalizationService
         _editService = editService;
     }
 
+    // ── URL 获取辅助 ──────────────────────────────────────
+
+    /// <summary>
+    /// 尝试解析 Showdown/PokePaste URL 为原始文本。
+    /// </summary>
+    private static (string? Text, string? Error) ResolveUrl(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return (input, null);
+
+        if (BattleTemplateTeams.TryGetSetLines(input, out var content))
+            return (content, null);
+
+        var trimmed = input.Trim();
+        var isUrl = ShowdownTeam.IsURL(trimmed, out _) || PokepasteTeam.IsURL(trimmed, out _);
+        if (!isUrl)
+            return (input, null);
+
+        return (null, "无法获取链接内容，请检查链接或网络后重试");
+    }
+
     // ── Showdown 导入 ──────────────────────────────────────
 
     /// <summary>
@@ -27,11 +48,15 @@ public class LegalizationService
     public (PKM? Pkm, string? Error, string? EncounterType) GenerateFromShowdown(
         ShowdownImportRequest request, ITrainerInfo trainerInfo)
     {
-        // 1. 解析 Showdown 文本（支持多套，只取第一只）
+        // 1. 解析 Showdown 文本（支持 PokePaste/Showdown URL）
+        var (resolvedText, urlError) = ResolveUrl(request.ShowdownText);
+        if (urlError != null)
+            return (null, urlError, null);
+
         List<ShowdownSet> sets;
         try
         {
-            sets = ShowdownParsing.GetShowdownSets(request.ShowdownText).ToList();
+            sets = ShowdownParsing.GetShowdownSets(resolvedText!).ToList();
         }
         catch (Exception ex)
         {
@@ -484,7 +509,12 @@ public class LegalizationService
     /// </summary>
     public List<ShowdownSetPreviewDto> ParseShowdownText(string text)
     {
-        var sets = ShowdownParsing.GetShowdownSets(text).ToList();
+        // 支持 PokePaste/Showdown URL
+        var (resolvedText, urlError) = ResolveUrl(text);
+        if (urlError != null)
+            throw new BusinessException(urlError);
+
+        var sets = ShowdownParsing.GetShowdownSets(resolvedText!).ToList();
         var strings = GameInfo.GetStrings("zh");
 
         return sets.Select(set =>
@@ -513,6 +543,17 @@ public class LegalizationService
                 RawText = set.Text
             };
         }).ToList();
+    }
+
+    /// <summary>
+    /// 将 PKM 导出为 Showdown 文本。
+    /// </summary>
+    public string ExportShowdown(PKM pkm, PokemonEditRequest? editSnapshot = null)
+    {
+        if (editSnapshot != null)
+            _editService.ApplyEditsToPkm(pkm, editSnapshot);
+
+        return ShowdownParsing.GetShowdownText(pkm);
     }
 
     // ── 缓存（银行批扫结果）── 已迁移至 LegalityCacheService（单一数据源）─────────────────

@@ -2,13 +2,13 @@ import React, { useEffect, useState } from 'react';
 import {
   Drawer, Tabs, Button, App, Space,
 } from 'antd';
-import { SaveOutlined, BankOutlined, CopyOutlined, ImportOutlined } from '@ant-design/icons';
+import { SaveOutlined, BankOutlined, CopyOutlined, ExportOutlined } from '@ant-design/icons';
 import type { PokemonDto, LegalityStatus, JudgementDto, EditResultDto, LegalityReportDto, AutoFixResultDto } from '../../api/saveFile';
 import { saveFileApi } from '../../api/saveFile';
 import type { EvolveResultDto } from '../../api/evolution';
 import { useResourceStore } from '../../stores/resourceStore';
 import { buildEditRequest, validateFields } from './editHelpers';
-import ShowdownImportModal from './ShowdownImportModal';
+import ShowdownExportModal from './ShowdownExportModal';
 import MainTab from './MainTab';
 import MetTab from './MetTab';
 import StatsTab from './StatsTab';
@@ -43,13 +43,30 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
   const [, forceUpdate] = useState(0);
   const notifyChange = () => forceUpdate(n => n + 1);
   const [saveKey, setSaveKey] = useState(0);
-  const [showImport, setShowImport] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [exportText, setExportText] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
 
   const { loadAll } = useResourceStore();
   const { message } = App.useApp();
 
   // editSnapshot 在每次渲染时重新计算（pokemon 是 mutate-in-place 的同一引用）
   const editSnapshot = pokemon ? buildEditRequest(pokemon) : {};
+
+  const handleExportShowdown = async () => {
+    if (!pokemon?.pkmDataBase64) { message.warning('缺少宝可梦数据，无法导出'); return; }
+    setExportLoading(true);
+    try {
+      const res = await saveFileApi.exportShowdown({
+        pkmDataBase64: pokemon.pkmDataBase64,
+        editSnapshot,
+      });
+      setExportText(res.data);
+      setShowExport(true);
+    } catch (err: unknown) {
+      message.error(getErrorMessage(err, '导出失败'));
+    } finally { setExportLoading(false); }
+  };
 
   useEffect(() => {
     if (open) loadAll();
@@ -226,6 +243,7 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
           onFix={legality ? handleFix : undefined}
           onValidate={handleValidate}
           pkmDataBase64={pokemon.pkmDataBase64}
+          editSnapshot={editSnapshot}
         />
       ),
     },
@@ -252,8 +270,9 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
         <Space>
           <Button icon={<CopyOutlined />} size="small">复制</Button>
           <Button icon={<BankOutlined />} size="small">存入银行</Button>
-          <Button icon={<ImportOutlined />} size="small"
-            onClick={() => setShowImport(true)}>Showdown</Button>
+          <Button icon={<ExportOutlined />} size="small"
+            loading={exportLoading} disabled={!pokemon?.pkmDataBase64}
+            onClick={handleExportShowdown}>Showdown 导出</Button>
           <Button onClick={onClose}>取消</Button>
           <Button type="primary" icon={<SaveOutlined />} loading={loading} onClick={handleSave}>
             保存修改
@@ -262,20 +281,21 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
       }
     >
       <Tabs key={`tabs-${saveKey}`} items={tabItems} defaultActiveKey="main" size="small" />
-      <ShowdownImportModal
-        open={showImport}
-        saveFileId={saveFileId}
-        onClose={() => setShowImport(false)}
-        onImported={(imported) => {
-          Object.assign(pokemon, imported);
-          notifyChange();
-          setLegality(null);
-          setShowImport(false);
-          message.success('Showdown 配置已导入，请检查并保存');
-        }}
+      <ShowdownExportModal
+        open={showExport}
+        showdownText={exportText}
+        onClose={() => setShowExport(false)}
       />
     </Drawer>
   );
 };
 
 export default EditPanel;
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (typeof err === 'object' && err && 'response' in err) {
+    const response = (err as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
+}

@@ -267,6 +267,11 @@ export interface AutoFixRequest {
   targetGameVersion?: number;
 }
 
+export interface ShowdownExportRequest {
+  pkmDataBase64: string;
+  editSnapshot?: Record<string, unknown>;
+}
+
 export interface LegalizationResultDto {
   success: boolean;
   error?: string;
@@ -416,6 +421,10 @@ export const saveFileApi = {
 
   parseShowdown: (data: { showdownText: string }) =>
     apiClient.post<ShowdownParseResultDto>('/Pokemon/parse-showdown', data),
+
+  // ── D.5 Showdown 导出 ──
+  exportShowdown: (data: ShowdownExportRequest) =>
+    apiClient.post<string>('/Pokemon/export-showdown', data),
 
   autoFix: (data: AutoFixRequest) =>
     apiClient.post<AutoFixResultDto>('/Pokemon/auto-fix', data),

@@ -160,3 +160,12 @@ public class QrGenerateRequest
 {
     public string PkmDataBase64 { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// Showdown 导出请求
+/// </summary>
+public class ShowdownExportRequest
+{
+    public string PkmDataBase64 { get; set; } = string.Empty;
+    public PokemonEditRequest? EditSnapshot { get; set; }
+}

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Alert, Tag, Button, Space, Empty, List, Image, Spin } from 'antd';
-import { CheckCircleOutlined, WarningOutlined, CloseCircleOutlined, ToolOutlined, QrcodeOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { Alert, Tag, Button, Space, Empty, List, Image, Spin, App } from 'antd';
+import { CheckCircleOutlined, WarningOutlined, CloseCircleOutlined, ToolOutlined, QrcodeOutlined, SafetyCertificateOutlined, ExportOutlined } from '@ant-design/icons';
 import type { LegalityStatus, JudgementDto } from '../../api/saveFile';
 import { saveFileApi } from '../../api/saveFile';
+import ShowdownExportModal from './ShowdownExportModal';
 
 interface Props {
   status: LegalityStatus;
@@ -11,6 +12,7 @@ interface Props {
   onFix?: (fixAction: string) => void;
   onValidate?: () => void;
   pkmDataBase64?: string;
+  editSnapshot?: Record<string, unknown>;
 }
 
 const STATUS_CONFIG: Record<LegalityStatus, { color: string; icon: React.ReactNode; text: string }> = {
@@ -19,10 +21,11 @@ const STATUS_CONFIG: Record<LegalityStatus, { color: string; icon: React.ReactNo
   Illegal: { color: 'red', icon: <CloseCircleOutlined />, text: '不合法' },
 };
 
-const LegalityTab: React.FC<Props> = ({ status, report, judgements, onFix, onValidate, pkmDataBase64 }) => {
+const LegalityTab: React.FC<Props> = ({ status, report, judgements, onFix, onValidate, pkmDataBase64, editSnapshot }) => {
   const [validating, setValidating] = useState(false);
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.Illegal;
   const fixableJudgements = judgements.filter(j => j.canFix);
+  const { message } = App.useApp();
 
   const handleValidate = async () => {
     setValidating(true);
@@ -37,6 +40,24 @@ const LegalityTab: React.FC<Props> = ({ status, report, judgements, onFix, onVal
   const [qrLoading, setQrLoading] = useState(false);
   const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
+
+  // Showdown export state
+  const [showdownExportLoading, setShowdownExportLoading] = useState(false);
+  const [showdownExportText, setShowdownExportText] = useState<string | null>(null);
+
+  const handleExportShowdown = async () => {
+    if (!pkmDataBase64) return;
+    setShowdownExportLoading(true);
+    try {
+      const res = await saveFileApi.exportShowdown({
+        pkmDataBase64,
+        editSnapshot,
+      });
+      setShowdownExportText(res.data);
+    } catch (err: unknown) {
+      message.error(getErrorMessage(err, '导出失败'));
+    } finally { setShowdownExportLoading(false); }
+  };
 
   const handleGenerateQR = async () => {
     if (!pkmDataBase64) {
@@ -134,6 +155,14 @@ const LegalityTab: React.FC<Props> = ({ status, report, judgements, onFix, onVal
           >
             生成QR码
           </Button>
+          <Button
+            icon={<ExportOutlined />}
+            onClick={handleExportShowdown}
+            loading={showdownExportLoading}
+            style={{ marginBottom: 12, marginLeft: 8 }}
+          >
+            Showdown 导出
+          </Button>
           {qrError && (
             <Alert type="error" message={qrError} showIcon style={{ marginBottom: 8 }} />
           )}
@@ -196,6 +225,13 @@ const LegalityTab: React.FC<Props> = ({ status, report, judgements, onFix, onVal
           )}
         />
       )}
+      {showdownExportText && (
+        <ShowdownExportModal
+          open={!!showdownExportText}
+          showdownText={showdownExportText}
+          onClose={() => setShowdownExportText(null)}
+        />
+      )}
     </div>
   );
 };
@@ -208,6 +244,14 @@ function getFixLabel(action: string): string {
     case 'FixRelearnMoves': return '修复回忆招式';
     default: return action;
   }
+}
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (typeof err === 'object' && err && 'response' in err) {
+    const response = (err as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
 }
 
 export default LegalityTab;

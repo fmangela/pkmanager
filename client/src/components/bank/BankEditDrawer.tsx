@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Drawer, Tabs, Button, App, Space, Tag, Modal, Select, Radio, Row, Col, Typography, Alert, Tooltip, Descriptions,
 } from 'antd';
-import { SaveOutlined, SendOutlined, ExperimentOutlined } from '@ant-design/icons';
+import { SaveOutlined, SendOutlined, ExperimentOutlined, ExportOutlined } from '@ant-design/icons';
 import type { PokemonDto, LegalityStatus, JudgementDto, EditResultDto, LegalityReportDto, SaveFileInfo, SaveFileDetail } from '../../api/saveFile';
 import { saveFileApi } from '../../api/saveFile';
 import { bankApi } from '../../api/bank';
@@ -17,6 +17,7 @@ import LegalityTab from '../editor/LegalityTab';
 import OTMiscTab from '../editor/OTMiscTab';
 import CosmeticTab from '../editor/CosmeticTab';
 import GenSpecificTab from '../editor/GenSpecificTab';
+import ShowdownExportModal from '../editor/ShowdownExportModal';
 
 const { Text } = Typography;
 
@@ -49,6 +50,11 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
     artFallbackStage.current = 0;
   }, [pokemon?.species]);
 
+  // Showdown export
+  const [showExport, setShowExport] = useState(false);
+  const [exportText, setExportText] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
+
   // Move-to-save modal
   const [moveModalOpen, setMoveModalOpen] = useState(false);
   const [moveLoading, setMoveLoading] = useState(false);
@@ -75,8 +81,24 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
 
   const generation = pokemon.format || 0;
   const hasPkmData = !!pokemon.pkmDataBase64;
+  const editSnapshot = buildEditRequest(pokemon);
 
   // ── Save ──────────────────────────────────────────────
+
+  const handleExportShowdown = async () => {
+    if (!pokemon?.pkmDataBase64) { message.warning('缺少宝可梦数据，无法导出'); return; }
+    setExportLoading(true);
+    try {
+      const res = await saveFileApi.exportShowdown({
+        pkmDataBase64: pokemon.pkmDataBase64,
+        editSnapshot,
+      });
+      setExportText(res.data);
+      setShowExport(true);
+    } catch (err: unknown) {
+      message.error(getErrorMessage(err, '导出失败'));
+    } finally { setExportLoading(false); }
+  };
 
   const handleSave = async () => {
     if (!hasPkmData) { message.error('该记录缺少原始数据，无法编辑'); return; }
@@ -217,6 +239,7 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
           judgements={legality.judgements}
           onValidate={handleValidate}
           pkmDataBase64={pokemon.pkmDataBase64}
+          editSnapshot={editSnapshot}
         />
       ),
     },
@@ -269,6 +292,10 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
             <Tooltip title={!hasPkmData ? '数据不完整，无法操作' : undefined}>
               <Button icon={<SendOutlined />} onClick={openMoveModal} disabled={!hasPkmData}>发送到存档</Button>
             </Tooltip>
+              <Tooltip title={!hasPkmData ? '数据不完整，无法操作' : undefined}>
+              <Button icon={<ExportOutlined />} loading={exportLoading}
+                onClick={handleExportShowdown} disabled={!hasPkmData}>Showdown 导出</Button>
+              </Tooltip>
             <Button onClick={onClose}>取消</Button>
             <Tooltip title={!hasPkmData ? '数据不完整，无法编辑' : undefined}>
               <Button type="primary" icon={<SaveOutlined />} loading={loading} onClick={handleSave} disabled={!hasPkmData}>
@@ -306,6 +333,12 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
           <Tabs items={tabItems} defaultActiveKey="main" size="small" />
         )}
       </Drawer>
+
+      <ShowdownExportModal
+        open={showExport}
+        showdownText={exportText}
+        onClose={() => setShowExport(false)}
+      />
 
       {/* Move-to-save Modal */}
       <Modal
@@ -376,3 +409,11 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
 };
 
 export default BankEditDrawer;
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (typeof err === 'object' && err && 'response' in err) {
+    const response = (err as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || fallback;
+  }
+  return fallback;
+}
