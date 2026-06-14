@@ -2,13 +2,19 @@ namespace PkManager.Server.Models.Response;
 
 /// <summary>
 /// 世代专属工具 capability — 前端条件渲染开关。
-/// RTC（Gen3 RS/Emerald）、O-Power（Gen6 XY/ORAS）、Zygarde Cell（Gen7 SM/USUM）。
+/// RTC（Gen3 RS/Emerald）、O-Power（Gen6 XY/ORAS）、Zygarde Cell（Gen7 SM/USUM）、
+/// Holo Caster（Gen6 XY/ORAS）、Festa/Pelago/Totem（Gen7 SM/USUM）、Rotom（Gen7 USUM）。
 /// </summary>
 public class GenToolsCapability
 {
     public bool HasRtc { get; set; }
     public bool HasOPowers { get; set; }
     public bool HasZygardeCells { get; set; }
+    public bool HasHoloCaster { get; set; }
+    public bool HasFesta { get; set; }
+    public bool HasPelago { get; set; }
+    public bool HasTotemStamps { get; set; }
+    public bool HasRotomDex { get; set; }
 }
 
 /// <summary>
@@ -110,6 +116,97 @@ public class ZygardeDto
 }
 
 /// <summary>
+/// Holo Caster 数据（Gen6 XY/ORAS）— 只读。
+/// PKHeX 当前未解析 Holo Caster 数据结构，仅暴露区块是否有非零内容。
+/// </summary>
+public class HoloCasterDto
+{
+    /// <summary>数据区域是否有非零内容</summary>
+    public bool DataPresent { get; set; }
+}
+
+/// <summary>
+/// Festival Plaza 数据（Gen7 SM/USUM）— 只读。
+/// </summary>
+public class FestaDto
+{
+    /// <summary>当前 Festival Coins (0-9,999,999)</summary>
+    public int FestaCoins { get; set; }
+
+    /// <summary>累计 Festival Coins</summary>
+    public int TotalFestaCoins { get; set; }
+
+    /// <summary>Festival Plaza 等级</summary>
+    public int FestaRank { get; set; }
+}
+
+/// <summary>
+/// Poké Pelago 数据（Gen7 SM/USUM）— 只读。
+/// </summary>
+public class PelagoDto
+{
+    /// <summary>已占用槽位数</summary>
+    public int OccupiedSlots { get; set; }
+
+    /// <summary>总槽位数 (93)</summary>
+    public int TotalSlots { get; set; }
+
+    /// <summary>15 种豆子数量（7 普通 + 7 花纹 + 1 彩虹）</summary>
+    public List<int> BeanCounts { get; set; } = [];
+
+    /// <summary>Poké Pelago 访问次数 (Record 054)</summary>
+    public int Visits { get; set; }
+
+    /// <summary>孵蛋数 (Record 060)</summary>
+    public int EggsHatched { get; set; }
+
+    /// <summary>寻宝次数 (Record 160)</summary>
+    public int TreasureHunts { get; set; }
+}
+
+/// <summary>
+/// 训练家护照印章项（Gen7 SM/USUM）— 只读。
+/// </summary>
+public class TotemStampItem
+{
+    /// <summary>中文名称</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>是否已获得</summary>
+    public bool Earned { get; set; }
+}
+
+/// <summary>
+/// 贴纸与护照印章数据（Gen7 SM/USUM）— 只读。
+/// </summary>
+public class TotemStampsDto
+{
+    /// <summary>收集的贴纸数量 (Record 72)</summary>
+    public int StickersCollected { get; set; }
+
+    /// <summary>15 个护照印章状态</summary>
+    public List<TotemStampItem> Stamps { get; set; } = [];
+}
+
+/// <summary>
+/// Rotom 图鉴数据（Gen7 USUM）— 只读。
+/// </summary>
+public class RotomDexDto
+{
+    /// <summary>洛托姆好感度 0-1000</summary>
+    public int Affection { get; set; }
+
+    /// <summary>Roto Loto 1 已启用</summary>
+    public bool RotoLoto1 { get; set; }
+
+    /// <summary>Roto Loto 2 已启用</summary>
+    public bool RotoLoto2 { get; set; }
+
+    /// <summary>洛托姆图鉴昵称</summary>
+    public string? Nickname { get; set; }
+}
+
+/// <summary>
 /// 世代专属工具统一响应 DTO。
 /// </summary>
 public class GenToolsDto
@@ -124,4 +221,19 @@ public class GenToolsDto
 
     /// <summary>Zygarde Cell 收集数据（Gen7 SM/USUM 非 null，其他存档为 null）</summary>
     public ZygardeDto? Zygarde { get; set; }
+
+    /// <summary>Holo Caster 数据（Gen6 XY/ORAS 非 null）— 只读</summary>
+    public HoloCasterDto? HoloCaster { get; set; }
+
+    /// <summary>Festival Plaza 数据（Gen7 SM/USUM 非 null）— 只读</summary>
+    public FestaDto? Festa { get; set; }
+
+    /// <summary>Poké Pelago 数据（Gen7 SM/USUM 非 null）— 只读</summary>
+    public PelagoDto? Pelago { get; set; }
+
+    /// <summary>贴纸与护照印章（Gen7 SM/USUM 非 null）— 只读</summary>
+    public TotemStampsDto? TotemStamps { get; set; }
+
+    /// <summary>Rotom 图鉴数据（Gen7 USUM 非 null）— 只读</summary>
+    public RotomDexDto? RotomDex { get; set; }
 }

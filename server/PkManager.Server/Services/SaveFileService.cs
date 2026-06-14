@@ -997,7 +997,9 @@ public class SaveFileService
     ];
 
     /// <summary>
-    /// 获取存档世代专属工具数据 — RTC（Gen3 RS/Emerald）+ O-Power（Gen6 XY/ORAS）。
+    /// 获取存档世代专属工具数据。
+    /// 当前覆盖 RTC（Gen3 RS/Emerald）、O-Power / Holo Caster（Gen6 XY/ORAS）、
+    /// Zygarde / Festa / Pelago / Totem（Gen7 SM/USUM）、Rotom Dex（Gen7 USUM）。
     /// </summary>
     public async Task<GenToolsDto> GetGenTools(Guid saveFileId, Guid userId)
     {
@@ -1090,12 +1092,98 @@ public class SaveFileService
             };
         }
 
+        // ── Holo Caster (Gen6 XY/ORAS) — 只读 ──
+        cap.HasHoloCaster = sav is SAV6XY or SAV6AO;
+        if (cap.HasHoloCaster)
+        {
+            dto.HoloCaster = new HoloCasterDto
+            {
+                DataPresent = PkhexSaveAdapters.HasHoloCasterData(sav),
+            };
+        }
+
+        // ── Festa (Gen7 SM/USUM) — 只读 ──
+        var festa = PkhexSaveAdapters.GetFesta(sav);
+        cap.HasFesta = festa != null;
+        if (festa != null)
+        {
+            dto.Festa = new FestaDto
+            {
+                FestaCoins = festa.Value.coins,
+                TotalFestaCoins = festa.Value.totalCoins,
+                FestaRank = festa.Value.rank,
+            };
+        }
+
+        // ── Pelago (Gen7 SM/USUM) — 只读 ──
+        var pelago = PkhexSaveAdapters.GetPelago(sav);
+        cap.HasPelago = pelago != null;
+        if (pelago != null)
+        {
+            dto.Pelago = new PelagoDto
+            {
+                OccupiedSlots = pelago.Value.occupied,
+                TotalSlots = pelago.Value.total,
+                BeanCounts = [.. pelago.Value.beans],
+                Visits = pelago.Value.visits,
+                EggsHatched = pelago.Value.eggs,
+                TreasureHunts = pelago.Value.hunts,
+            };
+        }
+
+        // ── Totem Stamps (Gen7 SM/USUM) — 只读 ──
+        var totem = PkhexSaveAdapters.GetTotemStamps(sav);
+        cap.HasTotemStamps = totem != null;
+        if (totem != null)
+        {
+            // 15 Stamp7 中文名称
+            var stampNames = new Dictionary<int, string>
+            {
+                [0] = "官方宝可梦训练家", [1] = "美乐美乐考验完成", [2] = "阿卡拉考验完成",
+                [3] = "乌拉乌拉考验完成", [4] = "波尼考验完成", [5] = "岛屿巡礼完成",
+                [6] = "美乐美乐图鉴完成", [7] = "阿卡拉图鉴完成", [8] = "乌拉乌拉图鉴完成",
+                [9] = "波尼图鉴完成", [10] = "阿罗拉图鉴完成",
+                [11] = "单打连胜 50", [12] = "双打连胜 50", [13] = "多人连胜 50",
+                [14] = "宝可搜寻镜专家",
+            };
+            var earnedStamps = new List<TotemStampItem>(15);
+            uint bits = totem.Value.stamps;
+            for (int i = 0; i < 15; i++)
+            {
+                earnedStamps.Add(new TotemStampItem
+                {
+                    Name = stampNames.TryGetValue(i, out var n) ? n : $"Stamp {i}",
+                    Earned = (bits & (1u << i)) != 0,
+                });
+            }
+            dto.TotemStamps = new TotemStampsDto
+            {
+                StickersCollected = totem.Value.stickers,
+                Stamps = earnedStamps,
+            };
+        }
+
+        // ── Rotom Dex (Gen7 USUM) — 只读 ──
+        var rotom = PkhexSaveAdapters.GetRotomDex(sav);
+        cap.HasRotomDex = rotom != null;
+        if (rotom != null)
+        {
+            dto.RotomDex = new RotomDexDto
+            {
+                Affection = rotom.Value.affection,
+                RotoLoto1 = rotom.Value.loto1,
+                RotoLoto2 = rotom.Value.loto2,
+                Nickname = rotom.Value.nickname,
+            };
+        }
+
         dto.Capability = cap;
         return dto;
     }
 
     /// <summary>
-    /// 保存世代专属工具数据 — RTC + O-Power。
+    /// 保存世代专属工具数据 — RTC + O-Power + Zygarde Cell。
+    /// 只读字段（HoloCaster/Festa/Pelago/TotemStamps/RotomDex）不参与保存。
     /// </summary>
     public async Task SaveGenTools(Guid saveFileId, Guid userId, GenToolsDto dto)
     {

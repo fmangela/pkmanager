@@ -149,4 +149,106 @@ internal static class PkhexSaveAdapters
         SAV7USUM usum => usum.EventWork,
         _ => null,
     };
+
+    // ═══ Gen6 Holo Caster ═════════════════════════════════
+
+    private const int HoloCasterOffsetXY = 0x15800;
+    private const int HoloCasterOffsetAO = 0x16200;
+    private const int HoloCasterSize = 0x644;
+
+    /// <summary>
+    /// 检测 Gen6 存档中 Holo Caster 数据区域是否存在非零内容。
+    /// </summary>
+    public static bool HasHoloCasterData(SaveFile sav)
+    {
+        int offset = sav switch
+        {
+            SAV6XY => HoloCasterOffsetXY,
+            SAV6AO => HoloCasterOffsetAO,
+            _ => -1,
+        };
+        if (offset < 0) return false;
+
+        var span = sav.Data.Slice(offset, HoloCasterSize);
+        // 检查是否非全零（至少有一个字节非零即认为已写入过内容）
+        for (int i = 0; i < span.Length; i++)
+        {
+            if (span[i] != 0) return true;
+        }
+        return false;
+    }
+
+    // ═══ Gen7 Festa ════════════════════════════════════════
+
+    /// <summary>
+    /// 获取 Gen7 (SM/USUM) Festival Plaza 数据。非 Gen7 存档返回 null。
+    /// </summary>
+    public static (int coins, int totalCoins, int rank)? GetFesta(SaveFile sav)
+    {
+        if (sav is not SAV7 s7) return null;
+        var f = s7.Festa;
+        return (f.FestaCoins, f.TotalFestaCoins, f.FestaRank);
+    }
+
+    // ═══ Gen7 Pelago ═══════════════════════════════════════
+
+    /// <summary>
+    /// 获取 Gen7 (SM/USUM) Poké Pelago 数据。非 Gen7 存档返回 null。
+    /// </summary>
+    public static (int occupied, int total, int[] beans, int visits, int eggs, int hunts)? GetPelago(SaveFile sav)
+    {
+        if (sav is not SAV7 s7) return null;
+        var r = s7.ResortSave;
+
+        // 统计已占用的槽位（非全零 PK7 数据）
+        int occupied = 0;
+        int total = ResortSave7.ResortCount;
+        for (int i = 0; i < total; i++)
+        {
+            var slot = r[i].Span;
+            bool hasData = false;
+            for (int j = 0; j < slot.Length; j++)
+            {
+                if (slot[j] != 0) { hasData = true; break; }
+            }
+            if (hasData) occupied++;
+        }
+
+        // 豆子统计
+        var beanSpan = r.GetBeans();
+        int[] beans = new int[beanSpan.Length];
+        for (int i = 0; i < beanSpan.Length; i++)
+            beans[i] = beanSpan[i];
+
+        int visits = (int)s7.GetRecord(054);
+        int eggs = (int)s7.GetRecord(060);
+        int hunts = (int)s7.GetRecord(160);
+
+        return (occupied, total, beans, visits, eggs, hunts);
+    }
+
+    // ═══ Gen7 Totem Stamps ═════════════════════════════════
+
+    /// <summary>
+    /// 获取 Gen7 (SM/USUM) 贴纸收集数与护照印章。非 Gen7 存档返回 null。
+    /// </summary>
+    public static (int stickers, uint stamps)? GetTotemStamps(SaveFile sav)
+    {
+        if (sav is not SAV7 s7) return null;
+        int stickers = (int)s7.GetRecord(072);
+        uint stamps = s7.Misc.Stamps;
+        return (stickers, stamps);
+    }
+
+    // ═══ Gen7 Rotom Dex ════════════════════════════════════
+
+    /// <summary>
+    /// 获取 Gen7 USUM 洛托姆图鉴数据。非 USUM 存档返回 null。
+    /// </summary>
+    public static (int affection, bool loto1, bool loto2, string? nickname)? GetRotomDex(SaveFile sav)
+    {
+        if (sav is not SAV7USUM usum) return null;
+        var fm = usum.FieldMenu;
+        return (fm.RotomAffection, fm.RotomLoto1, fm.RotomLoto2, fm.RotomOT);
+    }
 }

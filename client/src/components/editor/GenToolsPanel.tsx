@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Card, InputNumber, Button, App, Spin, Alert, Typography, Row, Col, Space, Checkbox, Tag, Divider, Progress } from 'antd';
-import { SaveOutlined, ClockCircleOutlined, ReloadOutlined, ThunderboltOutlined, AimOutlined } from '@ant-design/icons';
+import { Card, InputNumber, Button, App, Spin, Alert, Typography, Row, Col, Space, Checkbox, Tag, Divider, Progress, Statistic } from 'antd';
+import { SaveOutlined, ClockCircleOutlined, ReloadOutlined, ThunderboltOutlined, AimOutlined, GiftOutlined, HomeOutlined, TrophyOutlined, BugOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { saveFileApi, type GenToolsDto, type Rtc3EntryDto, type OPowerTypeEntryDto } from '../../api/saveFile';
 
 const { Text, Title } = Typography;
@@ -40,13 +40,17 @@ const GenToolsPanel: React.FC<Props> = ({ saveFileId }) => {
       setError(true);
       messageRef.current.error('获取世代工具数据失败');
     } finally {
-      if (!mountedRef.current || requestId !== requestIdRef.current) return;
-      setLoading(false);
+      if (mountedRef.current && requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [saveFileId]);
 
   useEffect(() => {
-    void fetchGenTools();
+    const timerId = window.setTimeout(() => {
+      void fetchGenTools();
+    }, 0);
+    return () => window.clearTimeout(timerId);
   }, [fetchGenTools]);
 
   // ── RTC helpers ──────────────────────────────────────
@@ -451,21 +455,200 @@ const GenToolsPanel: React.FC<Props> = ({ saveFileId }) => {
         </div>
       )}
 
-      {/* ── 保存按钮 ── */}
-      <div style={{
-        position: 'sticky', bottom: 0, background: 'var(--bg-surface, #fff)',
-        padding: '12px 0', borderTop: '1px solid var(--border-color, #f0f0f0)',
-        textAlign: 'right', marginTop: 24,
-      }}>
-        <Button
-          type="primary"
-          icon={<SaveOutlined />}
-          onClick={handleSave}
-          loading={saving}
-        >
-          保存专用工具设置
-        </Button>
-      </div>
+      {/* ── Holo Caster (Gen6) — 只读 ── */}
+      {genTools?.holoCaster && (
+        <div>
+          {(hasRtc || hasOPowers || hasZygardeCells) && <Divider style={{ margin: '8px 0 20px' }} />}
+          <Title level={5} style={{ marginBottom: 12 }}>
+            <InfoCircleOutlined style={{ marginRight: 6 }} />
+            Holo Caster
+          </Title>
+          <Alert
+            type="info"
+            showIcon
+            message={genTools.holoCaster.dataPresent ? 'Holo Caster 数据区块已写入' : 'Holo Caster 数据区块可用'}
+            description={
+              genTools.holoCaster.dataPresent
+                ? 'PKHeX 当前不支持解析 Holo Caster 数据结构（1604 字节原始数据块）。如需查看或编辑具体内容，请使用 PKHeX 桌面版。'
+                : '当前存档属于支持 Holo Caster 的 Gen6 游戏，但该区块暂未发现非零内容。PKHeX 当前也不提供该结构的解析视图。'
+            }
+          />
+        </div>
+      )}
+
+      {/* ── Festa (Gen7) — 只读 ── */}
+      {genTools?.festa && (
+        <div>
+          {(hasRtc || hasOPowers || hasZygardeCells || !!genTools?.holoCaster) && <Divider style={{ margin: '8px 0 20px' }} />}
+          <Title level={5} style={{ marginBottom: 12 }}>
+            <GiftOutlined style={{ marginRight: 6 }} />
+            Festival Plaza
+          </Title>
+          <Row gutter={[16, 16]}>
+            <Col xs={8}>
+              <Card size="small">
+                <Statistic title="当前硬币" value={genTools.festa.festaCoins} suffix={`/ ${9_999_999}`} />
+              </Card>
+            </Col>
+            <Col xs={8}>
+              <Card size="small">
+                <Statistic title="累计硬币" value={genTools.festa.totalFestaCoins} />
+              </Card>
+            </Col>
+            <Col xs={8}>
+              <Card size="small">
+                <Statistic title="广场等级" value={genTools.festa.festaRank} />
+              </Card>
+            </Col>
+          </Row>
+        </div>
+      )}
+
+      {/* ── Poké Pelago (Gen7) — 只读 ── */}
+      {genTools?.pelago && (
+        <div>
+          {(hasRtc || hasOPowers || hasZygardeCells || !!genTools?.holoCaster || !!genTools?.festa) && <Divider style={{ margin: '8px 0 20px' }} />}
+          <Title level={5} style={{ marginBottom: 12 }}>
+            <HomeOutlined style={{ marginRight: 6 }} />
+            Poké Pelago
+          </Title>
+          {(() => {
+            const pelago = genTools.pelago;
+            return (
+              <>
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} sm={8}>
+                    <Card size="small">
+                      <Text type="secondary">宝可梦槽位</Text>
+                      <Progress
+                        percent={Math.round((pelago.occupiedSlots / pelago.totalSlots) * 100)}
+                        format={() => `${pelago.occupiedSlots} / ${pelago.totalSlots}`}
+                        style={{ marginBottom: 0 }}
+                      />
+                    </Card>
+                  </Col>
+                  <Col xs={24} sm={8}>
+                    <Card size="small">
+                      <Statistic title="访问次数" value={pelago.visits} />
+                    </Card>
+                  </Col>
+                  <Col xs={24} sm={8}>
+                    <Card size="small">
+                      <Statistic title="孵蛋数" value={pelago.eggsHatched} />
+                    </Card>
+                  </Col>
+                </Row>
+                <Card size="small" title="豆子统计" style={{ marginTop: 16 }}>
+                  <Space wrap size={[4, 4]}>
+                    {pelago.beanCounts.map((count, i) => {
+                      const beanLabels = ['红', '蓝', '浅蓝', '绿', '黄', '紫', '橙',
+                        '红花纹', '蓝花纹', '浅蓝花纹', '绿花纹', '黄花纹', '紫花纹', '橙花纹', '彩虹'];
+                      return (
+                        <Tag key={i} color={count > 0 ? 'blue' : 'default'}>
+                          {beanLabels[i] ?? `Bean ${i}`}: {count}
+                        </Tag>
+                      );
+                    })}
+                  </Space>
+                </Card>
+                <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+                  <Col xs={24}>
+                    <Card size="small">
+                      <Statistic title="寻宝次数" value={pelago.treasureHunts} />
+                    </Card>
+                  </Col>
+                </Row>
+                <Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>
+                  Poké Pelago 是 Gen7 (太阳/月亮/究极之日/究极之月) 的特色系统。此处为只读展示。
+                </Text>
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ── Totem Stickers + Stamps (Gen7) — 只读 ── */}
+      {genTools?.totemStamps && (
+        <div>
+          {(hasRtc || hasOPowers || hasZygardeCells || !!genTools?.holoCaster || !!genTools?.festa || !!genTools?.pelago) && <Divider style={{ margin: '8px 0 20px' }} />}
+          <Title level={5} style={{ marginBottom: 12 }}>
+            <TrophyOutlined style={{ marginRight: 6 }} />
+            贴纸 &amp; 护照印章
+          </Title>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} sm={8}>
+              <Card size="small">
+                <Statistic title="贴纸收集" value={genTools.totemStamps.stickersCollected} />
+              </Card>
+            </Col>
+            <Col xs={24} sm={16}>
+              <Card size="small" title="护照印章">
+                <Space wrap size={[4, 4]}>
+                  {genTools.totemStamps.stamps.map((s, i) => (
+                    <Tag key={i} color={s.earned ? 'green' : 'default'}>{s.name}</Tag>
+                  ))}
+                </Space>
+              </Card>
+            </Col>
+          </Row>
+        </div>
+      )}
+
+      {/* ── Rotom Dex (Gen7 USUM) — 只读 ── */}
+      {genTools?.rotomDex && (
+        <div>
+          {(hasRtc || hasOPowers || hasZygardeCells || !!genTools?.holoCaster || !!genTools?.festa || !!genTools?.pelago || !!genTools?.totemStamps) && <Divider style={{ margin: '8px 0 20px' }} />}
+          <Title level={5} style={{ marginBottom: 12 }}>
+            <BugOutlined style={{ marginRight: 6 }} />
+            洛托姆图鉴
+          </Title>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} sm={8}>
+              <Card size="small">
+                <Statistic title="好感度" value={genTools.rotomDex.affection} suffix="/ 1000" />
+              </Card>
+            </Col>
+            <Col xs={24} sm={8}>
+              <Card size="small">
+                <Text type="secondary">Roto Loto</Text>
+                <div style={{ marginTop: 8 }}>
+                  <Tag color={genTools.rotomDex.rotoLoto1 ? 'green' : 'default'}>Roto Loto 1</Tag>
+                  <Tag color={genTools.rotomDex.rotoLoto2 ? 'green' : 'default'}>Roto Loto 2</Tag>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={8}>
+              <Card size="small">
+                <Text type="secondary">昵称</Text>
+                <div style={{ marginTop: 8 }}>
+                  <Text strong>{genTools.rotomDex.nickname || '（未设置）'}</Text>
+                </div>
+              </Card>
+            </Col>
+          </Row>
+          <Text type="secondary" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>
+            洛托姆图鉴此处仅展示 Gen7《究极之日 / 究极之月》存档中的数据。
+          </Text>
+        </div>
+      )}
+
+      {/* ── 保存按钮（仅可编辑区域可见时显示）── */}
+      {(hasRtc || hasOPowers || hasZygardeCells) && (
+        <div style={{
+          position: 'sticky', bottom: 0, background: 'var(--bg-surface, #fff)',
+          padding: '12px 0', borderTop: '1px solid var(--border-color, #f0f0f0)',
+          textAlign: 'right', marginTop: 24,
+        }}>
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            onClick={handleSave}
+            loading={saving}
+          >
+            保存专用工具设置
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

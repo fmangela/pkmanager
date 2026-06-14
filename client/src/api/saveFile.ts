@@ -452,6 +452,11 @@ export interface GenToolsCapability {
   hasRtc: boolean;
   hasOPowers: boolean;
   hasZygardeCells: boolean;
+  hasHoloCaster: boolean;
+  hasFesta: boolean;
+  hasPelago: boolean;
+  hasTotemStamps: boolean;
+  hasRotomDex: boolean;
 }
 
 export interface Rtc3EntryDto {
@@ -496,11 +501,54 @@ export interface ZygardeDto {
   cells: ZygardeCellDto[];
 }
 
+// ── I.5 Gen6/Gen7 只读字段 ────────────────────────────
+
+export interface HoloCasterDto {
+  dataPresent: boolean;
+}
+
+export interface FestaDto {
+  festaCoins: number;
+  totalFestaCoins: number;
+  festaRank: number;
+}
+
+export interface PelagoDto {
+  occupiedSlots: number;
+  totalSlots: number;
+  beanCounts: number[];
+  visits: number;
+  eggsHatched: number;
+  treasureHunts: number;
+}
+
+export interface TotemStampItem {
+  name: string;
+  earned: boolean;
+}
+
+export interface TotemStampsDto {
+  stickersCollected: number;
+  stamps: TotemStampItem[];
+}
+
+export interface RotomDexDto {
+  affection: number;
+  rotoLoto1: boolean;
+  rotoLoto2: boolean;
+  nickname: string | null;
+}
+
 export interface GenToolsDto {
   capability: GenToolsCapability;
   rtcEntries?: Rtc3EntryDto[];
   opower?: OPowerDto;
   zygarde?: ZygardeDto;
+  holoCaster?: HoloCasterDto;
+  festa?: FestaDto;
+  pelago?: PelagoDto;
+  totemStamps?: TotemStampsDto;
+  rotomDex?: RotomDexDto;
 }
 
 // ── Bag types ─────────────────────────────────────────
