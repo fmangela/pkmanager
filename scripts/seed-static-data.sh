@@ -17,8 +17,8 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PKHEX_TEXT="$PROJECT_DIR/sdk/PKHeX/PKHeX.Core/Resources/text"
 DATA_DIR="$PROJECT_DIR/data/pgdata"
 
-# PostgreSQL 连接参数
-PGHOST="$DATA_DIR/run"
+# PostgreSQL 连接参数 — 环境变量优先，回退到本地 Unix socket
+PGHOST="${PGHOST:-$DATA_DIR/run}"
 PGPORT="${PGPORT:-5432}"
 PGUSER="${PGUSER:-pkadmin}"
 PGDATABASE="${PGDATABASE:-pkmanager}"
