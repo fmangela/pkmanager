@@ -62,6 +62,23 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const isDark = mode === 'dark' || (mode === 'system' && prefersDark);
   const algorithm = isDark ? theme.darkAlgorithm : theme.defaultAlgorithm;
+  const themeConfig = useMemo(() => ({
+    algorithm,
+    token: {
+      colorPrimary: '#148a82',
+      colorInfo: '#4b86d9',
+      colorSuccess: '#2f9d62',
+      colorWarning: '#d08b1f',
+      colorError: '#d65252',
+      borderRadius: 18,
+      borderRadiusLG: 24,
+      borderRadiusSM: 12,
+      controlHeight: 40,
+      controlHeightSM: 32,
+      fontFamily: '"Avenir Next", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+      fontFamilyCode: '"JetBrains Mono", "SFMono-Regular", Consolas, monospace',
+    },
+  }), [algorithm]);
 
   // 同步 data-theme 到 documentElement — 关键：让 CSS 变量和内联样式感知主题
   useEffect(() => {
@@ -80,7 +97,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return (
     <ThemeContext.Provider value={ctxValue}>
-      <ConfigProvider locale={zhCN} theme={{ algorithm }}>
+      <ConfigProvider locale={zhCN} theme={themeConfig}>
         <AntdApp>{children}</AntdApp>
       </ConfigProvider>
     </ThemeContext.Provider>

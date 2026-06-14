@@ -9,6 +9,7 @@ import {
   SaveOutlined, DownloadOutlined, ArrowLeftOutlined, BankOutlined,
   SafetyCertificateOutlined, AppstoreOutlined, LeftOutlined, RightOutlined,
   StarFilled, SortAscendingOutlined, SunOutlined, MoonOutlined, DesktopOutlined,
+  InboxOutlined, ShoppingOutlined, IdcardOutlined, BookOutlined, SearchOutlined, ToolOutlined,
 } from '@ant-design/icons';
 import {
   DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors,
@@ -51,6 +52,13 @@ const BOX_SORT_MENU_ITEMS: MenuProps['items'] = [
   { key: 'name', label: '按名称' },
 ];
 
+const tabLabel = (icon: React.ReactNode, label: string) => (
+  <Space size={6} align="center" className="save-editor-tab-label">
+    <span className="save-editor-tab-label__icon">{icon}</span>
+    <span>{label}</span>
+  </Space>
+);
+
 const getDownloadFileName = (contentDisposition?: string, fallback = 'save.sav') => {
   if (!contentDisposition) return fallback;
 
@@ -73,7 +81,8 @@ const DraggableSlot: React.FC<{
   boxIndex: number; slot: BoxSlotDto; onPokemonClick?: (p: PokemonDto) => void;
   legalityStatus?: LegalityStatus;
   spriteStyle?: SpriteStyle;
-}> = ({ boxIndex, slot, onPokemonClick, legalityStatus, spriteStyle }) => {
+  selected?: boolean;
+}> = ({ boxIndex, slot, onPokemonClick, legalityStatus, spriteStyle, selected }) => {
   const slotId = saveSlotId(boxIndex, slot.slotIndex);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: slotId, disabled: slot.isEmpty });
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: slotId });
@@ -87,75 +96,54 @@ const DraggableSlot: React.FC<{
     legalityStatus === 'Fishy' ? '#faad14' :
     legalityStatus === 'Illegal' ? '#ff4d4f' :
     undefined;
+  const slotClassName = [
+    'pokemon-slot-card',
+    isEmpty ? 'is-empty' : '',
+    isOver ? 'is-drop-target' : '',
+    isDragging ? 'is-dragging' : '',
+    selected ? 'is-selected' : '',
+  ].filter(Boolean).join(' ');
 
   return (
     <div
       ref={(node) => { setNodeRef(node); setDropRef(node); }}
-      style={{
-        aspectRatio: '1',
-        border: isOver ? '2px solid #52c41a' : isEmpty ? '2px dashed #d9d9d9' : '1px solid #e8e8e8',
-        borderRadius: 8,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        cursor: isEmpty ? 'default' : 'grab',
-        background: isOver ? '#f6ffed' : isEmpty ? '#fafafa' : '#fff',
-        opacity: isDragging ? 0.5 : 1,
-        transition: 'border-color 0.2s, background 0.2s',
-        userSelect: 'none',
-        position: 'relative',
-      }}
+      className={slotClassName}
+      style={legalityColor ? ({ '--slot-legality': legalityColor } as React.CSSProperties) : undefined}
       {...(!isEmpty ? { ...attributes, ...listeners } : {})}
       onClick={() => { if (!isEmpty && p && onPokemonClick) onPokemonClick(p); }}
     >
       {isEmpty ? (
-        <Text type="secondary" style={{ fontSize: 11 }}>{slot.slotIndex + 1}</Text>
+        <Text type="secondary" className="pokemon-slot-card__slot-index">{slot.slotIndex + 1}</Text>
       ) : (
         <>
-          <div style={{ position: 'relative' }}>
+          <div className="pokemon-slot-card__sprite-shell">
             <PokemonSprite speciesId={p!.species} width={32} height={32}
               variant={spriteStyle}
             />
             {/* Alpha badge — top-left */}
             {p!.isAlpha && (
-              <span style={{
-                position: 'absolute', top: -4, left: -4,
-                background: '#ff4d4f', color: '#fff', borderRadius: '50%',
-                width: 14, height: 14, fontSize: 9, lineHeight: '14px', textAlign: 'center',
-                border: '1px solid #fff',
-              }} title="头目 (Alpha)">α</span>
+              <span className="pokemon-slot-card__badge pokemon-slot-card__badge--alpha" title="头目 (Alpha)">α</span>
             )}
             {/* Shiny star — top-right */}
             {p!.isShiny && (
-              <StarFilled style={{
-                position: 'absolute', top: -4, right: -4,
-                fontSize: 12, color: '#faad14', filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.3))',
-              }} title="闪光" />
+              <StarFilled className="pokemon-slot-card__badge pokemon-slot-card__badge--shiny" title="闪光" />
             )}
             {/* Gmax badge — bottom-right */}
             {p!.canGigantamax && (
-              <span style={{
-                position: 'absolute', bottom: -4, right: -4,
-                background: '#fa541c', color: '#fff', borderRadius: '50%',
-                width: 14, height: 14, fontSize: 10, lineHeight: '14px', textAlign: 'center',
-                border: '1px solid #fff',
-              }} title="超极巨化">G</span>
+              <span className="pokemon-slot-card__badge pokemon-slot-card__badge--gmax" title="超极巨化">G</span>
             )}
             {/* Legality indicator dot — bottom-left (tri-color) */}
             {legalityColor && (
-              <span style={{
-                position: 'absolute', bottom: -2, left: -2,
-                width: 8, height: 8, borderRadius: '50%',
-                background: legalityColor,
-                border: '1px solid #fff',
-              }} title={
+              <span className="pokemon-slot-card__legality" title={
                 legalityStatus === 'Legal' ? '合法' :
                 legalityStatus === 'Fishy' ? '可疑' : '不合法'
               } />
             )}
           </div>
-          <div style={{ fontSize: 10, lineHeight: 1.2, textAlign: 'center', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div className="pokemon-slot-card__name">
             {p!.nickname || p!.speciesName}
           </div>
-          <Tag color="blue" style={{ fontSize: 9, margin: 0, padding: '0 3px', lineHeight: '14px' }}>Lv.{p!.level}</Tag>
+          <Tag color="blue" className="pokemon-slot-card__level">Lv.{p!.level}</Tag>
         </>
       )}
     </div>
@@ -166,23 +154,24 @@ const DraggableSlot: React.FC<{
 const DraggableBankItem: React.FC<{ pokemon: BankListItem; spriteStyle?: SpriteStyle }> = ({ pokemon, spriteStyle }) => {
   const id = bankItemId(pokemon.id);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+  const className = [
+    'bank-pokemon-chip',
+    pokemon.isShiny ? 'is-shiny' : '',
+    isDragging ? 'is-dragging' : '',
+  ].filter(Boolean).join(' ');
 
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      style={{
-        width: 64, textAlign: 'center', cursor: 'grab', padding: 4, borderRadius: 6,
-        border: pokemon.isShiny ? '2px solid #faad14' : '1px solid #e8e8e8',
-        background: '#fff', opacity: isDragging ? 0.5 : 1, flexShrink: 0,
-      }}
+      className={className}
     >
       <PokemonSprite speciesId={pokemon.species} width={40} height={40}
         variant={spriteStyle}
       />
-      <div style={{ fontSize: 10, lineHeight: 1.2 }}>{pokemon.nickname || pokemon.speciesName}</div>
-      <Tag color="blue" style={{ fontSize: 9, margin: 0, padding: '0 4px', lineHeight: '16px' }}>Lv.{pokemon.level}</Tag>
+      <div className="bank-pokemon-chip__name">{pokemon.nickname || pokemon.speciesName}</div>
+      <Tag color="blue" className="bank-pokemon-chip__level">Lv.{pokemon.level}</Tag>
     </div>
   );
 };
@@ -194,12 +183,7 @@ const DroppableBankZone: React.FC<{ children: React.ReactNode }> = ({ children }
   return (
     <div
       ref={setNodeRef}
-      style={{
-        display: 'flex', gap: 8, overflow: 'auto', padding: 8, minHeight: 64,
-        border: isOver ? '2px solid #52c41a' : '2px dashed #d9d9d9',
-        borderRadius: 8, background: isOver ? '#f6ffed' : '#fafafa',
-        transition: 'border-color 0.2s, background 0.2s',
-      }}
+      className={`bank-drop-zone${isOver ? ' is-drop-target' : ''}`}
     >
       {children}
     </div>
@@ -219,7 +203,7 @@ const SaveEditor: React.FC = () => {
   const [activeBox, setActiveBox] = useState(0);
   const [bankPokemon, setBankPokemon] = useState<BankListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeDrag, setActiveDrag] = useState<{ label: string } | null>(null);
+  const [activeDrag, setActiveDrag] = useState<{ label: string; meta?: string } | null>(null);
   const [editingPokemon, setEditingPokemon] = useState<PokemonDto | null>(null);
   const [editingBoxIndex, setEditingBoxIndex] = useState<number | undefined>();
   const [editingSlotIndex, setEditingSlotIndex] = useState<number | undefined>();
@@ -292,11 +276,18 @@ const SaveEditor: React.FC = () => {
     if (activeId.startsWith('save:')) {
       const { boxIndex, slotIndex } = parseSaveSlot(activeId);
       const slot = saveData?.boxes[boxIndex]?.slots[slotIndex];
-      setActiveDrag({ label: slot?.pokemon?.nickname || slot?.pokemon?.speciesName || '宝可梦' });
+      const level = slot?.pokemon?.level;
+      setActiveDrag({
+        label: slot?.pokemon?.nickname || slot?.pokemon?.speciesName || '宝可梦',
+        meta: `Box ${boxIndex + 1} · ${typeof level === 'number' ? `Lv.${level}` : `槽位 ${slotIndex + 1}`}`,
+      });
     } else if (activeId.startsWith('bank:')) {
       const bankId = activeId.replace('bank:', '');
       const item = bankPokemon.find(p => p.id === bankId);
-      setActiveDrag({ label: item?.nickname || item?.speciesName || '宝可梦' });
+      setActiveDrag({
+        label: item?.nickname || item?.speciesName || '宝可梦',
+        meta: typeof item?.level === 'number' ? `银行库存 · Lv.${item.level}` : '银行库存',
+      });
     }
   };
 
@@ -468,18 +459,18 @@ const SaveEditor: React.FC = () => {
   }, [message, saveData]);
 
   const tabItems = useMemo(() => {
-    const items: Array<{ key: string; label: string }> = [
-      { key: 'boxes', label: '📦 箱子' },
-      { key: 'bag', label: '🎒 背包' },
-      { key: 'trainer', label: '👤 训练家' },
-      { key: 'pokedex', label: '📖 图鉴' },
-      { key: 'search', label: '🔍 搜索' },
+    const items: Array<{ key: string; label: React.ReactNode }> = [
+      { key: 'boxes', label: tabLabel(<InboxOutlined />, '箱子') },
+      { key: 'bag', label: tabLabel(<ShoppingOutlined />, '背包') },
+      { key: 'trainer', label: tabLabel(<IdcardOutlined />, '训练家') },
+      { key: 'pokedex', label: tabLabel(<BookOutlined />, '图鉴') },
+      { key: 'search', label: tabLabel(<SearchOutlined />, '搜索') },
     ];
     // Gen7: 支持具体版本 30-33，以及历史复合版本 71/72；排除 LGPE 42/43/73
     const isGen7SMUSUM = saveData?.gameVersion != null
       && [30, 31, 32, 33, 71, 72].includes(saveData.gameVersion);
     if (saveData?.generation === 3 || saveData?.generation === 6 || isGen7SMUSUM) {
-      items.push({ key: 'gen-tools', label: '🔧 专用工具' });
+      items.push({ key: 'gen-tools', label: tabLabel(<ToolOutlined />, '专用工具') });
     }
     return items;
   }, [saveData?.generation, saveData?.gameVersion]);
@@ -489,251 +480,365 @@ const SaveEditor: React.FC = () => {
     || (saveData?.gameVersion != null && [30, 31, 32, 33, 71, 72].includes(saveData.gameVersion));
   const visibleActiveTab = isGenToolsTab && !isGenToolsSupported ? 'boxes' : activeTab;
 
-  if (!isAuthenticated) return <div style={{ padding: 48, textAlign: 'center' }}>请先登录</div>;
-  if (loading) return <div style={{ padding: 48, textAlign: 'center' }}><Spin size="large" /></div>;
+  if (!isAuthenticated) return <div className="save-editor-fallback">请先登录</div>;
+  if (loading) return <div className="save-editor-fallback"><Spin size="large" /></div>;
 
-  if (!saveData) return <div style={{ padding: 48, textAlign: 'center' }}><Title level={4}>存档不存在</Title><Button onClick={() => navigate('/saves')}>返回</Button></div>;
+  if (!saveData) {
+    return (
+      <div className="save-editor-fallback">
+        <Title level={4}>存档不存在</Title>
+        <Button onClick={() => navigate('/saves')}>返回</Button>
+      </div>
+    );
+  }
 
   const currentBox = saveData.boxes[activeBox];
   const boxList = saveData.boxes;
+  const currentBoxUsed = currentBox?.slots.filter(slot => !slot.isEmpty).length ?? 0;
+  const partyCount = saveData.party.filter(slot => !slot.isEmpty).length;
+  const legalitySummary = { total: 0, legal: 0, fishy: 0, illegal: 0 };
+
+  Object.values(legalityMap).forEach((status) => {
+    legalitySummary.total += 1;
+    if (status === 'Legal') legalitySummary.legal += 1;
+    if (status === 'Fishy') legalitySummary.fishy += 1;
+    if (status === 'Illegal') legalitySummary.illegal += 1;
+  });
+
+  const legalityTone = legalitySummary.illegal > 0
+    ? 'danger'
+    : legalitySummary.fishy > 0
+      ? 'warning'
+      : legalitySummary.total > 0
+        ? 'success'
+        : 'neutral';
+  const focusLabel = editingPokemon
+    ? `${editingPokemon.nickname || editingPokemon.speciesName} · Lv.${editingPokemon.level}`
+    : '未打开编辑面板';
+  const overviewCards = [
+    { label: '训练家', value: saveData.trainerName || '未知训练家', tone: 'neutral' },
+    { label: '当前箱子', value: currentBox ? `${currentBox.boxName} · ${currentBoxUsed}/${currentBox.capacity}` : '未选择', tone: 'accent' },
+    { label: '队伍状态', value: `${partyCount}/${saveData.party.length} 已上阵`, tone: 'success' },
+    {
+      label: '合法性扫描',
+      value: legalitySummary.total > 0
+        ? `${legalitySummary.legal} 合法 · ${legalitySummary.fishy} 可疑 · ${legalitySummary.illegal} 异常`
+        : '尚未扫描',
+      tone: legalityTone,
+    },
+    { label: '银行库存', value: `${bankPokemon.length} 只宝可梦`, tone: 'neutral' },
+    { label: '编辑焦点', value: focusLabel, tone: editingPokemon ? 'accent' : 'neutral' },
+  ] as const;
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div style={{ minHeight: '100vh', background: 'var(--bg-body, #f5f5f5)' }}>
-        {/* Toolbar */}
-        <div style={{ background: 'var(--bg-toolbar, #fff)', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--border-color, #e8e8e8)' }}>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/saves')}>返回</Button>
-          <Title level={5} style={{ margin: 0, flex: 1 }}>
-            {saveData.filename}
-            {saveData.isModified && <Tag color="orange" style={{ marginLeft: 8 }}>已修改</Tag>}
-          </Title>
-          <Space>
-            <GameCover gameVersion={saveData.gameVersion} size="small" showPlatform={false}
-              style={{ minWidth: 0, minHeight: 0, padding: 0 }} />
-            <Text type="secondary">Gen{saveData.generation} | {saveData.gameVersionName}</Text>
-          </Space>
-          <Space>
-            <Tooltip title="手动创建备份"><Button icon={<SaveOutlined />} onClick={handleSave}>备份</Button></Tooltip>
-            <Tooltip title="导出下载"><Button icon={<DownloadOutlined />} onClick={handleDownload}>导出</Button></Tooltip>
-          </Space>
-          <Segmented
-            size="small"
-            options={[
-              { value: 'light' as ThemeMode, icon: <SunOutlined /> },
-              { value: 'dark' as ThemeMode, icon: <MoonOutlined /> },
-              { value: 'system' as ThemeMode, icon: <DesktopOutlined /> },
-            ]}
-            value={themeMode}
-            onChange={(v) => setThemeMode(v as ThemeMode)}
-          />
-          <Segmented
-            size="small"
-            options={[
-              { value: 'game' as SpriteStyle, label: '🎮 Game' },
-              { value: 'home' as SpriteStyle, label: '🏠 Home' },
-            ]}
-            value={spriteStyle}
-            onChange={(v) => {
-              const style = v as SpriteStyle;
-              setSpriteStyle(style);
-              localStorage.setItem('pkmanager_sprite_style', style);
-            }}
-          />
-        </div>
-
-        {/* Tab navigation — archive-level features */}
-        <div style={{ background: 'var(--bg-toolbar, #fff)', padding: '0 24px', borderBottom: '1px solid var(--border-color, #e8e8e8)' }}>
-          <Tabs
-            activeKey={visibleActiveTab}
-            onChange={setActiveTab}
-            size="small"
-            items={tabItems}
-          />
-        </div>
-
-        {/* Content area — switches based on active tab */}
-        {visibleActiveTab === 'boxes' && (
-        <div style={{ padding: 12 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-            background: 'var(--bg-surface, #fff)', borderRadius: 8, padding: '10px 12px',
-            border: '1px solid var(--border-color, #e8e8e8)', marginBottom: 12,
-          }}>
-            <Text strong>箱子工具</Text>
-            <Select size="small" value={activeBox} style={{ width: 240, maxWidth: '100%' }}
-              onChange={setActiveBox}
-              options={boxList.map(b => {
-                const used = b.slots.filter(s => !s.isEmpty).length;
-                return {
-                  value: b.boxIndex,
-                  label: `Box ${b.boxIndex + 1}: ${b.boxName} (${used}/${b.capacity})`,
-                };
-              })}
-            />
-            <div style={{ flex: 1 }} />
-            <Tooltip title="扫描当前存档中所有箱子与队伍宝可梦的合法性">
-              <Button icon={<SafetyCertificateOutlined />} onClick={handleBatchLegalityScan}
-                loading={legalityScanning}>
-                合法性扫描
-              </Button>
-            </Tooltip>
-            <Dropdown menu={sortMenu} trigger={['click']} disabled={sortingBoxes || saveData.boxes.length === 0}>
-              <Button icon={<SortAscendingOutlined />} loading={sortingBoxes}>全部排序</Button>
-            </Dropdown>
-          </div>
-
-          <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
-            {/* Box List Sidebar — height matches box grid; collapses on narrow screens */}
-            <div style={{
-              minWidth: 130, maxWidth: 150, flex: '0 1 150px', background: 'var(--bg-surface, #fff)', borderRadius: 8, padding: '8px 12px', flexShrink: 0,
-              border: '1px solid var(--border-color, #e8e8e8)', alignSelf: 'flex-start',
-              display: 'flex', flexDirection: 'column',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexShrink: 0 }}>
-                <Text strong>箱子列表</Text>
-                <Space size={2}>
-                  <Button size="small" type="text" icon={<LeftOutlined />}
-                    disabled={activeBox === 0}
-                    onClick={() => setActiveBox(a => Math.max(0, a - 1))} />
-                  <Button size="small" type="text" icon={<RightOutlined />}
-                    disabled={activeBox >= boxList.length - 1}
-                    onClick={() => setActiveBox(a => Math.min(boxList.length - 1, a + 1))} />
-                </Space>
-              </div>
-              <div style={{ overflow: 'auto', maxHeight: 480 }}>
-                {boxList.map(box => {
-                  const count = box.slots.filter(s => !s.isEmpty).length;
-                  return (
-                    <div key={box.boxIndex} onClick={() => setActiveBox(box.boxIndex)}
-                      style={{ padding: '6px 10px', borderRadius: 4, cursor: 'pointer', marginBottom: 2,
-                        background: activeBox === box.boxIndex ? '#e6f4ff' : 'transparent',
-                        border: activeBox === box.boxIndex ? '1px solid #1677ff' : '1px solid transparent' }}>
-                      <Text style={{ fontSize: 12 }}>Box {box.boxIndex + 1}: {box.boxName}</Text>
-                      <Text type="secondary" style={{ fontSize: 10, display: 'block' }}>{count}/{box.capacity}</Text>
-                    </div>
-                  );
-                })}
-              </div>
-              <Button size="small" type="dashed" icon={<AppstoreOutlined />}
-                style={{ marginTop: 8, flexShrink: 0 }}
-                onClick={() => setAllBoxesOpen(true)}>
-                全部箱子
-              </Button>
-            </div>
-
-            {/* Box Grid */}
-            <div style={{ flex: 1, alignSelf: 'flex-start', background: 'var(--bg-surface, #fff)', borderRadius: 8, padding: 16, border: '1px solid var(--border-color, #e8e8e8)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-                <Text strong>{currentBox?.boxName || `Box ${activeBox + 1}`}</Text>
-                <Tooltip title="只对当前箱子内部排序，空槽位会排到末尾">
-                  <Dropdown menu={currentBoxSortMenu} trigger={['click']} disabled={sortingCurrentBox || !currentBox}>
-                    <Button size="small" icon={<SortAscendingOutlined />} loading={sortingCurrentBox}>当前箱排序</Button>
-                  </Dropdown>
-                </Tooltip>
-              </div>
-              {currentBox && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 'clamp(3px, 1vw, 8px)', maxWidth: 'clamp(300px, 100%, 600px)', overflowX: 'auto' }}>
-                  {currentBox.slots.map(slot => {
-                    const slotKey = `box-${activeBox}-${slot.slotIndex}`;
-                    return (
-                      <DraggableSlot key={slot.slotIndex} boxIndex={activeBox} slot={slot}
-                        legalityStatus={legalityMap[slotKey]}
-                        spriteStyle={spriteStyle}
-                        onPokemonClick={(p) => { setEditingPokemon(p); setEditingBoxIndex(activeBox); setEditingSlotIndex(slot.slotIndex); setEditingIsParty(false); setEditPanelOpen(true); }} />
-                    );
-                  })}
+      <div className="save-editor-page">
+        <div className="save-editor-shell">
+          <section className="app-panel save-editor-hero">
+            <div className="save-editor-hero__overview">
+              <div className="save-editor-hero__heading">
+                <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/saves')}>返回</Button>
+                <div className="save-editor-hero__title-group">
+                  <Text className="save-editor-hero__eyebrow">宝可梦编辑工作台</Text>
+                  <Title level={3} className="save-editor-hero__title">{saveData.filename}</Title>
+                  <div className="save-editor-hero__meta">
+                    <GameCover
+                      gameVersion={saveData.gameVersion}
+                      size="small"
+                      showPlatform={false}
+                      style={{ minWidth: 0, minHeight: 0, padding: 0 }}
+                    />
+                    <span className="app-status-chip is-accent">Gen{saveData.generation}</span>
+                    <span className="app-status-chip">{saveData.gameVersionName}</span>
+                    {saveData.isModified && <span className="app-status-chip is-warning">已修改</span>}
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Party Pokémon (随行宝可梦) */}
-          {saveData.party && saveData.party.length > 0 && (
-            <div style={{ marginTop: 12, background: 'var(--bg-surface, #fff)', borderRadius: 8, padding: 16, border: '1px solid var(--border-color, #e8e8e8)' }}>
-              <Text strong style={{ marginBottom: 8, display: 'block' }}>🎒 随行宝可梦</Text>
-              <div style={{ display: 'flex', gap: 8, maxWidth: 600 }}>
-                {saveData.party.map((slot: BoxSlotDto) => (
-                  <div key={slot.slotIndex} style={{ flex: 1, maxWidth: 96 }}>
-                    {slot.isEmpty ? (
-                      <div style={{
-                        aspectRatio: '1', border: '2px dashed #d9d9d9', borderRadius: 8,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: '#fafafa', maxWidth: 80,
-                      }}>
-                        <Text type="secondary" style={{ fontSize: 11 }}>空</Text>
-                      </div>
-                    ) : (
-                      <div style={{
-                        aspectRatio: '1', border: slot.pokemon?.isShiny ? '2px solid #faad14' : '1px solid #e8e8e8',
-                        borderRadius: 8, display: 'flex', flexDirection: 'column', cursor: 'pointer',
-                        alignItems: 'center', justifyContent: 'center', background: '#fff', maxWidth: 80,
-                      }} onClick={() => { if (slot.pokemon) { setEditingPokemon(slot.pokemon); setEditingBoxIndex(-1); setEditingSlotIndex(slot.slotIndex); setEditingIsParty(true); setEditPanelOpen(true); } }}>
-                        <PokemonSprite speciesId={slot.pokemon!.species} width={32} height={32}
-                          variant={spriteStyle}
-                        />
-                        <div style={{ fontSize: 10, lineHeight: 1.2, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-                          {slot.pokemon!.nickname || slot.pokemon!.speciesName}
-                        </div>
-                        <Tag color="blue" style={{ fontSize: 9, margin: 0, padding: '0 3px', lineHeight: '14px' }}>Lv.{slot.pokemon!.level}</Tag>
-                      </div>
-                    )}
+              </div>
+              <div className="save-editor-overview-grid">
+                {overviewCards.map((item) => (
+                  <div key={item.label} className={`save-editor-metric is-${item.tone}`}>
+                    <span className="save-editor-metric__label">{item.label}</span>
+                    <span className="save-editor-metric__value">{item.value}</span>
                   </div>
                 ))}
               </div>
             </div>
+
+            <div className="save-editor-hero__actions">
+              <div className="save-editor-hero__action-row">
+                <Tooltip title="手动创建备份">
+                  <Button icon={<SaveOutlined />} onClick={handleSave}>备份</Button>
+                </Tooltip>
+                <Tooltip title="导出下载">
+                  <Button icon={<DownloadOutlined />} onClick={handleDownload}>导出</Button>
+                </Tooltip>
+              </div>
+              <div className="save-editor-hero__control-group">
+                <span className="save-editor-hero__control-label">主题</span>
+                <Segmented
+                  size="small"
+                  options={[
+                    { value: 'light' as ThemeMode, icon: <SunOutlined /> },
+                    { value: 'dark' as ThemeMode, icon: <MoonOutlined /> },
+                    { value: 'system' as ThemeMode, icon: <DesktopOutlined /> },
+                  ]}
+                  value={themeMode}
+                  onChange={(v) => setThemeMode(v as ThemeMode)}
+                />
+              </div>
+              <div className="save-editor-hero__control-group">
+                <span className="save-editor-hero__control-label">精灵图</span>
+                <Segmented
+                  size="small"
+                  options={[
+                    { value: 'game' as SpriteStyle, label: 'Game' },
+                    { value: 'home' as SpriteStyle, label: 'Home' },
+                  ]}
+                  value={spriteStyle}
+                  onChange={(v) => {
+                    const style = v as SpriteStyle;
+                    setSpriteStyle(style);
+                    localStorage.setItem('pkmanager_sprite_style', style);
+                  }}
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="app-panel save-editor-tabs-shell">
+            <Tabs
+              className="save-editor-archive-tabs"
+              activeKey={visibleActiveTab}
+              onChange={setActiveTab}
+              size="small"
+              items={tabItems}
+            />
+          </section>
+
+          {visibleActiveTab === 'boxes' && (
+            <div className="save-editor-workbench">
+              <section className="app-panel app-toolbar save-editor-toolbar">
+                <div className="save-editor-toolbar__label-group">
+                  <Text strong>箱子工具</Text>
+                  <Text type="secondary">在存档、队伍与银行之间快速整理宝可梦。</Text>
+                </div>
+                <Select
+                  size="small"
+                  value={activeBox}
+                  className="save-editor-toolbar__select"
+                  onChange={setActiveBox}
+                  options={boxList.map((box) => {
+                    const used = box.slots.filter(slot => !slot.isEmpty).length;
+                    return {
+                      value: box.boxIndex,
+                      label: `Box ${box.boxIndex + 1}: ${box.boxName} (${used}/${box.capacity})`,
+                    };
+                  })}
+                />
+                <div className="save-editor-toolbar__spacer" />
+                <Tooltip title="扫描当前存档中所有箱子与队伍宝可梦的合法性">
+                  <Button
+                    icon={<SafetyCertificateOutlined />}
+                    onClick={handleBatchLegalityScan}
+                    loading={legalityScanning}
+                  >
+                    合法性扫描
+                  </Button>
+                </Tooltip>
+                <Dropdown menu={sortMenu} trigger={['click']} disabled={sortingBoxes || saveData.boxes.length === 0}>
+                  <Button icon={<SortAscendingOutlined />} loading={sortingBoxes}>全部排序</Button>
+                </Dropdown>
+              </section>
+
+              <div className="save-editor-grid-layout">
+                <aside className="app-panel save-editor-sidebar">
+                  <div className="save-editor-panel-heading">
+                    <Text strong>箱子列表</Text>
+                    <Space size={4}>
+                      <Button
+                        size="small"
+                        type="text"
+                        icon={<LeftOutlined />}
+                        disabled={activeBox === 0}
+                        onClick={() => setActiveBox((value) => Math.max(0, value - 1))}
+                      />
+                      <Button
+                        size="small"
+                        type="text"
+                        icon={<RightOutlined />}
+                        disabled={activeBox >= boxList.length - 1}
+                        onClick={() => setActiveBox((value) => Math.min(boxList.length - 1, value + 1))}
+                      />
+                    </Space>
+                  </div>
+                  <div className="save-editor-sidebar__list">
+                    {boxList.map((box) => {
+                      const count = box.slots.filter(slot => !slot.isEmpty).length;
+                      return (
+                        <button
+                          key={box.boxIndex}
+                          type="button"
+                          className={`save-editor-box-list-item${activeBox === box.boxIndex ? ' is-active' : ''}`}
+                          onClick={() => setActiveBox(box.boxIndex)}
+                        >
+                          <span className="save-editor-box-list-item__title">Box {box.boxIndex + 1}: {box.boxName}</span>
+                          <span className="save-editor-box-list-item__meta">{count}/{box.capacity}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    size="small"
+                    type="dashed"
+                    icon={<AppstoreOutlined />}
+                    className="save-editor-sidebar__all-boxes"
+                    onClick={() => setAllBoxesOpen(true)}
+                  >
+                    全部箱子
+                  </Button>
+                </aside>
+
+                <section className="app-panel save-editor-grid-panel">
+                  <div className="save-editor-panel-heading">
+                    <div>
+                      <Text strong>{currentBox?.boxName || `Box ${activeBox + 1}`}</Text>
+                      <Text type="secondary" className="save-editor-panel-heading__meta">
+                        {currentBoxUsed}/{currentBox?.capacity ?? 0} 已占用
+                      </Text>
+                    </div>
+                    <Tooltip title="只对当前箱子内部排序，空槽位会排到末尾">
+                      <Dropdown menu={currentBoxSortMenu} trigger={['click']} disabled={sortingCurrentBox || !currentBox}>
+                        <Button size="small" icon={<SortAscendingOutlined />} loading={sortingCurrentBox}>当前箱排序</Button>
+                      </Dropdown>
+                    </Tooltip>
+                  </div>
+                  {currentBox && (
+                    <div className="save-editor-slot-grid">
+                      {currentBox.slots.map((slot) => {
+                        const slotKey = `box-${activeBox}-${slot.slotIndex}`;
+                        return (
+                          <DraggableSlot
+                            key={slot.slotIndex}
+                            boxIndex={activeBox}
+                            slot={slot}
+                            legalityStatus={legalityMap[slotKey]}
+                            spriteStyle={spriteStyle}
+                            selected={editPanelOpen && !editingIsParty && editingBoxIndex === activeBox && editingSlotIndex === slot.slotIndex}
+                            onPokemonClick={(pokemon) => {
+                              setEditingPokemon(pokemon);
+                              setEditingBoxIndex(activeBox);
+                              setEditingSlotIndex(slot.slotIndex);
+                              setEditingIsParty(false);
+                              setEditPanelOpen(true);
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              </div>
+
+              <div className="save-editor-support-layout">
+                {saveData.party && saveData.party.length > 0 && (
+                  <section className="app-panel save-editor-party-panel">
+                    <div className="save-editor-panel-heading">
+                      <Text strong>随行宝可梦</Text>
+                      <Text type="secondary" className="save-editor-panel-heading__meta">{partyCount}/{saveData.party.length} 在队</Text>
+                    </div>
+                    <div className="save-editor-party-grid">
+                      {saveData.party.map((slot: BoxSlotDto) => (
+                        <div key={slot.slotIndex} className="save-editor-party-grid__item">
+                          {slot.isEmpty ? (
+                            <div className="pokemon-slot-card is-empty pokemon-slot-card--party">
+                              <Text type="secondary" className="pokemon-slot-card__slot-index">空</Text>
+                            </div>
+                          ) : (
+                            <div
+                              className={`pokemon-slot-card pokemon-slot-card--party${editPanelOpen && editingIsParty && editingSlotIndex === slot.slotIndex ? ' is-selected' : ''}`}
+                              onClick={() => {
+                                if (slot.pokemon) {
+                                  setEditingPokemon(slot.pokemon);
+                                  setEditingBoxIndex(-1);
+                                  setEditingSlotIndex(slot.slotIndex);
+                                  setEditingIsParty(true);
+                                  setEditPanelOpen(true);
+                                }
+                              }}
+                            >
+                              <div className="pokemon-slot-card__sprite-shell">
+                                <PokemonSprite speciesId={slot.pokemon!.species} width={32} height={32} variant={spriteStyle} />
+                                {slot.pokemon!.isShiny && <StarFilled className="pokemon-slot-card__badge pokemon-slot-card__badge--shiny" title="闪光" />}
+                              </div>
+                              <div className="pokemon-slot-card__name">{slot.pokemon!.nickname || slot.pokemon!.speciesName}</div>
+                              <Tag color="blue" className="pokemon-slot-card__level">Lv.{slot.pokemon!.level}</Tag>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                <section className="app-panel save-editor-bank-panel">
+                  <div className="save-editor-panel-heading">
+                    <Text strong><BankOutlined /> 我的银行</Text>
+                    <Text type="secondary" className="save-editor-panel-heading__meta">{bankPokemon.length} 只已入库</Text>
+                  </div>
+                  <DroppableBankZone>
+                    {bankPokemon.length === 0 ? (
+                      <Text type="secondary" className="save-editor-bank-panel__empty">拖拽宝可梦到这里存入银行</Text>
+                    ) : (
+                      bankPokemon.map((pokemon) => <DraggableBankItem key={pokemon.id} pokemon={pokemon} spriteStyle={spriteStyle} />)
+                    )}
+                  </DroppableBankZone>
+                </section>
+              </div>
+
+              <BackupSection saveFileId={id!} />
+            </div>
           )}
 
-          {/* Bank Panel */}
-          <div style={{ marginTop: 12, background: 'var(--bg-surface, #fff)', borderRadius: 8, padding: 16, border: '1px solid var(--border-color, #e8e8e8)', minHeight: 120 }}>
-            <Text strong style={{ marginBottom: 8, display: 'block' }}><BankOutlined /> 我的银行</Text>
-            <DroppableBankZone>
-              {bankPokemon.length === 0 ? (
-                <Text type="secondary" style={{ padding: 16 }}>拖拽宝可梦到这里存入银行</Text>
-              ) : (
-                bankPokemon.map(p => <DraggableBankItem key={p.id} pokemon={p} spriteStyle={spriteStyle} />)
-              )}
-            </DroppableBankZone>
-          </div>
+          {visibleActiveTab === 'bag' && (
+            <div className="app-panel save-editor-tab-surface">
+              <BagPanel saveFileId={id!} />
+            </div>
+          )}
 
-          {/* Backup Section */}
-          <BackupSection saveFileId={id!} />
+          {visibleActiveTab === 'trainer' && (
+            <div className="app-panel save-editor-tab-surface">
+              <TrainerPanel saveFileId={id!} />
+            </div>
+          )}
+
+          {visibleActiveTab === 'pokedex' && (
+            <div className="app-panel save-editor-tab-surface save-editor-tab-surface--flush">
+              <PokedexPanel saveFileId={id!} />
+            </div>
+          )}
+
+          {visibleActiveTab === 'gen-tools' && (
+            <div className="save-editor-gen-tools">
+              <GenToolsPanel key={id} saveFileId={id!} />
+            </div>
+          )}
+
+          {activeTab === 'search' && id && saveData && (
+            <div className="app-panel save-editor-tab-surface save-editor-tab-surface--flush">
+              <SearchPanel
+                saveFileId={id}
+                onJumpToSlot={openPokemonFromLocation}
+              />
+            </div>
+          )}
         </div>
-        )}
-
-        {visibleActiveTab === 'bag' && (
-          <div style={{ padding: 12, background: 'var(--bg-surface, #fff)', borderRadius: 8, margin: 12, border: '1px solid var(--border-color, #e8e8e8)' }}>
-            <BagPanel saveFileId={id!} />
-          </div>
-        )}
-
-        {visibleActiveTab === 'trainer' && (
-          <div style={{ padding: 12, background: 'var(--bg-surface, #fff)', borderRadius: 8, margin: 12, border: '1px solid var(--border-color, #e8e8e8)' }}>
-            <TrainerPanel saveFileId={id!} />
-          </div>
-        )}
-
-        {visibleActiveTab === 'pokedex' && (
-          <div style={{ background: 'var(--bg-surface, #fff)', borderRadius: 8, margin: 12, border: '1px solid var(--border-color, #e8e8e8)', overflow: 'hidden' }}>
-            <PokedexPanel saveFileId={id!} />
-          </div>
-        )}
-        {visibleActiveTab === 'gen-tools' && (
-          <div style={{ padding: 12 }}>
-            <GenToolsPanel key={id} saveFileId={id!} />
-          </div>
-        )}
-        {activeTab === 'search' && id && saveData && (
-          <SearchPanel
-            saveFileId={id}
-            onJumpToSlot={openPokemonFromLocation}
-          />
-        )}
       </div>
 
       <DragOverlay>
         {activeDrag ? (
-          <div style={{ background: '#fff', padding: '8px 12px', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', opacity: 0.85 }}>
-            <Text>{activeDrag.label}</Text>
+          <div className="save-editor-drag-preview">
+            <Text className="save-editor-drag-preview__label">{activeDrag.label}</Text>
+            {activeDrag.meta && <Text type="secondary" className="save-editor-drag-preview__meta">{activeDrag.meta}</Text>}
           </div>
         ) : null}
       </DragOverlay>
@@ -799,18 +904,19 @@ const BackupSection: React.FC<{ saveFileId: string }> = ({ saveFileId }) => {
   if (backups.length === 0) return null;
 
   return (
-    <div style={{ marginTop: 12, background: 'var(--bg-surface, #fff)', borderRadius: 8, padding: 16, border: '1px solid var(--border-color, #e8e8e8)' }}>
-      <Text strong style={{ marginBottom: 10, display: 'block' }}>💾 存档备份 (最近5次)</Text>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+    <section className="app-panel save-editor-backup-panel">
+      <div className="save-editor-panel-heading">
+        <Text strong>存档备份</Text>
+        <Text type="secondary" className="save-editor-panel-heading__meta">最近 5 次快照</Text>
+      </div>
+      <div className="save-editor-backup-grid">
         {backups.map((b, i) => (
-          <div key={b.id} style={{
-            padding: '10px 14px', borderRadius: 8, border: '1px solid #e8e8e8',
-            background: i === 0 ? '#f6ffed' : '#fafafa', minWidth: 200,
-          }}>
-            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-              {b.label || '备份'}
+          <div key={b.id} className={`save-editor-backup-card${i === 0 ? ' is-latest' : ''}`}>
+            <div className="save-editor-backup-card__head">
+              <div className="save-editor-backup-card__title">{b.label || '备份'}</div>
+              {i === 0 && <Tag color="green">最新</Tag>}
             </div>
-            <div style={{ fontSize: 12, color: '#666', lineHeight: 1.6 }}>
+            <div className="save-editor-backup-card__meta">
               <div>🕐 {new Date(b.createdAt).toLocaleString('zh-CN')}</div>
               <div>🎮 {b.gameVersion || '—'}</div>
               <div>👤 {b.trainerName || '—'}</div>
@@ -821,16 +927,14 @@ const BackupSection: React.FC<{ saveFileId: string }> = ({ saveFileId }) => {
               title="确定恢复到此备份？当前修改将丢失"
               onConfirm={() => handleRestore(b.id)}
               okText="恢复" cancelText="取消">
-              <Button size="small" type="primary" danger
-                loading={loading === b.id}
-                style={{ marginTop: 8, width: '100%' }}>
+              <Button size="small" type="primary" danger loading={loading === b.id} block>
                 恢复此备份
               </Button>
             </Popconfirm>
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 };
 

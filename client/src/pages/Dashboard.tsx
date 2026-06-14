@@ -17,8 +17,8 @@ type WorkbenchCardStyle = React.CSSProperties & Record<'--dashboard-card-accent'
 
 const createWorkbenchCardStyle = (accent: string): WorkbenchCardStyle => ({
   height: '100%',
-  borderColor: `${accent}26`,
-  background: `linear-gradient(180deg, var(--bg-surface, #ffffff) 0%, ${accent}10 100%)`,
+  borderColor: `${accent}30`,
+  background: `linear-gradient(180deg, var(--bg-surface, #ffffff) 0%, ${accent}12 100%)`,
   '--dashboard-card-accent': accent,
 });
 
@@ -147,7 +147,8 @@ const DashboardPage: React.FC = () => {
         />
       }
     >
-      <Row gutter={[24, 24]} style={{ marginTop: 24 }}>
+      <div className="dashboard-page">
+        <Row gutter={[24, 24]} className="dashboard-page__grid">
         {/* 功能入口 */}
         {featureCards.map((card) => (
           <Col key={card.key} xs={24} sm={12} md={8} lg={6} style={{ display: 'flex' }}>
@@ -215,10 +216,12 @@ const DashboardPage: React.FC = () => {
             </Card>
           </Col>
         ))}
-      </Row>
+        </Row>
+      </div>
 
       {/* 游戏选择 Modal — 复用同一对话框，标题和 newGame 动态切换 */}
       <Modal
+        rootClassName="dashboard-launch-modal"
         title={selectedGame ? `游玩${selectedGame.displayName.replace('宝可梦 ', '')}` : ''}
         open={selectedGame !== null}
         onCancel={() => setSelectedGame(null)}

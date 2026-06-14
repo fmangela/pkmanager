@@ -33,19 +33,9 @@ const PageContainer: React.FC<PageContainerProps> = ({
   const navigate = useNavigate();
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 12,
-        marginBottom: 24,
-        paddingBottom: 16,
-        borderBottom: '1px solid var(--border-color, #e8e8e8)',
-      }}>
-        <Space align="center" size={8}>
+    <div className="page-container" style={{ maxWidth }}>
+      <div className="page-container__header">
+        <Space align="center" size={10} className="page-container__heading">
           {backTo && (
             <Button
               icon={<ArrowLeftOutlined />}
@@ -56,14 +46,13 @@ const PageContainer: React.FC<PageContainerProps> = ({
             </Button>
           )}
           {title && (
-            <Title level={3} style={{ margin: 0 }}>{title}</Title>
+            <Title level={3} className="page-container__title">{title}</Title>
           )}
         </Space>
-        {extra && <div>{extra}</div>}
+        {extra && <div className="page-container__extra">{extra}</div>}
       </div>
 
-      {/* Content */}
-      {children}
+      <div className="page-container__content">{children}</div>
     </div>
   );
 };

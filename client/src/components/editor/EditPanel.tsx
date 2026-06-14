@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Drawer, Tabs, Button, App, Space,
+  Drawer, Tabs, Button, App, Space, Typography,
 } from 'antd';
-import { SaveOutlined, BankOutlined, CopyOutlined, ExportOutlined } from '@ant-design/icons';
+import {
+  SaveOutlined, BankOutlined, CopyOutlined, ExportOutlined,
+  AppstoreOutlined, EnvironmentOutlined, BarChartOutlined,
+  ThunderboltOutlined, IdcardOutlined, SkinOutlined,
+  ClusterOutlined, SafetyCertificateOutlined,
+} from '@ant-design/icons';
 import type { PokemonDto, LegalityStatus, JudgementDto, EditResultDto, LegalityReportDto, AutoFixResultDto } from '../../api/saveFile';
 import { saveFileApi } from '../../api/saveFile';
 import type { EvolveResultDto } from '../../api/evolution';
@@ -17,6 +22,9 @@ import LegalityTab from './LegalityTab';
 import OTMiscTab from './OTMiscTab';
 import CosmeticTab from './CosmeticTab';
 import GenSpecificTab from './GenSpecificTab';
+import PokemonSprite from '../PokemonSprite';
+
+const { Text } = Typography;
 
 interface Props {
   open: boolean;
@@ -30,6 +38,13 @@ interface Props {
   onClose: () => void;
   onSaved: () => void;
 }
+
+const panelTabLabel = (icon: React.ReactNode, label: string) => (
+  <Space size={6} align="center" className="pokemon-editor-drawer__tab-label">
+    <span className="pokemon-editor-drawer__tab-icon">{icon}</span>
+    <span>{label}</span>
+  </Space>
+);
 
 const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, boxIndex, slotIndex, isParty, boxCount, onClose, onSaved }) => {
   const [loading, setLoading] = useState(false);
@@ -184,7 +199,7 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
   const tabItems = [
     {
       key: 'main',
-      label: '基本信息',
+      label: panelTabLabel(<AppstoreOutlined />, '基本信息'),
       children: <MainTab pokemon={pokemon} generation={generation} onChange={notifyChange}
         saveFileId={saveFileId} boxIndex={boxIndex} slotIndex={slotIndex} isParty={isParty}
         editSnapshot={editSnapshot}
@@ -204,37 +219,37 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
     },
     {
       key: 'met',
-      label: '相遇信息',
+      label: panelTabLabel(<EnvironmentOutlined />, '相遇信息'),
       children: <MetTab pokemon={pokemon} generation={generation} onChange={notifyChange} saveFileId={saveFileId} boxCount={boxCount} onGenerated={onSaved} />,
     },
     {
       key: 'stats',
-      label: '能力值',
+      label: panelTabLabel(<BarChartOutlined />, '能力值'),
       children: <StatsTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
     },
     {
       key: 'moves',
-      label: '招式',
+      label: panelTabLabel(<ThunderboltOutlined />, '招式'),
       children: <MovesTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
     },
     {
       key: 'otmisc',
-      label: '训练家/杂项',
+      label: panelTabLabel(<IdcardOutlined />, '训练家/杂项'),
       children: <OTMiscTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
     },
     {
       key: 'cosmetic',
-      label: '外观/装饰',
+      label: panelTabLabel(<SkinOutlined />, '外观/装饰'),
       children: <CosmeticTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
     },
     {
       key: 'genspecific',
-      label: '世代专属',
+      label: panelTabLabel(<ClusterOutlined />, '世代专属'),
       children: <GenSpecificTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
     },
     {
       key: 'legality',
-      label: '合法性',
+      label: panelTabLabel(<SafetyCertificateOutlined />, '合法性'),
       children: (
         <LegalityTab
           status={legality?.status || 'Legal'}
@@ -249,38 +264,97 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
     },
   ];
 
+  const positionLabel = isParty
+    ? `随行位置 ${slotIndex != null ? slotIndex + 1 : '—'}`
+    : boxIndex != null && boxIndex >= 0 && slotIndex != null
+      ? `Box ${boxIndex + 1} · 槽位 ${slotIndex + 1}`
+      : '存档宝可梦';
+  const subtitleParts = [
+    positionLabel,
+    pokemon.languageName,
+    pokemon.natureName,
+    pokemon.heldItemName || '无持有物',
+  ].filter(Boolean);
+  const legalityTone = legality?.status === 'Illegal'
+    ? 'danger'
+    : legality?.status === 'Fishy'
+      ? 'warning'
+      : legality?.status === 'Legal'
+        ? 'success'
+        : 'neutral';
+  const legalityLabel = legality?.status === 'Illegal'
+    ? '不合法'
+    : legality?.status === 'Fishy'
+      ? '可疑'
+      : legality?.status === 'Legal'
+        ? '合法'
+        : '待验证';
+  const legalityHint = legality?.report
+    ? '已同步最近一次验证结果'
+    : '建议保存前执行验证';
+
   return (
     <Drawer
+      rootClassName="pokemon-editor-drawer"
       title={
-        <Space>
-          <span style={{ fontWeight: 600 }}>
-            {pokemon.nickname || pokemon.speciesName} Lv.{pokemon.level}
-          </span>
-          {pokemon.isShiny && <span style={{ color: '#faad14' }}>✨</span>}
-          {pokemon.isEgg && <span>🥚</span>}
-          <span style={{ fontSize: 10, color: '#bbb' }}>
-            {!pokemon.id ? `随行#${slotIndex ?? '?'} 存档:${(saveFileId || '?').substring(0,8)}` : ''}
-          </span>
-        </Space>
+        <div className="pokemon-editor-drawer__header">
+          <div className="pokemon-editor-drawer__identity">
+            <div className="pokemon-editor-drawer__sprite-shell">
+              <PokemonSprite speciesId={pokemon.species} width={56} height={56} />
+            </div>
+            <div className="pokemon-editor-drawer__titles">
+              <Text className="pokemon-editor-drawer__eyebrow">宝可梦控制台</Text>
+              <div className="pokemon-editor-drawer__title-row">
+                <span className="pokemon-editor-drawer__title">{pokemon.nickname || pokemon.speciesName} Lv.{pokemon.level}</span>
+                {pokemon.isShiny && <span className="app-status-chip is-warning">闪光</span>}
+                {pokemon.isEgg && <span className="app-status-chip">蛋</span>}
+              </div>
+              <Text className="pokemon-editor-drawer__subtitle">{subtitleParts.join(' · ')}</Text>
+            </div>
+          </div>
+          <div className={`pokemon-editor-drawer__status-card is-${legalityTone}`}>
+            <span className="pokemon-editor-drawer__status-label">合法性</span>
+            <strong className="pokemon-editor-drawer__status-value">{legalityLabel}</strong>
+            <span className="pokemon-editor-drawer__status-hint">{legalityHint}</span>
+          </div>
+        </div>
       }
       open={open}
       onClose={onClose}
       size="large"
-      extra={
-        <Space>
-          <Button icon={<CopyOutlined />} size="small">复制</Button>
-          <Button icon={<BankOutlined />} size="small">存入银行</Button>
-          <Button icon={<ExportOutlined />} size="small"
-            loading={exportLoading} disabled={!pokemon?.pkmDataBase64}
-            onClick={handleExportShowdown}>Showdown 导出</Button>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" icon={<SaveOutlined />} loading={loading} onClick={handleSave}>
-            保存修改
-          </Button>
-        </Space>
+      footer={
+        <div className="pokemon-editor-drawer__footer">
+          <div className="pokemon-editor-drawer__footer-secondary">
+            <Button icon={<CopyOutlined />} size="small" disabled>复制</Button>
+            <Button icon={<BankOutlined />} size="small" disabled>存入银行</Button>
+          </div>
+          <div className="pokemon-editor-drawer__footer-primary">
+            <Button
+              icon={<ExportOutlined />}
+              size="small"
+              loading={exportLoading}
+              disabled={!pokemon?.pkmDataBase64}
+              onClick={handleExportShowdown}
+            >
+              Showdown 导出
+            </Button>
+            <Button onClick={onClose}>取消</Button>
+            <Button type="primary" icon={<SaveOutlined />} loading={loading} onClick={handleSave}>
+              保存修改
+            </Button>
+          </div>
+        </div>
       }
     >
-      <Tabs key={`tabs-${saveKey}`} items={tabItems} defaultActiveKey="main" size="small" />
+      <div className="pokemon-editor-drawer__body">
+        <Tabs
+          key={`tabs-${saveKey}`}
+          className="pokemon-editor-drawer__tabs"
+          items={tabItems}
+          defaultActiveKey="main"
+          size="small"
+        />
+      </div>
       <ShowdownExportModal
         open={showExport}
         showdownText={exportText}
