@@ -11,6 +11,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Typography, Space } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 
 const { Title } = Typography;
 
@@ -31,6 +32,7 @@ const PageContainer: React.FC<PageContainerProps> = ({
   children,
 }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation('common');
 
   return (
     <div className="page-container" style={{ maxWidth }}>
@@ -42,7 +44,7 @@ const PageContainer: React.FC<PageContainerProps> = ({
               onClick={() => navigate(backTo)}
               size="small"
             >
-              返回
+              {t('back', '返回')}
             </Button>
           )}
           {title && (

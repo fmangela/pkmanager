@@ -2,14 +2,16 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, Row, Col, Typography, Button, Modal, List, Tag, Spin, App, Segmented } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { BankOutlined, SaveOutlined, PlusOutlined, SettingOutlined, SunOutlined, MoonOutlined, DesktopOutlined } from '@ant-design/icons';
-import { useTheme, type ThemeMode } from '../components/ThemeProvider';
+import { useTranslation } from 'react-i18next';
+import { useTheme, type ThemeMode } from '../components/theme-context';
 import { saveFileApi, type SaveFileInfo } from '../api/saveFile';
 import { useDiagnosticStore } from '../stores/diagnosticStore';
-import { PLAYABLE_GAMES, GAME_META } from '../constants/games';
+import { PLAYABLE_GAMES, GAME_META, getGameDisplayName, getGameShortName } from '../constants/games';
 import { emulatorApi } from '../api/saveFile';
 import GameCover from '../components/GameCover';
 import PageContainer from '../components/PageContainer';
 import { launchLocalSave } from '../lib/localLaunch';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 const { Title, Text } = Typography;
 
@@ -26,9 +28,10 @@ const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { message } = App.useApp();
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  const { t } = useTranslation(['common', 'messages', 'pages']);
 
   // Modal state — selectedGame is null when closed
-  const [selectedGame, setSelectedGame] = useState<{ gameId: string; displayName: string; generation: number } | null>(null);
+  const [selectedGame, setSelectedGame] = useState<{ gameId: string; generation: number } | null>(null);
   const [saves, setSaves] = useState<SaveFileInfo[]>([]);
   const [loadingSaves, setLoadingSaves] = useState(false);
   const fetchSaves = useCallback(async () => {
@@ -53,6 +56,8 @@ const DashboardPage: React.FC = () => {
   }, [selectedGame, fetchSaves]);
 
   const selectedMeta = selectedGame ? GAME_META[selectedGame.gameId] : undefined;
+  const selectedGameName = selectedGame ? getGameDisplayName(selectedGame.gameId) : '';
+  const selectedGameShortName = selectedGame ? getGameShortName(selectedGame.gameId) : '';
   const gameVersion = selectedMeta?.gameVersion;
   const matchingSaves = saves.filter(s => s.gameVersion === gameVersion);
   const isNds = selectedMeta?.platform === 'NDS';
@@ -61,27 +66,27 @@ const DashboardPage: React.FC = () => {
   const featureCards = [
     {
       key: 'saves',
-      title: '存档管理',
-      description: '上传、整理并快速打开你的游戏存档',
-      buttonLabel: '进入',
+      title: t('dashboard.featureSavesTitle', { ns: 'pages', defaultValue: '存档管理' }),
+      description: t('dashboard.featureSavesDescription', { ns: 'pages', defaultValue: '上传、整理并快速打开你的游戏存档' }),
+      buttonLabel: t('enter', { ns: 'common', defaultValue: '进入' }),
       accent: '#1677ff',
       icon: <SaveOutlined style={{ fontSize: 56, color: '#1677ff' }} />,
       onClick: () => navigate('/saves'),
     },
     {
       key: 'bank',
-      title: '我的银行',
-      description: '集中收藏、编辑与回收你的宝可梦',
-      buttonLabel: '进入',
+      title: t('dashboard.featureBankTitle', { ns: 'pages', defaultValue: '我的银行' }),
+      description: t('dashboard.featureBankDescription', { ns: 'pages', defaultValue: '集中收藏、编辑与回收你的宝可梦' }),
+      buttonLabel: t('enter', { ns: 'common', defaultValue: '进入' }),
       accent: '#52c41a',
       icon: <BankOutlined style={{ fontSize: 56, color: '#52c41a' }} />,
       onClick: () => navigate('/bank'),
     },
     {
       key: 'settings',
-      title: '设置',
-      description: '调整模拟器配置与本机启动偏好',
-      buttonLabel: '配置',
+      title: t('dashboard.featureSettingsTitle', { ns: 'pages', defaultValue: '设置' }),
+      description: t('dashboard.featureSettingsDescription', { ns: 'pages', defaultValue: '调整模拟器配置与本机启动偏好' }),
+      buttonLabel: t('configure', { ns: 'common', defaultValue: '配置' }),
       accent: '#fa8c16',
       icon: <SettingOutlined style={{ fontSize: 56, color: '#fa8c16' }} />,
       onClick: () => navigate('/settings'),
@@ -96,23 +101,23 @@ const DashboardPage: React.FC = () => {
       .then((res: any) => {
         const d = res.data || res;
         const ready = d.azaharReady || d.desmumeReady;
-        setCheckState({ loading: false, ready, error: ready ? undefined : (d.error || '模拟器未就绪') });
+        setCheckState({ loading: false, ready, error: ready ? undefined : (d.error || t('localEmulatorNotReady', { ns: 'messages', defaultValue: '本地模拟器未就绪' })) });
       })
       .catch((err: any) => {
-        setCheckState({ loading: false, ready: false, error: err.response?.data?.message || err.message || '校验失败' });
+        setCheckState({ loading: false, ready: false, error: err.response?.data?.message || err.message || 'Check failed' });
       });
-  }, [selectedGame?.gameId, is3ds]);
+  }, [selectedGame?.gameId, selectedGame?.generation, is3ds, gameVersion, t]);
 
   const handleLocalPlay = async (saveFileId: string, filename?: string) => {
     if (is3ds && !checkState.ready) {
-      message.warning(checkState.error || '本地模拟器未就绪');
+      message.warning(checkState.error || t('localEmulatorNotReady', { ns: 'messages', defaultValue: '本地模拟器未就绪' }));
       return;
     }
     setSelectedGame(null);
     try {
       await launchLocalSave(saveFileId, message, filename);
     } catch (err: any) {
-      message.error(err?.message || err?.response?.data?.message || '本机启动失败');
+      message.error(err?.message || err?.response?.data?.message || t('launchFailed', { ns: 'messages', defaultValue: '启动失败' }));
     }
   };
 
@@ -133,18 +138,21 @@ const DashboardPage: React.FC = () => {
 
   return (
     <PageContainer
-      title="工作台"
+      title={t('dashboard.title', { ns: 'pages', defaultValue: '工作台' })}
       extra={
-        <Segmented
-          size="small"
-          options={[
-            { value: 'light' as ThemeMode, icon: <SunOutlined /> },
-            { value: 'dark' as ThemeMode, icon: <MoonOutlined /> },
-            { value: 'system' as ThemeMode, icon: <DesktopOutlined /> },
-          ]}
-          value={themeMode}
-          onChange={(v) => setThemeMode(v as ThemeMode)}
-        />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <LanguageSwitcher />
+          <Segmented
+            size="small"
+            options={[
+              { value: 'light' as ThemeMode, icon: <SunOutlined /> },
+              { value: 'dark' as ThemeMode, icon: <MoonOutlined /> },
+              { value: 'system' as ThemeMode, icon: <DesktopOutlined /> },
+            ]}
+            value={themeMode}
+            onChange={(v) => setThemeMode(v as ThemeMode)}
+          />
+        </div>
       }
     >
       <div className="dashboard-page">
@@ -194,14 +202,20 @@ const DashboardPage: React.FC = () => {
             <Card
               hoverable
               className="dashboard-workbench-card"
-              onClick={() => setSelectedGame({ gameId: game.gameId, displayName: game.displayName, generation: game.generation })}
+              onClick={() => setSelectedGame({ gameId: game.gameId, generation: game.generation })}
               style={createWorkbenchCardStyle(game.color)}
             >
               <div className="dashboard-workbench-card__media">
                 <GameCover gameId={game.gameId} />
               </div>
-              <Title level={4} className="dashboard-workbench-card__title">游玩{game.shortName}</Title>
-              <Text type="secondary" className="dashboard-workbench-card__description">{game.displayName}</Text>
+              <Title level={4} className="dashboard-workbench-card__title">
+                {t('dashboard.playTitle', {
+                  ns: 'pages',
+                  defaultValue: '游玩{{game}}',
+                  game: getGameShortName(game.gameId),
+                })}
+              </Title>
+              <Text type="secondary" className="dashboard-workbench-card__description">{getGameDisplayName(game.gameId)}</Text>
               <Button
                 type="primary"
                 className="dashboard-workbench-card__button"
@@ -211,7 +225,7 @@ const DashboardPage: React.FC = () => {
                   boxShadow: `0 12px 22px ${game.color}33`,
                 }}
               >
-                开始游戏
+                {t('dashboard.startGame', { ns: 'pages', defaultValue: '开始游戏' })}
               </Button>
             </Card>
           </Col>
@@ -222,7 +236,11 @@ const DashboardPage: React.FC = () => {
       {/* 游戏选择 Modal — 复用同一对话框，标题和 newGame 动态切换 */}
       <Modal
         rootClassName="dashboard-launch-modal"
-        title={selectedGame ? `游玩${selectedGame.displayName.replace('宝可梦 ', '')}` : ''}
+        title={selectedGame ? t('dashboard.playTitle', {
+          ns: 'pages',
+          defaultValue: '游玩{{game}}',
+          game: selectedGameShortName,
+        }) : ''}
         open={selectedGame !== null}
         onCancel={() => setSelectedGame(null)}
         footer={null}
@@ -231,7 +249,7 @@ const DashboardPage: React.FC = () => {
         {/* 3DS: 预校验状态 */}
         {is3ds && checkState.loading && (
           <div style={{ textAlign: 'center', padding: 16, background: '#e6f4ff', borderRadius: 6, marginBottom: 12 }}>
-            <Spin size="small" /> 正在检查 Azahar 配置...
+            <Spin size="small" /> {t('dashboard.modal.checkingAzahar', { ns: 'pages', defaultValue: '正在检查 Azahar 配置...' })}
           </div>
         )}
         {is3ds && !checkState.loading && checkState.error && (
@@ -239,7 +257,7 @@ const DashboardPage: React.FC = () => {
             <Text type="danger">{checkState.error}</Text>
             <br />
             <Button type="link" size="small" onClick={() => { setSelectedGame(null); window.open('/settings', '_blank'); }}>
-              前往设置页配置
+              {t('dashboard.modal.openSettings', { ns: 'pages', defaultValue: '前往设置页配置' })}
             </Button>
           </div>
         )}
@@ -249,7 +267,11 @@ const DashboardPage: React.FC = () => {
         ) : matchingSaves.length > 0 ? (
           <>
             <Text type="secondary" style={{ marginBottom: 12, display: 'block' }}>
-              {is3ds ? '选择已有存档后将直接本机游玩' : isNds ? '选择已有存档后可在 Web 或本地继续游戏' : '选择已有存档继续游戏'}
+              {is3ds
+                ? t('dashboard.modal.selectExisting3ds', { ns: 'pages', defaultValue: '选择已有存档后将直接本机游玩' })
+                : isNds
+                  ? t('dashboard.modal.selectExistingNds', { ns: 'pages', defaultValue: '选择已有存档后可在 Web 或本地继续游戏' })
+                  : t('dashboard.modal.selectExistingGeneric', { ns: 'pages', defaultValue: '选择已有存档继续游戏' })}
             </Text>
             <List
               dataSource={matchingSaves}
@@ -265,10 +287,10 @@ const DashboardPage: React.FC = () => {
                   }}
                   actions={isNds ? [
                     <Button key="web" type="primary" size="small" onClick={() => handleWebPlay(save.saveFileId)}>
-                      Web 游玩
+                      {t('dashboard.modal.webPlay', { ns: 'pages', defaultValue: 'Web 游玩' })}
                     </Button>,
                     <Button key="local" size="small" onClick={() => handleLocalPlay(save.saveFileId, save.filename)}>
-                      本地游玩
+                      {t('dashboard.modal.localPlay', { ns: 'pages', defaultValue: '本地游玩' })}
                     </Button>,
                   ] : undefined}
                 >
@@ -280,7 +302,16 @@ const DashboardPage: React.FC = () => {
                         <Tag color={save.generation >= 6 ? 'volcano' : save.generation >= 4 ? 'blue' : 'green'}>
                           Gen{save.generation} {save.generation >= 6 ? '3DS' : save.generation >= 4 ? 'NDS' : 'GBA'}
                         </Tag>
-                        {save.pokemonCount > 0 && <Text type="secondary"> {save.pokemonCount} 只宝可梦</Text>}
+                        {save.pokemonCount > 0 && (
+                          <Text type="secondary">
+                            {' '}
+                            {t('dashboard.modal.pokemonCount', {
+                              ns: 'pages',
+                              defaultValue: '{{count}} 只宝可梦',
+                              count: save.pokemonCount,
+                            })}
+                          </Text>
+                        )}
                       </span>
                     }
                   />
@@ -291,7 +322,7 @@ const DashboardPage: React.FC = () => {
             {!is3ds && (
               <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
                 <Text type="secondary" style={{ marginBottom: 8, display: 'block' }}>
-                  或者开始全新游戏
+                  {t('dashboard.modal.orStartNewGame', { ns: 'pages', defaultValue: '或者开始全新游戏' })}
                 </Text>
               </div>
             )}
@@ -300,8 +331,16 @@ const DashboardPage: React.FC = () => {
           <div style={{ textAlign: 'center', padding: '16px 0' }}>
             <Text type="secondary">
               {is3ds
-                ? `暂无${selectedGame?.displayName}存档，请先上传你本机已绑定的 3DS 存档`
-                : `暂无${selectedGame?.displayName}存档`}
+                ? t('dashboard.modal.noSave3ds', {
+                  ns: 'pages',
+                  defaultValue: '暂无{{game}}存档，请先上传你本机已绑定的 3DS 存档',
+                  game: selectedGameName,
+                })
+                : t('dashboard.modal.noSaveGeneric', {
+                  ns: 'pages',
+                  defaultValue: '暂无{{game}}存档',
+                  game: selectedGameName,
+                })}
             </Text>
           </div>
         )}
@@ -315,7 +354,7 @@ const DashboardPage: React.FC = () => {
             onClick={handleNewGame}
             style={{ marginTop: matchingSaves.length > 0 ? 0 : 8, height: 48 }}
           >
-            新游戏
+            {t('dashboard.modal.newGame', { ns: 'pages', defaultValue: '新游戏' })}
           </Button>
         )}
       </Modal>

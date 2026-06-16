@@ -4,9 +4,10 @@ import {
 } from 'antd';
 import { UploadOutlined, DeleteOutlined, EyeOutlined, FileAddOutlined, PlayCircleOutlined, DesktopOutlined, SettingOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { saveFileApi, type SaveFileInfo } from '../api/saveFile';
-import { GAME_VERSION_DISPLAY, GENERATION_MAP } from '../constants/games';
+import { GAME_VERSION_COLORS, GENERATION_MAP, getVersionDisplayName } from '../constants/games';
 import GameCover from '../components/GameCover';
 import PageContainer from '../components/PageContainer';
 import { launchLocalSave } from '../lib/localLaunch';
@@ -14,6 +15,7 @@ import { launchLocalSave } from '../lib/localLaunch';
 const { Text } = Typography;
 
 const SavesPage: React.FC = () => {
+  const { t, i18n } = useTranslation(['common', 'messages', 'pages']);
   const [saves, setSaves] = useState<SaveFileInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -26,7 +28,7 @@ const SavesPage: React.FC = () => {
   // ── 启动本地模拟器（浏览器端调起）────────────────────
   const handleLaunchLocal = async (record: SaveFileInfo) => {
     if (launchStates[record.saveFileId]) {
-      message.warning('该存档的模拟器已在运行中');
+      message.warning(t('emulatorAlreadyRunning', { ns: 'messages', defaultValue: '该存档的模拟器已在运行中' }));
       return;
     }
     const saveFileId = record.saveFileId;
@@ -35,7 +37,7 @@ const SavesPage: React.FC = () => {
     try {
       await launchLocalSave(saveFileId, message, record.filename);
     } catch (err: any) {
-      message.error(err?.message || err?.response?.data?.message || '启动失败');
+      message.error(err?.message || err?.response?.data?.message || t('launchFailed', { ns: 'messages', defaultValue: '启动失败' }));
     } finally {
       setLaunchStates(prev => {
         const next = { ...prev };
@@ -51,11 +53,11 @@ const SavesPage: React.FC = () => {
       const res = await saveFileApi.list();
       setSaves(res.data);
     } catch {
-      message.error('加载存档列表失败');
+      message.error(t('loadSaveListFailed', { ns: 'messages', defaultValue: '加载存档列表失败' }));
     } finally {
       setLoading(false);
     }
-  }, [message]);
+  }, [message, t]);
 
   useEffect(() => {
     fetchSaves();
@@ -65,10 +67,10 @@ const SavesPage: React.FC = () => {
     setUploading(true);
     try {
       await saveFileApi.upload(file);
-      message.success('存档上传并解析成功！');
+      message.success(t('uploadSaveSuccess', { ns: 'messages', defaultValue: '存档上传并解析成功！' }));
       fetchSaves();
     } catch (err: any) {
-      message.error(err.response?.data?.message || '上传失败，请检查文件格式');
+      message.error(err.response?.data?.message || t('uploadFailedCheckFormat', { ns: 'messages', defaultValue: '上传失败，请检查文件格式' }));
     } finally {
       setUploading(false);
     }
@@ -78,10 +80,10 @@ const SavesPage: React.FC = () => {
   const handleDelete = async (id: string) => {
     try {
       await saveFileApi.delete(id);
-      message.success('存档已删除');
+      message.success(t('saveDeleted', { ns: 'messages', defaultValue: '存档已删除' }));
       fetchSaves();
     } catch {
-      message.error('删除失败');
+      message.error(t('deleteFailed', { ns: 'messages', defaultValue: '删除失败' }));
     }
   };
 
@@ -93,24 +95,24 @@ const SavesPage: React.FC = () => {
 
   const columns: ColumnsType<SaveFileInfo> = [
     {
-      title: '文件名',
+      title: t('saves.column.filename', { ns: 'pages', defaultValue: '文件名' }),
       dataIndex: 'filename',
       key: 'filename',
       ellipsis: true,
     },
     {
-      title: '游戏',
+      title: t('saves.column.game', { ns: 'pages', defaultValue: '游戏' }),
       dataIndex: 'gameVersion',
       key: 'gameVersion',
       width: 110,
       render: (ver: number) => {
-        const info = GAME_VERSION_DISPLAY[ver];
+        const color = GAME_VERSION_COLORS[ver];
         return (
           <Space size={8}>
             <GameCover gameVersion={ver} size="small" showPlatform={false}
               style={{ minWidth: 0, minHeight: 0, padding: 0 }} />
-            {info
-              ? <Tag color={info.color}>{info.name}</Tag>
+            {color
+              ? <Tag color={color}>{getVersionDisplayName(ver)}</Tag>
               : <Tag>{GENERATION_MAP[ver] || `Gen${ver}`}</Tag>
             }
           </Space>
@@ -118,42 +120,44 @@ const SavesPage: React.FC = () => {
       },
     },
     {
-      title: '训练家',
+      title: t('saves.column.trainer', { ns: 'pages', defaultValue: '训练家' }),
       dataIndex: 'trainerName',
       key: 'trainerName',
       width: 90,
     },
     {
-      title: '宝可梦',
+      title: t('saves.column.pokemon', { ns: 'pages', defaultValue: '宝可梦' }),
       dataIndex: 'pokemonCount',
       key: 'pokemonCount',
       width: 70,
       align: 'center',
     },
     {
-      title: '时间',
+      title: t('saves.column.time', { ns: 'pages', defaultValue: '时间' }),
       dataIndex: 'playTime',
       key: 'playTime',
       width: 80,
       render: (t: number) => formatPlayTime(t),
     },
     {
-      title: '状态',
+      title: t('saves.column.status', { ns: 'pages', defaultValue: '状态' }),
       dataIndex: 'isModified',
       key: 'isModified',
       width: 80,
       render: (modified: boolean) =>
-        modified ? <Tag color="orange">已修改</Tag> : <Tag>原始</Tag>,
+        modified
+          ? <Tag color="orange">{t('saves.status.modified', { ns: 'pages', defaultValue: '已修改' })}</Tag>
+          : <Tag>{t('saves.status.original', { ns: 'pages', defaultValue: '原始' })}</Tag>,
     },
     {
-      title: '更新时间',
+      title: t('saves.column.updatedAt', { ns: 'pages', defaultValue: '更新时间' }),
       dataIndex: 'updatedAt',
       key: 'updatedAt',
       width: 160,
-      render: (date: string) => new Date(date).toLocaleString('zh-CN'),
+      render: (date: string) => new Date(date).toLocaleString(i18n.language === 'en' ? 'en-US' : 'zh-CN'),
     },
     {
-      title: '操作',
+      title: t('saves.column.actions', { ns: 'pages', defaultValue: '操作' }),
       key: 'actions',
       width: 180,
       render: (_, record) => (
@@ -161,21 +165,25 @@ const SavesPage: React.FC = () => {
           {(record.generation === 3 || record.generation === 4 || record.generation === 5) && (
             <Button type="link" size="small" icon={<PlayCircleOutlined />}
               onClick={() => window.open(`/play${record.generation >= 4 ? '-nds' : ''}/${record.saveFileId}`, '_blank')}
-              style={{ color: '#52c41a' }}>WASM</Button>
+              style={{ color: '#52c41a' }}>{t('saves.action.wasm', { ns: 'pages', defaultValue: 'WASM' })}</Button>
           )}
           {(record.generation >= 4) && (
             (() => {
               const ls = launchStates[record.saveFileId];
-              if (ls?.status === 'launching') return <Button type="link" size="small" loading>启动中</Button>;
+              if (ls?.status === 'launching') return <Button type="link" size="small" loading>{t('saves.action.launching', { ns: 'pages', defaultValue: '启动中' })}</Button>;
               if (ls?.status === 'running') return (
                 <Button type="link" size="small" icon={<DesktopOutlined />} style={{ color: '#52c41a' }}>
-                  {ls.type === 'azahar' ? '3DS' : 'NDS'} 运行中
+                  {t('saves.action.running', {
+                    ns: 'pages',
+                    defaultValue: '{{platform}} 运行中',
+                    platform: ls.type === 'azahar' ? '3DS' : 'NDS',
+                  })}
                 </Button>
               );
-              if (ls?.status === 'syncing') return <Button type="link" size="small" loading>同步中</Button>;
+              if (ls?.status === 'syncing') return <Button type="link" size="small" loading>{t('saves.action.syncing', { ns: 'pages', defaultValue: '同步中' })}</Button>;
               return (
                 <Button type="link" size="small" icon={<DesktopOutlined />}
-                  onClick={() => handleLaunchLocal(record)}>本机</Button>
+                  onClick={() => handleLaunchLocal(record)}>{t('saves.action.local', { ns: 'pages', defaultValue: '本机' })}</Button>
               );
             })()
           )}
@@ -185,17 +193,17 @@ const SavesPage: React.FC = () => {
             icon={<EyeOutlined />}
             onClick={() => navigate(`/saves/${record.saveFileId}`)}
           >
-            查看
+            {t('view', { ns: 'common', defaultValue: '查看' })}
           </Button>
           <Popconfirm
-            title="确定删除此存档？"
-            description="删除后数据不可恢复"
+            title={t('saves.deleteConfirmTitle', { ns: 'pages', defaultValue: '确定删除此存档？' })}
+            description={t('saves.deleteConfirmDescription', { ns: 'pages', defaultValue: '删除后数据不可恢复' })}
             onConfirm={() => handleDelete(record.saveFileId)}
-            okText="确定"
-            cancelText="取消"
+            okText={t('delete', { ns: 'common', defaultValue: '删除' })}
+            cancelText={t('cancel', { ns: 'common', defaultValue: '取消' })}
           >
             <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              删除
+              {t('delete', { ns: 'common', defaultValue: '删除' })}
             </Button>
           </Popconfirm>
         </Space>
@@ -205,20 +213,20 @@ const SavesPage: React.FC = () => {
 
   return (
     <PageContainer
-      title="存档管理"
+      title={t('saves.title', { ns: 'pages', defaultValue: '存档管理' })}
       backTo="/dashboard"
       maxWidth={1200}
       extra={
         <Space size={12} align="center">
-          <Button icon={<SettingOutlined />} onClick={() => navigate('/settings')}>模拟器设置</Button>
+          <Button icon={<SettingOutlined />} onClick={() => navigate('/settings')}>{t('saves.emulatorSettings', { ns: 'pages', defaultValue: '模拟器设置' })}</Button>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
             <Upload showUploadList={false} beforeUpload={handleUpload}>
               <Button type="primary" icon={<UploadOutlined />} loading={uploading} size="large">
-                上传存档
+                {t('saves.uploadButton', { ns: 'pages', defaultValue: '上传存档' })}
               </Button>
             </Upload>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              支持 `.sav/.dat/.dsv/.gci`，以及 3DS 无扩展名 `main`
+              {t('saves.uploadHint', { ns: 'pages', defaultValue: '支持 `.sav/.dat/.dsv/.gci`，以及 3DS 无扩展名 `main`' })}
             </Text>
           </div>
         </Space>
@@ -238,7 +246,7 @@ const SavesPage: React.FC = () => {
               <div style={{ padding: 48 }}>
                 <FileAddOutlined style={{ fontSize: 48, color: '#ccc' }} />
                 <p style={{ marginTop: 16, color: '#999' }}>
-                  暂无存档，点击「上传存档」开始
+                  {t('saves.emptyState', { ns: 'pages', defaultValue: '暂无存档，点击「上传存档」开始' })}
                 </p>
               </div>
             ),

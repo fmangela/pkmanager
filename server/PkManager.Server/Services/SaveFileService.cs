@@ -22,13 +22,15 @@ public class SaveFileService
     private readonly NpgsqlConnection _db;
     private readonly ParseService _parseService;
     private readonly LegalityCacheService _legalityCache;
+    private readonly IPkhexStringProvider _pkhexStrings;
 
     public SaveFileService(NpgsqlConnection db, ParseService parseService,
-        IWebHostEnvironment env, LegalityCacheService legalityCache)
+        IWebHostEnvironment env, LegalityCacheService legalityCache, IPkhexStringProvider pkhexStrings)
     {
         _db = db;
         _parseService = parseService;
         _legalityCache = legalityCache;
+        _pkhexStrings = pkhexStrings;
         _baseSaveDir = Path.Combine(env.ContentRootPath, "data", "saves");
     }
 
@@ -1570,7 +1572,7 @@ public class SaveFileService
         return Array.Empty<byte>();
     }
 
-    private static Func<IEnumerable<PKM>, int, IEnumerable<PKM>> GetBoxSortMethod(string? sortBy)
+    private Func<IEnumerable<PKM>, int, IEnumerable<PKM>> GetBoxSortMethod(string? sortBy)
     {
         var normalized = sortBy?.Trim().ToLowerInvariant();
         return normalized switch
@@ -1583,9 +1585,9 @@ public class SaveFileService
         };
     }
 
-    private static IEnumerable<PKM> OrderByName(IEnumerable<PKM> list)
+    private IEnumerable<PKM> OrderByName(IEnumerable<PKM> list)
     {
-        var speciesNames = GameInfo.GetStrings("zh").Species;
+        var speciesNames = _pkhexStrings.GetStrings().Species;
         var max = speciesNames.Count - 1;
         var comparer = StringComparer.Create(CultureInfo.GetCultureInfo("zh-CN"), true);
 
@@ -1633,7 +1635,7 @@ public class SaveFileService
         PokemonSearchRequest request)
     {
         var (sf, sav) = await LoadSave(saveFileId, userId);
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings();
 
         var allMatches = new List<PokemonSearchItemDto>();
 

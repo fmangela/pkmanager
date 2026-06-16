@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useDiagnosticStore } from '../stores/diagnosticStore';
+import i18n from '../i18n/i18n';
 
 const apiClient = axios.create({
   baseURL: '/api',
@@ -36,6 +37,7 @@ apiClient.interceptors.request.use((config) => {
   if (deviceId) {
     config.headers['X-Device-Id'] = deviceId;
   }
+  config.headers['Accept-Language'] = i18n.language;
   return config;
 });
 

@@ -1,0 +1,19 @@
+{
+  "saveSuccess": "Saved",
+  "saveFailed": "Save failed",
+  "loginSuccess": "Logged in",
+  "loginFailed": "Login failed",
+  "loadSaveListFailed": "Failed to load saves",
+  "emulatorAlreadyRunning": "An emulator is already running for this save",
+  "launchFailed": "Launch failed",
+  "uploadSaveSuccess": "Save uploaded and parsed successfully",
+  "uploadFailedCheckFormat": "Upload failed. Check the file format.",
+  "saveDeleted": "Save deleted",
+  "deleteFailed": "Delete failed",
+  "localEmulatorNotReady": "Local emulator is not ready",
+  "showdownInputRequired": "Enter Showdown text",
+  "showdownParseSuccess": "Parsed successfully: {{species}}",
+  "showdownParseFailed": "Parse failed",
+  "showdownImportSuccess": "Showdown import succeeded",
+  "showdownGenerateFailed": "Generation failed"
+}

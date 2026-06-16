@@ -7,6 +7,8 @@
  *   本文件封装为 NdsEmulator 接口        → 与 mgba.ts 相同的调用模式
  */
 
+import { getI18nGameName } from '../i18n/i18n';
+
 // ── 全局类型声明（来自 webmelon.js + wasmemulator.js） ──
 
 declare global {
@@ -116,29 +118,9 @@ export const NDS_BTN_LABEL: Record<string, string> = {
   DPAD_UP: '↑上', DPAD_DOWN: '↓下', DPAD_LEFT: '←左', DPAD_RIGHT: '→右',
 };
 
-// ── NDS 版本映射（Gen4/5 gameVersion → gameId） ─────────
-
-export const NDS_VERSION_MAP: Record<number, string> = {
-  // Gen4 (PKHeX: D=10, P=11, Pt=12, HG=7, SS=8)
-  10: 'pkm_diamond', 11: 'pkm_pearl', 12: 'pkm_platinum',
-  7: 'pkm_heartgold', 8: 'pkm_soulsilver',
-  // Gen5 (PKHeX: W=20, B=21, W2=22, B2=23)
-  20: 'pkm_white', 21: 'pkm_black', 22: 'pkm_white2', 23: 'pkm_black2',
-  // PKHeX 复合版本 → 默认具体游戏（兜底，NormalizeOrKeepExisting 应已避免走到这里）
-  62: 'pkm_diamond',    // DP → 钻石（无法区分时默认）
-  63: 'pkm_platinum',   // DPPt → 白金
-  64: 'pkm_heartgold',  // HGSS → 心金
-  66: 'pkm_black',      // BW → 黑
-  67: 'pkm_black2',     // B2W2 → 黑2
-};
-
-export const NDS_ROM_NAMES: Record<string, string> = {
-  pkm_diamond: '宝可梦 钻石', pkm_pearl: '宝可梦 珍珠',
-  pkm_platinum: '宝可梦 白金',
-  pkm_heartgold: '宝可梦 心金', pkm_soulsilver: '宝可梦 魂银',
-  pkm_black: '宝可梦 黑', pkm_white: '宝可梦 白',
-  pkm_black2: '宝可梦 黑2', pkm_white2: '宝可梦 白2',
-};
+export function getNdsRomDisplayName(gameId: string): string {
+  return getI18nGameName(gameId);
+}
 
 // ── WebGL 兼容性 Monkey-Patch ──────────────────────────────
 // melonDS 的 WebGL2 GPU 路径仍带着少量桌面 GL 调用习惯。这里不做“全量降级”，

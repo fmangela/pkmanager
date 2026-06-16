@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { resourceApi, type ResourceItem } from '../api/resource';
 import { useDiagnosticStore } from './diagnosticStore';
+import i18n from '../i18n/i18n';
 
 interface ResourceState {
   species: ResourceItem[];
@@ -12,6 +13,7 @@ interface ResourceState {
   loaded: boolean;
   loading: boolean;
   error: string | null;
+  language: string | null;
 
   loadAll: () => Promise<void>;
   getSpeciesName: (id: number) => string;
@@ -31,19 +33,22 @@ export const useResourceStore = create<ResourceState>((set, get) => ({
   loaded: false,
   loading: false,
   error: null,
+  language: null,
 
   loadAll: async () => {
-    if (get().loaded || get().loading) return;
+    const currentLang = i18n.language;
+    if (get().loaded && get().language === currentLang) return;
+    if (get().loading) return;
     set({ loading: true, error: null });
 
     try {
       const results = await Promise.allSettled([
-        resourceApi.species(),
-        resourceApi.moves(),
-        resourceApi.abilities(),
-        resourceApi.natures(),
-        resourceApi.items(),
-        resourceApi.balls(),
+        resourceApi.species(currentLang),
+        resourceApi.moves(undefined, currentLang),
+        resourceApi.abilities(currentLang),
+        resourceApi.natures(currentLang),
+        resourceApi.items(currentLang),
+        resourceApi.balls(currentLang),
       ]);
 
       const names = ['species', 'moves', 'abilities', 'natures', 'items', 'balls'] as const;
@@ -72,6 +77,7 @@ export const useResourceStore = create<ResourceState>((set, get) => ({
         items: extracted[4],
         balls: extracted[5],
         loaded: true,
+        language: currentLang,
         loading: false,
         error: failed.length > 0 ? `部分资源加载失败: ${failed.join(', ')}` : null,
       });

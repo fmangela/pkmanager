@@ -14,11 +14,18 @@ export interface RegisterRequest {
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
-  user: {
-    id: string;
-    username: string;
-    email: string;
-  };
+  user: UserDto;
+}
+
+export interface UserDto {
+  id: string;
+  username: string;
+  email: string;
+  preferredLang: string;
+}
+
+export interface SetLanguageRequest {
+  lang: string;
 }
 
 export const authApi = {
@@ -31,5 +38,8 @@ export const authApi = {
   refresh: (refreshToken: string) =>
     apiClient.post<AuthResponse>('/auth/refresh', { refreshToken }),
 
-  me: () => apiClient.get('/auth/me'),
+  me: () => apiClient.get<UserDto>('/auth/me'),
+
+  setLanguage: (lang: string) =>
+    apiClient.put<boolean>('/auth/language', { lang } satisfies SetLanguageRequest),
 };

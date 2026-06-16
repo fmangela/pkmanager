@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using PkManager.Server.Helpers;
+using PkManager.Server.Middleware;
 using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
 using PkManager.Server.Services;
@@ -11,12 +13,14 @@ namespace PkManager.Server.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AuthService _authService;
+    private readonly IMemoryCache _cache;
     private readonly UserContext _userContext;
 
-    public AuthController(AuthService authService, UserContext userContext)
+    public AuthController(AuthService authService, UserContext userContext, IMemoryCache cache)
     {
         _authService = authService;
         _userContext = userContext;
+        _cache = cache;
     }
 
     /// <summary>
@@ -30,7 +34,8 @@ public class AuthController : ControllerBase
 
         try
         {
-            var result = await _authService.Register(request);
+            var acceptLanguage = Request.Headers["Accept-Language"].FirstOrDefault();
+            var result = await _authService.Register(request, acceptLanguage);
             return Ok(ApiResponse<AuthResponse>.Ok(result, "注册成功"));
         }
         catch (BusinessException ex)
@@ -96,9 +101,37 @@ public class AuthController : ControllerBase
             return NotFound(ApiResponse<UserDto>.Error(404, ex.Message));
         }
     }
+
+    /// <summary>
+    /// 更新当前账号的语言偏好
+    /// </summary>
+    [HttpPut("language")]
+    public async Task<ActionResult<ApiResponse<bool>>> SetLanguage([FromBody] SetLanguageRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null)
+            return Unauthorized(ApiResponse<bool>.Error(401, "未登录"));
+
+        try
+        {
+            await _authService.SetPreferredLang(userId.Value, request.Lang);
+            _cache.Remove(LanguageMiddleware.GetCacheKey(userId.Value));
+            HttpContext.Items["resolved_lang"] = AuthService.NormalizeForClient(request.Lang);
+            return Ok(ApiResponse<bool>.Ok(true, "ok"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(ApiResponse<bool>.Error(ex.ErrorCode, ex.Message));
+        }
+    }
 }
 
 public class RefreshRequest
 {
     public string RefreshToken { get; set; } = string.Empty;
+}
+
+public class SetLanguageRequest
+{
+    public string Lang { get; set; } = "zh-Hans";
 }

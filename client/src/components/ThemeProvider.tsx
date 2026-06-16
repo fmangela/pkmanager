@@ -6,27 +6,11 @@
 // 持久化：localStorage key = "pkmanager_theme"
 // 值: "light" | "dark" | "system"
 
-import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, useSyncExternalStore } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { ConfigProvider, theme, App as AntdApp } from 'antd';
-import zhCN from 'antd/locale/zh_CN';
-
-export type ThemeMode = 'light' | 'dark' | 'system';
-
-interface ThemeContextValue {
-  mode: ThemeMode;
-  isDark: boolean;
-  setMode: (mode: ThemeMode) => void;
-}
-
-const ThemeContext = createContext<ThemeContextValue>({
-  mode: 'system',
-  isDark: false,
-  setMode: () => {},
-});
-
-export function useTheme(): ThemeContextValue {
-  return useContext(ThemeContext);
-}
+import { useTranslation } from 'react-i18next';
+import { getAntdLocale } from '../i18n/antd-locales';
+import { ThemeContext, type ThemeContextValue, type ThemeMode } from './theme-context';
 
 // ── useSystemPrefersDark ─────────────────────────────────────────
 
@@ -57,11 +41,13 @@ function readStoredMode(): ThemeMode {
 }
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { i18n } = useTranslation();
   const [mode, setModeState] = useState<ThemeMode>(readStoredMode);
   const prefersDark = useSystemPrefersDark();
 
   const isDark = mode === 'dark' || (mode === 'system' && prefersDark);
   const algorithm = isDark ? theme.darkAlgorithm : theme.defaultAlgorithm;
+  const antdLocale = useMemo(() => getAntdLocale(i18n.language), [i18n.language]);
   const themeConfig = useMemo(() => ({
     algorithm,
     token: {
@@ -97,7 +83,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return (
     <ThemeContext.Provider value={ctxValue}>
-      <ConfigProvider locale={zhCN} theme={themeConfig}>
+      <ConfigProvider locale={antdLocale} theme={themeConfig}>
         <AntdApp>{children}</AntdApp>
       </ConfigProvider>
     </ThemeContext.Provider>

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { authApi, type AuthResponse } from '../api/auth';
+import i18n from '../i18n/i18n';
 
 interface AuthState {
   token: string | null;
@@ -11,6 +12,7 @@ interface AuthState {
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   restoreSession: () => void;
+  setUser: (user: AuthResponse['user']) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -24,6 +26,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { accessToken, refreshToken, user } = res.data;
     localStorage.setItem('access_token', accessToken);
     localStorage.setItem('refresh_token', refreshToken);
+    localStorage.setItem('pkmanager_lang', user.preferredLang);
+    await i18n.changeLanguage(user.preferredLang);
     set({ token: accessToken, refreshToken, user, isAuthenticated: true });
   },
 
@@ -44,4 +48,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ token, isAuthenticated: true });
     }
   },
+
+  setUser: (user) => set({ user }),
 }));

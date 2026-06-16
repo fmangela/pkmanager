@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Text;
 using PKHeX.Core;
+using PkManager.Server.Helpers;
 using PkManager.Server.Models.Response;
 
 namespace PkManager.Server.Services;
@@ -13,6 +14,12 @@ public class ParseService
     private const int DeSmuMEFooterSize = 0x7A;
     private const int NdsRawSaveSize = SaveUtil.SIZE_G4RAW;
     private static readonly byte[] DeSmuMEMarker = Encoding.ASCII.GetBytes("|-DESMUME SAVE-|");
+    private readonly IPkhexStringProvider _pkhexStrings;
+
+    public ParseService(IPkhexStringProvider pkhexStrings)
+    {
+        _pkhexStrings = pkhexStrings;
+    }
 
     private static bool IsDeSmuMESave(byte[] saveData)
     {
@@ -191,11 +198,11 @@ public class ParseService
     /// <summary>
     /// PKM 对象 → 前端可消费的 DTO
     /// </summary>
-    public static PokemonDto MapToPokemonDto(PKM pkm)
+    public PokemonDto MapToPokemonDto(PKM pkm)
     {
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings();
         var moveStrings = strings.Move;
-        var typeStrings = GameInfo.GetStrings("zh").Types;
+        var typeStrings = strings.Types;
 
         // 种族值（Base Stats）
         var baseStats = new int[6];

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Dapper;
 using Npgsql;
 using PKHeX.Core;
+using PkManager.Server.Helpers;
 using PkManager.Server.Models.Entity;
 using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
@@ -19,15 +20,17 @@ public class BankService
     private readonly SaveFileService _saveFileService;
     private readonly PokemonEditService _editService;
     private readonly LegalityCacheService _legalityCache;
+    private readonly IPkhexStringProvider _pkhexStrings;
 
     public BankService(NpgsqlConnection db, ParseService parseService, SaveFileService saveFileService,
-        PokemonEditService editService, LegalityCacheService legalityCache)
+        PokemonEditService editService, LegalityCacheService legalityCache, IPkhexStringProvider pkhexStrings)
     {
         _db = db;
         _parseService = parseService;
         _saveFileService = saveFileService;
         _editService = editService;
         _legalityCache = legalityCache;
+        _pkhexStrings = pkhexStrings;
     }
 
     /// <summary>
@@ -131,7 +134,7 @@ public class BankService
         {
             try
             {
-                var pokemon = ParseService.MapToPokemonDto(
+                var pokemon = _parseService.MapToPokemonDto(
                     EntityFormat.GetFromBytes(Convert.FromBase64String(record.PkmDataBase64))
                     ?? throw new InvalidOperationException("PKM parse returned null"));
                 pokemon.Id = record.Id;
@@ -178,11 +181,11 @@ public class BankService
         var newBase64 = Convert.ToBase64String(buf);
 
         // Re-generate DTO from edited PKM
-        var dto = ParseService.MapToPokemonDto(pkm);
+        var dto = _parseService.MapToPokemonDto(pkm);
         var pokemonJson = JsonSerializer.Serialize(dto);
 
         // Sync all redundant columns (list/filter/card summary stays in sync)
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings();
         await _db.ExecuteAsync(@"
             UPDATE bank_pokemon SET
                 species = @Species, species_name = @SpeciesName, nickname = @Nickname,
@@ -274,7 +277,7 @@ public class BankService
             new { UserId = userId })).ToList();
 
         int fixed_ = 0, skipped = 0, failed = 0;
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings();
 
         foreach (var rec in records)
         {
@@ -293,7 +296,7 @@ public class BankService
                 var pkm = EntityFormat.GetFromBytes(Convert.FromBase64String(rec.PkmDataBase64));
                 if (pkm == null) { failed++; continue; }
 
-                var dto = ParseService.MapToPokemonDto(pkm);
+                var dto = _parseService.MapToPokemonDto(pkm);
                 var pokemonJson = JsonSerializer.Serialize(dto);
 
                 await _db.ExecuteAsync(@"
@@ -405,7 +408,7 @@ public class BankService
         if (pkm == null) throw new BusinessException("该位置没有宝可梦");
 
         // Map to DTO
-        var pokemon = ParseService.MapToPokemonDto(pkm);
+        var pokemon = _parseService.MapToPokemonDto(pkm);
         var buf = new byte[pkm.SIZE_PARTY]; pkm.WriteDecryptedDataParty(buf); var pkmDataBase64 = Convert.ToBase64String(buf);
 
         // Derive generation / game_version from PKM object itself (not save file)
@@ -648,7 +651,7 @@ public class BankService
     {
         var report = new BankBatchLegalityReportDto();
         var slots = new List<SlotLegalityDto>();
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings();
 
         var records = (await _db.QueryAsync<BankScanRecord>(
             @"SELECT id, species, species_name AS SpeciesName, nickname, level,
@@ -785,7 +788,7 @@ public class BankService
         var rows = (await _db.QueryAsync<BankSearchRow>(sql, parameters)).ToList();
 
         // ── 第二层: C# 内存精确过滤 ──
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings();
         var allMatches = new List<PokemonSearchItemDto>();
 
         foreach (var row in rows)

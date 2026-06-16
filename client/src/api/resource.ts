@@ -12,39 +12,39 @@ export interface SpeciesExperienceInfo {
 }
 
 export const resourceApi = {
-  species: () =>
-    apiClient.get<ResourceItem[]>('/Resource/species'),
+  species: (lang?: string) =>
+    apiClient.get<ResourceItem[]>('/Resource/species', { params: { lang } }),
 
-  moves: (generation?: number) =>
-    apiClient.get<ResourceItem[]>('/Resource/moves', { params: { generation } }),
+  moves: (generation?: number, lang?: string) =>
+    apiClient.get<ResourceItem[]>('/Resource/moves', { params: { generation, lang } }),
 
-  abilities: () =>
-    apiClient.get<ResourceItem[]>('/Resource/abilities'),
+  abilities: (lang?: string) =>
+    apiClient.get<ResourceItem[]>('/Resource/abilities', { params: { lang } }),
 
-  natures: () =>
-    apiClient.get<ResourceItem[]>('/Resource/natures'),
+  natures: (lang?: string) =>
+    apiClient.get<ResourceItem[]>('/Resource/natures', { params: { lang } }),
 
-  items: () =>
-    apiClient.get<ResourceItem[]>('/Resource/items'),
+  items: (lang?: string) =>
+    apiClient.get<ResourceItem[]>('/Resource/items', { params: { lang } }),
 
-  balls: () =>
-    apiClient.get<ResourceItem[]>('/Resource/balls'),
+  balls: (lang?: string) =>
+    apiClient.get<ResourceItem[]>('/Resource/balls', { params: { lang } }),
 
-  games: () =>
-    apiClient.get<ResourceItem[]>('/Resource/games'),
+  games: (lang?: string) =>
+    apiClient.get<ResourceItem[]>('/Resource/games', { params: { lang } }),
 
-  speciesAbilities: (speciesId: number, generation?: number, form?: number) =>
-    apiClient.get<ResourceItem[]>(`/Resource/species/${speciesId}/abilities`, { params: { generation, form } }),
+  speciesAbilities: (speciesId: number, generation?: number, form?: number, lang?: string) =>
+    apiClient.get<ResourceItem[]>(`/Resource/species/${speciesId}/abilities`, { params: { generation, form, lang } }),
 
-  speciesMoves: (speciesId: number, generation?: number, form?: number) =>
-    apiClient.get<ResourceItem[]>(`/Resource/species/${speciesId}/moves`, { params: { generation, form } }),
+  speciesMoves: (speciesId: number, generation?: number, form?: number, lang?: string) =>
+    apiClient.get<ResourceItem[]>(`/Resource/species/${speciesId}/moves`, { params: { generation, form, lang } }),
 
-  speciesExperience: (speciesId: number, generation?: number, form?: number) =>
-    apiClient.get<SpeciesExperienceInfo>(`/Resource/species/${speciesId}/experience`, { params: { generation, form } }),
+  speciesExperience: (speciesId: number, generation?: number, form?: number, lang?: string) =>
+    apiClient.get<SpeciesExperienceInfo>(`/Resource/species/${speciesId}/experience`, { params: { generation, form, lang } }),
 
-  geoCountries: () =>
-    apiClient.get<ResourceItem[]>('/Resource/geo/countries'),
+  geoCountries: (lang?: string) =>
+    apiClient.get<ResourceItem[]>('/Resource/geo/countries', { params: { lang } }),
 
-  geoRegions: (countryId: number) =>
-    apiClient.get<ResourceItem[]>(`/Resource/geo/regions/${countryId}`),
+  geoRegions: (countryId: number, lang?: string) =>
+    apiClient.get<ResourceItem[]>(`/Resource/geo/regions/${countryId}`, { params: { lang } }),
 };

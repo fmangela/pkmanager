@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Input, InputNumber, Select, Space } from 'antd';
+import { useTranslation } from 'react-i18next';
 import type { PokemonDto } from '../../api/saveFile';
 import { resourceApi, type ResourceItem } from '../../api/resource';
 import { useDiagnosticStore } from '../../stores/diagnosticStore';
@@ -21,6 +22,7 @@ const CONSOLE_OPTIONS = [
 ];
 
 const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
+  const { i18n } = useTranslation();
   const g = generation;
   const ch = () => onChange?.();
   const isGen6Plus = g >= 6;
@@ -33,22 +35,22 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
   const [regions, setRegions] = useState<ResourceItem[]>([]);
 
   useEffect(() => {
-    resourceApi.geoCountries().then(r => setCountries(r.data || [])).catch((err: any) => {
+    resourceApi.geoCountries(i18n.language).then(r => setCountries(r.data || [])).catch((err: any) => {
       useDiagnosticStore.getState().log({ category: 'api', level: 'error', message: '加载国家列表失败', stack: err?.message });
     });
-  }, []);
+  }, [i18n.language]);
 
   useEffect(() => {
     const cid = pokemon.country || 0;
     if (cid > 0) {
-      resourceApi.geoRegions(cid).then(r => setRegions(r.data || [])).catch((err: any) => {
+      resourceApi.geoRegions(cid, i18n.language).then(r => setRegions(r.data || [])).catch((err: any) => {
         setRegions([]);
         useDiagnosticStore.getState().log({ category: 'api', level: 'error', message: `加载地区列表失败 (country=${cid})`, stack: err?.message });
       });
     } else {
       setRegions([]);
     }
-  }, [pokemon.country]);
+  }, [pokemon.country, i18n.language]);
 
   return (
     <div>

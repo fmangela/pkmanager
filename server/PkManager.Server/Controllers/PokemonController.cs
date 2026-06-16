@@ -99,7 +99,7 @@ public class PokemonController : ControllerBase
             }
 
             if (persisted != null)
-                result.UpdatedPokemon = ParseService.MapToPokemonDto(persisted);
+                result.UpdatedPokemon = _parseService.MapToPokemonDto(persisted);
 
             return Ok(ApiResponse<EditResultDto>.Ok(result,
                 result.IsValid ? "修改已保存" : "已保存（⚠️ 不合法）"));
@@ -352,7 +352,7 @@ public class PokemonController : ControllerBase
                     new LegalizationResultDto { Success = false, Error = error },
                     error ?? "生成失败"));
 
-            var dto = ParseService.MapToPokemonDto(pkm);
+            var dto = _parseService.MapToPokemonDto(pkm);
             var base64 = new byte[pkm.SIZE_PARTY];
             pkm.WriteDecryptedDataParty(base64);
 
@@ -400,7 +400,7 @@ public class PokemonController : ControllerBase
                     new LegalizationResultDto { Success = false, Error = error },
                     error ?? "Showdown导入失败"));
 
-            var dto = ParseService.MapToPokemonDto(pkm);
+            var dto = _parseService.MapToPokemonDto(pkm);
             var base64 = new byte[pkm.SIZE_PARTY];
             pkm.WriteDecryptedDataParty(base64);
 
@@ -646,7 +646,7 @@ public class PokemonController : ControllerBase
                     {
                         Success = false,
                         Error = "生成结果未通过合法性校验",
-                        Pokemon = ParseService.MapToPokemonDto(compat),
+                        Pokemon = _parseService.MapToPokemonDto(compat),
                         PkmDataBase64 = ParseService.GetPkmBase64(compat),
                         IsLegal = false,
                         LegalityReport = report
@@ -673,7 +673,7 @@ public class PokemonController : ControllerBase
             // 从磁盘回读以确保返回实际落盘的数据
             var persisted = _saveFileService.ReadBoxSlot(request.SaveFileId, userId.Value,
                 request.BoxIndex, request.SlotIndex);
-            var dto = persisted != null ? ParseService.MapToPokemonDto(persisted) : ParseService.MapToPokemonDto(compat);
+            var dto = persisted != null ? _parseService.MapToPokemonDto(persisted) : _parseService.MapToPokemonDto(compat);
             var base64 = new byte[(persisted ?? compat).SIZE_PARTY];
             (persisted ?? compat).WriteDecryptedDataParty(base64);
 

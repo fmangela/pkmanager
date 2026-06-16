@@ -13,7 +13,9 @@ import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import DiagnosticPanel from './components/DiagnosticPanel';
 import { useDiagnosticStore } from './stores/diagnosticStore';
+import { useAuthStore } from './stores/authStore';
 import { authApi } from './api/auth';
+import i18n from './i18n/i18n';
 
 const EmulatorPage = React.lazy(() => import('./pages/Emulator'));
 const NdsEmulatorPage = React.lazy(() => import('./pages/NdsEmulator'));
@@ -41,6 +43,8 @@ const LazyRoute: React.FC<{
 // ── Health check on mount ───────────────────────────────────────────
 
 const HealthChecker: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const setUser = useAuthStore((s) => s.setUser);
+
   useEffect(() => {
     const store = useDiagnosticStore.getState();
 
@@ -73,7 +77,13 @@ const HealthChecker: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     if (token) {
       authApi
         .me()
-        .then(() => {
+        .then((res) => {
+          const user = res.data;
+          if (user?.preferredLang) {
+            localStorage.setItem('pkmanager_lang', user.preferredLang);
+            void i18n.changeLanguage(user.preferredLang);
+          }
+          if (user) setUser(user);
           store.log({ category: 'health', level: 'info', message: 'Auth Token 有效' });
         })
         .catch((err) => {
@@ -85,7 +95,7 @@ const HealthChecker: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           store.setHealth('degraded');
         });
     }
-  }, []);
+  }, [setUser]);
 
   return <>{children}</>;
 };

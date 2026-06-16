@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PKHeX.Core;
+using PkManager.Server.Helpers;
 using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
 
@@ -12,14 +13,18 @@ namespace PkManager.Server.Services;
 public class EvolutionService
 {
     private readonly PokemonEditService _editService;
+    private readonly ParseService _parseService;
+    private readonly IPkhexStringProvider _pkhexStrings;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
     };
 
-    public EvolutionService(PokemonEditService editService)
+    public EvolutionService(PokemonEditService editService, ParseService parseService, IPkhexStringProvider pkhexStrings)
     {
         _editService = editService;
+        _parseService = parseService;
+        _pkhexStrings = pkhexStrings;
     }
 
     /// <summary>
@@ -54,7 +59,7 @@ public class EvolutionService
         if (methods.IsEmpty)
             return new EvolutionPathDto { HasAnyEvolution = false };
 
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings();
         var groupedMethods = new Dictionary<(ushort Species, byte Form), List<EvolutionMethod>>();
         var options = new List<EvolutionOptionDto>();
 
@@ -214,7 +219,7 @@ public class EvolutionService
 
             shedinjaResult = new EvolveResultDto
             {
-                Shedinja = ParseService.MapToPokemonDto(compatShedinja),
+                Shedinja = _parseService.MapToPokemonDto(compatShedinja),
                 ShedinjaLocation = $"箱子 {sBox + 1} 槽位 {sSlot + 1}",
             };
         }
@@ -249,7 +254,7 @@ public class EvolutionService
         return new EvolveResultDto
         {
             Success = true,
-            EvolvedPokemon = ParseService.MapToPokemonDto(compat),
+            EvolvedPokemon = _parseService.MapToPokemonDto(compat),
             Shedinja = shedinjaResult?.Shedinja,
             ShedinjaLocation = shedinjaResult?.ShedinjaLocation,
         };
@@ -404,10 +409,10 @@ public class EvolutionService
         prop?.SetValue(pkm, (byte)Math.Clamp(value, 0, 255));
     }
 
-    private static bool TryGetMoveOfType(PKM pkm, ushort typeId, out ushort moveId)
+    private bool TryGetMoveOfType(PKM pkm, ushort typeId, out ushort moveId)
     {
         moveId = 0;
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings();
         for (ushort id = 1; id < strings.Move.Count; id++)
         {
             try

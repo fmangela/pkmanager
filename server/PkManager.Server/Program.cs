@@ -116,10 +116,13 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+builder.Services.AddMemoryCache();
 
 // ── 应用服务注册 ────────────────────────────────────────
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<UserContext>();
+builder.Services.AddScoped<ILanguageResolver, LanguageResolver>();
+builder.Services.AddScoped<IPkhexStringProvider, PkhexStringProvider>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ParseService>();
 builder.Services.AddScoped<SaveFileService>();
@@ -203,6 +206,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowClient");
 app.UseAuthentication();
+app.UseMiddleware<LanguageMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 

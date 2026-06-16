@@ -1,4 +1,5 @@
 using PKHeX.Core;
+using PkManager.Server.Helpers;
 using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
 using System.Reflection;
@@ -14,10 +15,12 @@ public class PokemonEditService
         typeof(PK5).GetMethod("CalculateAbilityIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
     private readonly ParseService _parseService;
+    private readonly IPkhexStringProvider _pkhexStrings;
 
-    public PokemonEditService(ParseService parseService)
+    public PokemonEditService(ParseService parseService, IPkhexStringProvider pkhexStrings)
     {
         _parseService = parseService;
+        _pkhexStrings = pkhexStrings;
     }
 
     /// <summary>
@@ -45,7 +48,7 @@ public class PokemonEditService
                 CanFix = CanAutoFix(r),
                 FixAction = GetFixAction(r)
             }).ToList(),
-            UpdatedPokemon = ParseService.MapToPokemonDto(original)
+            UpdatedPokemon = _parseService.MapToPokemonDto(original)
         };
     }
 
@@ -567,7 +570,7 @@ public class PokemonEditService
     {
         var report = new BatchLegalityReportDto();
         var slots = new List<SlotLegalityDto>();
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings();
 
         // Party
         for (int i = 0; i < 6; i++)

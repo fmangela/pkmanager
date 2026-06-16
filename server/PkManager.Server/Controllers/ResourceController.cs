@@ -14,6 +14,8 @@ public class ResourceController : ControllerBase
 {
     private readonly UserContext _userContext;
     private readonly NpgsqlConnection _db;
+    private readonly ILanguageResolver _langResolver;
+    private readonly IPkhexStringProvider _pkhexStrings;
 
     // Cache: species ID → valid ability IDs
     private static readonly ConcurrentDictionary<(ushort Species, byte Form, byte Gen), int[]> _abilityCache = new();
@@ -29,31 +31,41 @@ public class ResourceController : ControllerBase
         1785, 1710, 1711, 1712, 1713, 1746, 1747, 1748, 1749, 1750, 1771,
     };
 
-    public ResourceController(UserContext userContext, NpgsqlConnection db)
+    public ResourceController(
+        UserContext userContext,
+        NpgsqlConnection db,
+        ILanguageResolver langResolver,
+        IPkhexStringProvider pkhexStrings)
     {
         _userContext = userContext;
         _db = db;
+        _langResolver = langResolver;
+        _pkhexStrings = pkhexStrings;
     }
+
+    private string ResolveLang(string? lang) => _langResolver.ResolveOrDefault(lang);
 
     /// <summary>
     /// 宝可梦物种列表（DB 优先，PKHeX 回退）
     /// </summary>
     [HttpGet("species")]
-    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Species([FromQuery] int? generation)
+    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Species([FromQuery] int? generation, [FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
 
         // 优先从 DB 读取
+        var langCode = ResolveLang(lang);
         var items = (await _db.QueryAsync<ResourceItem>(
-            "SELECT id, name FROM res_species WHERE lang = 'zh-Hans' AND id >= 1 AND name != '' ORDER BY id"))
+            "SELECT id, name FROM res_species WHERE lang = @Lang AND id >= 1 AND name != '' ORDER BY id",
+            new { Lang = langCode }))
             .ToList();
 
         if (items.Count > 0)
             return Ok(ApiResponse<List<ResourceItem>>.Ok(items));
 
         // 回退 PKHeX（DB 未播种）
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings(langCode);
         for (int i = 1; i < strings.Species.Count; i++)
         {
             var name = strings.Species[i];
@@ -68,20 +80,22 @@ public class ResourceController : ControllerBase
     /// 招式列表（DB 优先，PKHeX 回退）
     /// </summary>
     [HttpGet("moves")]
-    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Moves([FromQuery] int? generation)
+    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Moves([FromQuery] int? generation, [FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
 
+        var langCode = ResolveLang(lang);
         var items = (await _db.QueryAsync<ResourceItem>(
-            "SELECT id, name FROM res_moves WHERE lang = 'zh-Hans' AND id >= 1 AND name != '' ORDER BY id"))
+            "SELECT id, name FROM res_moves WHERE lang = @Lang AND id >= 1 AND name != '' ORDER BY id",
+            new { Lang = langCode }))
             .ToList();
 
         if (items.Count > 0)
             return Ok(ApiResponse<List<ResourceItem>>.Ok(items));
 
         // 回退 PKHeX
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings(langCode);
         for (int i = 1; i < strings.Move.Count; i++)
         {
             var name = strings.Move[i];
@@ -96,20 +110,22 @@ public class ResourceController : ControllerBase
     /// 特性列表（DB 优先，PKHeX 回退）
     /// </summary>
     [HttpGet("abilities")]
-    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Abilities()
+    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Abilities([FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
 
+        var langCode = ResolveLang(lang);
         var items = (await _db.QueryAsync<ResourceItem>(
-            "SELECT id, name FROM res_abilities WHERE lang = 'zh-Hans' AND id >= 1 AND name != '' ORDER BY id"))
+            "SELECT id, name FROM res_abilities WHERE lang = @Lang AND id >= 1 AND name != '' ORDER BY id",
+            new { Lang = langCode }))
             .ToList();
 
         if (items.Count > 0)
             return Ok(ApiResponse<List<ResourceItem>>.Ok(items));
 
         // 回退 PKHeX
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings(langCode);
         for (int i = 1; i < strings.Ability.Count; i++)
         {
             var name = strings.Ability[i];
@@ -124,20 +140,22 @@ public class ResourceController : ControllerBase
     /// 性格列表（DB 优先，PKHeX 回退）
     /// </summary>
     [HttpGet("natures")]
-    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Natures()
+    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Natures([FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
 
+        var langCode = ResolveLang(lang);
         var items = (await _db.QueryAsync<ResourceItem>(
-            "SELECT id, name FROM res_natures WHERE lang = 'zh-Hans' AND id >= 0 AND name != '' ORDER BY id"))
+            "SELECT id, name FROM res_natures WHERE lang = @Lang AND id >= 0 AND name != '' ORDER BY id",
+            new { Lang = langCode }))
             .ToList();
 
         if (items.Count > 0)
             return Ok(ApiResponse<List<ResourceItem>>.Ok(items));
 
         // 回退 PKHeX
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings(langCode);
         for (int i = 0; i < Math.Min(25, strings.Natures.Count); i++)
         {
             var name = strings.Natures[i];
@@ -152,20 +170,22 @@ public class ResourceController : ControllerBase
     /// 道具列表（DB 优先，PKHeX 回退）
     /// </summary>
     [HttpGet("items")]
-    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Items()
+    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Items([FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
 
+        var langCode = ResolveLang(lang);
         var items = (await _db.QueryAsync<ResourceItem>(
-            "SELECT id, name FROM res_items WHERE lang = 'zh-Hans' AND id >= 0 AND name != '' ORDER BY id"))
+            "SELECT id, name FROM res_items WHERE lang = @Lang AND id >= 0 AND name != '' ORDER BY id",
+            new { Lang = langCode }))
             .ToList();
 
         if (items.Count > 0)
             return Ok(ApiResponse<List<ResourceItem>>.Ok(items));
 
         // 回退 PKHeX
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings(langCode);
         for (int i = 0; i < strings.Item.Count; i++)
         {
             var name = strings.Item[i];
@@ -180,15 +200,16 @@ public class ResourceController : ControllerBase
     /// 球种列表（从 res_items 按球种 item ID 派生，PKHeX 回退）
     /// </summary>
     [HttpGet("balls")]
-    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Balls()
+    public async Task<ActionResult<ApiResponse<List<ResourceItem>>>> Balls([FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
 
         // 优先从 DB 派生（res_items 按球种 ID 取值，与 PKHeX GameStrings.balllist 构造逻辑一致）
+        var langCode = ResolveLang(lang);
         var ballNames = (await _db.QueryAsync<(int id, string name)>(
-            "SELECT id, name FROM res_items WHERE lang = 'zh-Hans' AND id = ANY(@Ids)",
-            new { Ids = BallItemIds }))
+            "SELECT id, name FROM res_items WHERE lang = @Lang AND id = ANY(@Ids)",
+            new { Lang = langCode, Ids = BallItemIds }))
             .ToDictionary(x => x.id, x => x.name);
 
         if (ballNames.Count > 0)
@@ -203,7 +224,7 @@ public class ResourceController : ControllerBase
         }
 
         // 回退 PKHeX
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings(langCode);
         var fallback = new List<ResourceItem>();
         if (strings.balllist != null)
         {
@@ -222,7 +243,7 @@ public class ResourceController : ControllerBase
     /// 游戏版本列表
     /// </summary>
     [HttpGet("games")]
-    public ActionResult<ApiResponse<List<ResourceItem>>> Games()
+    public ActionResult<ApiResponse<List<ResourceItem>>> Games([FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
@@ -261,7 +282,7 @@ public class ResourceController : ControllerBase
     /// 获取 3DS 国家列表（中文，来自 PKHeX 内置数据）
     /// </summary>
     [HttpGet("geo/countries")]
-    public ActionResult<ApiResponse<List<ResourceItem>>> GeoCountries()
+    public ActionResult<ApiResponse<List<ResourceItem>>> GeoCountries([FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
@@ -272,7 +293,7 @@ public class ResourceController : ControllerBase
     /// 获取指定国家的地区列表（中文）
     /// </summary>
     [HttpGet("geo/regions/{countryId:int}")]
-    public ActionResult<ApiResponse<List<ResourceItem>>> GeoRegions(int countryId)
+    public ActionResult<ApiResponse<List<ResourceItem>>> GeoRegions(int countryId, [FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
@@ -285,7 +306,7 @@ public class ResourceController : ControllerBase
     /// 获取指定物种的合法特性列表（带槽位标签，如"激流 (1)"、"激流 (2)"、"湿润之声 (H)"）
     /// </summary>
     [HttpGet("species/{speciesId:int}/abilities")]
-    public ActionResult<ApiResponse<List<ResourceItem>>> SpeciesAbilities(int speciesId, [FromQuery] int generation = 7, [FromQuery] int form = 0)
+    public ActionResult<ApiResponse<List<ResourceItem>>> SpeciesAbilities(int speciesId, [FromQuery] int generation = 7, [FromQuery] int form = 0, [FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
@@ -293,7 +314,7 @@ public class ResourceController : ControllerBase
         try
         {
             var abilities = GetValidAbilities((ushort)speciesId, (byte)Math.Max(0, form), generation);
-            var strings = GameInfo.GetStrings("zh");
+            var strings = _pkhexStrings.GetStrings(ResolveLang(lang));
 
             // 槽位标签: 0=特性1, 1=特性2, 2=隐藏特性
             var slotLabels = new[] { " (1)", " (2)", " (H)" };
@@ -327,7 +348,7 @@ public class ResourceController : ControllerBase
     /// 获取指定物种在当前世代可学习的招式列表
     /// </summary>
     [HttpGet("species/{speciesId:int}/moves")]
-    public ActionResult<ApiResponse<List<ResourceItem>>> SpeciesMoves(int speciesId, [FromQuery] int generation = 7, [FromQuery] int form = 0)
+    public ActionResult<ApiResponse<List<ResourceItem>>> SpeciesMoves(int speciesId, [FromQuery] int generation = 7, [FromQuery] int form = 0, [FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
@@ -335,7 +356,7 @@ public class ResourceController : ControllerBase
         try
         {
             var moveIds = GetLearnableMoves((ushort)speciesId, (byte)Math.Max(0, form), generation);
-            var strings = GameInfo.GetStrings("zh");
+            var strings = _pkhexStrings.GetStrings(ResolveLang(lang));
 
             var items = new List<ResourceItem>();
             foreach (var moveId in moveIds)
@@ -436,7 +457,7 @@ public class ResourceController : ControllerBase
             blank.CurrentLevel = 100;
             blank.Version = version;
 
-            var flags = new bool[Math.Max(1001, GameInfo.GetStrings("zh").Move.Count + 1)];
+            var flags = new bool[Math.Max(1001, GameInfo.GetStrings("en").Move.Count + 1)];
             var evo = new EvoCriteria
             {
                 Species = species,

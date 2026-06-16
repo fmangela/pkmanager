@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Tag, Typography } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
-import { GAME_META, type GameMeta, getGameMetaByVersion, type GamePlatform } from '../constants/games';
+import { useTranslation } from 'react-i18next';
+import { GAME_META, type GameMeta, getGameDisplayName, getGameMetaByVersion, getGameShortName, getPlatformTranslationKey, type GamePlatform } from '../constants/games';
 
 const { Text } = Typography;
 
 const PLATFORM_LABELS: Record<GamePlatform, string> = {
-  GBA: 'GBA', NDS: 'NDS', '3DS': '3DS', Switch: 'NS',
+  GBA: 'GBA', NDS: 'NDS', '3DS': '3DS', Switch: 'Switch',
 };
 
 const PLATFORM_COLORS: Record<GamePlatform, string> = {
@@ -44,6 +45,7 @@ const GameCover: React.FC<GameCoverProps> = ({
   gameId, gameVersion, size = 'medium', showPlatform = true, style,
 }) => {
   const [imgError, setImgError] = useState(false);
+  const { t } = useTranslation('games');
 
   // Resolve meta
   const meta: GameMeta | undefined = gameId
@@ -81,7 +83,7 @@ const GameCover: React.FC<GameCoverProps> = ({
       <div style={containerStyle}>
         <img
           src={coverPath}
-          alt={meta.displayName}
+          alt={getGameDisplayName(meta.gameId)}
           style={{
             width: '100%',
             height: '100%',
@@ -119,7 +121,7 @@ const GameCover: React.FC<GameCoverProps> = ({
               lineHeight: 1.2,
             }}
           >
-            {meta.shortName}
+            {getGameShortName(meta.gameId)}
           </Text>
         )}
 
@@ -134,7 +136,7 @@ const GameCover: React.FC<GameCoverProps> = ({
               lineHeight: size === 'small' ? '12px' : '16px',
             }}
           >
-            {PLATFORM_LABELS[meta.platform]}
+            {t(getPlatformTranslationKey(meta.platform), PLATFORM_LABELS[meta.platform])}
           </Tag>
         )}
       </div>

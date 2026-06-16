@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button, Space, Tag, Slider, Modal } from 'antd';
 import { PauseCircleOutlined, PlayCircleOutlined, ArrowLeftOutlined, ReloadOutlined, SettingOutlined, SaveOutlined, CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import { createMGBA, type MGBAEmulator, GBA_VERSION_MAP, ROM_DISPLAY_NAMES } from '../lib/mgba';
+import { useTranslation } from 'react-i18next';
+import { createMGBA, type MGBAEmulator, getGbaRomDisplayName } from '../lib/mgba';
+import { GBA_VERSION_MAP } from '../constants/games';
 import {
   cloneGamepadBinds,
   codeLabel,
@@ -20,6 +22,7 @@ import {
 } from '../lib/inputUtil';
 import { useGamepad } from '../hooks/useGamepad';
 import CheatsModal from '../components/CheatsModal';
+import { getI18nText } from '../i18n/i18n';
 
 type ScreenScale = 1 | 2 | 4;
 const SZ: Record<ScreenScale, { w: number; h: number }> = { 1: { w: 240, h: 160 }, 2: { w: 480, h: 320 }, 4: { w: 960, h: 640 } };
@@ -38,6 +41,7 @@ function saveGamepadKM(m: Record<string, number[]>) { saveGamepadBinds(GBA_GAMEP
 
 const EmulatorPage: React.FC = () => {
   const { saveFileId, gameId } = useParams<{ saveFileId?: string; gameId?: string }>();
+  const { t } = useTranslation('emulator');
   const isNewGame = !!gameId;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const effectiveSaveId = useRef<string | null>(saveFileId || null);
@@ -47,9 +51,9 @@ const EmulatorPage: React.FC = () => {
   const [volume, setVolume] = useState(100);
   const [fps, setFps] = useState(0);
   const [romName, setRomName] = useState('');
-  const [saveName, setSaveName] = useState(isNewGame ? '新游戏' : '');
+  const [saveName, setSaveName] = useState(isNewGame ? getI18nText('newGame', undefined, 'emulator') : '');
   const [ready, setReady] = useState(false);
-  const [status, setStatus] = useState('初始化中...');
+  const [status, setStatus] = useState(getI18nText('status.initializing', undefined, 'emulator'));
   const [keyMap, setKeyMap] = useState<Record<string,string>>(loadKM);
   const [gamepadMap, setGamepadMap] = useState<Record<string, number[]>>(loadGamepadKM);
   const [gamepadDeadzone, setGamepadDeadzone] = useState<number>(() => loadNumberSetting(GBA_GAMEPAD_DEADZONE_KEY, GAMEPAD_DEADZONE_DEFAULT));
@@ -61,6 +65,19 @@ const EmulatorPage: React.FC = () => {
   const [cheatsOpen, setCheatsOpen] = useState(false);
   const emuRef = useRef<MGBAEmulator|null>(null);
   const initDone = useRef(false);
+  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) => t(key, { defaultValue, ...(options ?? {}) });
+  const buttonLabels: Record<string, string> = {
+    Up: et('button.up', '↑上'),
+    Down: et('button.down', '↓下'),
+    Left: et('button.left', '←左'),
+    Right: et('button.right', '→右'),
+    A: 'A',
+    B: 'B',
+    L: 'L',
+    R: 'R',
+    Start: et('button.start', 'Start'),
+    Select: et('button.select', 'Select'),
+  };
 
   // Init
   useEffect(() => {
@@ -72,24 +89,24 @@ const EmulatorPage: React.FC = () => {
         let gid: string;
         if (saveFileId) {
           // 已有存档
-          setStatus('获取存档...');
+          setStatus(et('status.fetchingSave', '获取存档...'));
           const infoRes = await fetch(`/api/SaveFile/${saveFileId}`, { headers: { Authorization: auth } });
-          if (!infoRes.ok) { setStatus('存档不存在'); return; }
+          if (!infoRes.ok) { setStatus(et('status.saveMissing', '存档不存在')); return; }
           const sd = (await infoRes.json()).data;
           setSaveName(sd.filename);
           gid = GBA_VERSION_MAP[sd.gameVersion] || 'pkm_emerald';
         } else if (gameId) {
           // 新游戏
           gid = gameId;
-          setSaveName(ROM_DISPLAY_NAMES[gid] || gid);
+          setSaveName(getGbaRomDisplayName(gid));
         } else {
-          setStatus('缺少参数'); return;
+          setStatus(et('status.missingParams', '缺少参数')); return;
         }
-        setRomName(ROM_DISPLAY_NAMES[gid] || gid);
+        setRomName(getGbaRomDisplayName(gid));
 
-        setStatus('下载ROM...');
+        setStatus(et('status.downloadingRom', '下载ROM...'));
         const romRes = await fetch(`/api/Emulator/roms/${gid}`, { headers: { Authorization: auth } });
-        if (!romRes.ok) { setStatus(`ROM缺失: ${gid}`); return; }
+        if (!romRes.ok) { setStatus(et('status.romMissing', 'ROM缺失: {{gameId}}', { gameId: gid })); return; }
         const rom = new Uint8Array(await romRes.arrayBuffer());
 
         // 加载已有存档（如果有）
@@ -99,7 +116,7 @@ const EmulatorPage: React.FC = () => {
           if (rawRes.ok) { const d = new Uint8Array(await rawRes.arrayBuffer()); if (d.length > 0) savData = d; }
         }
 
-        setStatus('启动模拟器...');
+        setStatus(et('status.starting', '启动模拟器...'));
         const emu = await createMGBA(canvasRef.current!);
         emuRef.current = emu;
         const gp = emu.gamePath.endsWith('/') ? emu.gamePath : emu.gamePath + '/';
@@ -108,10 +125,10 @@ const EmulatorPage: React.FC = () => {
         let sfp: string | undefined;
         if (savData) { emu.FS.writeFile(sp + 'game.sav', savData); sfp = sp + 'game.sav'; }
         emu.loadGame(gp + 'game.gba', sfp);
-        setReady(true); setStatus('就绪');
-      } catch (err: unknown) { setStatus(`失败: ${errorMessage(err)}`); }
+        setReady(true); setStatus(et('status.ready', '就绪'));
+      } catch (err: unknown) { setStatus(et('status.failed', '失败: {{error}}', { error: errorMessage(err) })); }
     })();
-  }, [saveFileId, gameId]);
+  }, [saveFileId, gameId, t]);
 
   useEffect(() => {
     saveKM(keyMap);
@@ -139,8 +156,8 @@ const EmulatorPage: React.FC = () => {
     if (!emu) return false;
     const sd = emu.getSave();
     if (!sd?.length) {
-      setStatus('尚未在游戏中存档，未创建存档');
-      setTimeout(() => { if (ready) setStatus('就绪'); }, 2500);
+      setStatus(et('status.noInGameSaveNoCreate', '尚未在游戏中存档，未创建存档'));
+      setTimeout(() => { if (ready) setStatus(et('status.ready', '就绪')); }, 2500);
       return false;
     }
     const token = localStorage.getItem('access_token');
@@ -162,14 +179,16 @@ const EmulatorPage: React.FC = () => {
       if (r.ok) {
         const resp = await r.json();
         if (resp.data?.skipped) {
-          setStatus(resp.message || '尚未在游戏中存档，未创建存档');
-          setTimeout(() => { if (ready) setStatus('就绪'); }, 2500);
+          setStatus(resp.message || et('status.noInGameSaveNoCreate', '尚未在游戏中存档，未创建存档'));
+          setTimeout(() => { if (ready) setStatus(et('status.ready', '就绪')); }, 2500);
           return false;
         }
         // 新游戏首次同步: 服务器返回新创建的 saveFileId，存储供后续使用
         if (resp.data?.saveFileId && !effectiveSaveId.current) {
           effectiveSaveId.current = resp.data.saveFileId;
-          setSaveName(`存档 - ${resp.data.trainerName || '训练家'}`);
+          setSaveName(et('saveNameTemplate', '存档 - {{trainerName}}', {
+            trainerName: resp.data.trainerName || et('trainerFallback', '训练家'),
+          }));
           console.log(`[syncSave] New save created: ${effectiveSaveId.current}`);
         }
         setSynced(true);
@@ -280,36 +299,36 @@ const EmulatorPage: React.FC = () => {
     <div style={{ minHeight: '100vh', background: '#1a1a2e', color: '#eee' }}>
       {/* Toolbar */}
       <div style={{ background: '#16213e', padding: '6px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #0f3460' }}>
-        <Button icon={<ArrowLeftOutlined />} ghost size="small" onClick={async () => { await syncSaveNow(); setTimeout(() => window.close(), 300); }}>关闭</Button>
+        <Button icon={<ArrowLeftOutlined />} ghost size="small" onClick={async () => { await syncSaveNow(); setTimeout(() => window.close(), 300); }}>{et('toolbar.close', '关闭')}</Button>
         <Button ghost size="small" icon={synced ? <CheckCircleOutlined /> : <SaveOutlined />}
           onClick={syncSaveNow} loading={syncing} disabled={!ready}
-          style={{ color: synced ? '#52c41a' : undefined }}>同步存档</Button>
+          style={{ color: synced ? '#52c41a' : undefined }}>{et('toolbar.syncSave', '同步存档')}</Button>
         <span style={{ fontWeight: 600, fontSize: 13 }}>{saveName || 'GBA'}</span>
         <Tag color="blue" style={{ fontSize: 11 }}>{romName}</Tag>
         <div style={{ flex: 1 }} />
         <Space size={4}>
-          <span style={{ fontSize: 11, color: '#888' }}>画面</span>
+          <span style={{ fontSize: 11, color: '#888' }}>{et('toolbar.screen', '画面')}</span>
           {([1,2,4] as const).map(s => (
             <Button key={`scale-${s}`} ghost size="small" type={scale===s?'primary':'default'}
               onClick={() => setScale(s)} disabled={!ready} style={{ padding: '0 8px', fontSize: 12 }}>{s}×</Button>
           ))}
-          <span style={{ fontSize: 11, color: '#888', marginLeft: 4 }}>速度</span>
+          <span style={{ fontSize: 11, color: '#888', marginLeft: 4 }}>{et('toolbar.speed', '速度')}</span>
           {([1,2,4] as const).map(s => (
             <Button key={`speed-${s}`} ghost size="small" type={speed===s?'primary':'default'}
               onClick={() => { emuRef.current?.setFastForwardMultiplier(s); setSpeed(s); }} disabled={!ready} style={{ padding: '0 8px', fontSize: 12 }}>{s}×</Button>
           ))}
           <Button ghost size="small" icon={paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
             onClick={() => { const e=emuRef.current; if(!e)return; if(paused){e.resumeGame();setPaused(false);}else{e.pauseGame();setPaused(true);} }} disabled={!ready}>
-            {paused ? '继续' : '暂停'}
+            {paused ? et('toolbar.resume', '继续') : et('toolbar.pause', '暂停')}
           </Button>
-          <Button ghost size="small" icon={<ReloadOutlined />} onClick={() => emuRef.current?.quickReload()} disabled={!ready}>重置</Button>
-          <Button ghost size="small" icon={<ThunderboltOutlined />} onClick={() => setCheatsOpen(true)} disabled={!ready}>金手指</Button>
+          <Button ghost size="small" icon={<ReloadOutlined />} onClick={() => emuRef.current?.quickReload()} disabled={!ready}>{et('toolbar.reset', '重置')}</Button>
+          <Button ghost size="small" icon={<ThunderboltOutlined />} onClick={() => setCheatsOpen(true)} disabled={!ready}>{et('toolbar.cheats', '金手指')}</Button>
           <div style={{ width: 80, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ fontSize: 11, color: '#888' }}>🔊</span>
             <Slider min={0} max={100} value={volume} onChange={v => { emuRef.current?.setVolume(v/100); setVolume(v); }} disabled={!ready} style={{ width: 60, margin: 0 }} tooltip={{formatter:v=>`${v}%`}} />
           </div>
-        {gpConnected && <Tag color="cyan" style={{ fontSize: 11 }} title={gpId || undefined}>🎮 已连接</Tag>}
-        <Button ghost size="small" icon={<SettingOutlined />} disabled={!ready} onClick={() => setKeyDlg(true)}>按键</Button>
+        {gpConnected && <Tag color="cyan" style={{ fontSize: 11 }} title={gpId || undefined}>🎮 {et('toolbar.connected', '已连接')}</Tag>}
+        <Button ghost size="small" icon={<SettingOutlined />} disabled={!ready} onClick={() => setKeyDlg(true)}>{et('toolbar.buttons', '按键')}</Button>
         <Tag color="green" style={{ fontSize: 11 }}>{fps} FPS</Tag>
       </Space>
       </div>
@@ -318,37 +337,37 @@ const EmulatorPage: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
         <div style={{ position: 'relative', width: w, height: h }}>
           <canvas ref={canvasRef} style={{ width: w, height: h, imageRendering: 'pixelated', border: '4px solid #0f3460', borderRadius: 4, background: '#000', display: ready ? 'block' : 'none' }} />
-          {!ready && <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000', color: '#888', border: '4px solid #0f3460', borderRadius: 4 }}><div style={{ fontSize: 16 }}>加载中...</div><div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{status}</div></div>}
+          {!ready && <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000', color: '#888', border: '4px solid #0f3460', borderRadius: 4 }}><div style={{ fontSize: 16 }}>{et('loading', '加载中...')}</div><div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{status}</div></div>}
         </div>
       </div>
 
       {/* Key Mapping Modal */}
-      <Modal title="按键映射设置" open={keyDlg} onCancel={() => setKeyDlg(false)} footer={null} width={400}>
+      <Modal title={et('keymap.title', '按键映射设置')} open={keyDlg} onCancel={() => setKeyDlg(false)} footer={null} width={400}>
         <div style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>
-          按下按键或手柄按钮，先捕获到的绑定生效。
+          {et('keymap.captureHint', '按下按键或手柄按钮，先捕获到的绑定生效。')}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
           {GBA_BTNS.map(btn => (
             <div key={btn} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#f5f5f5', borderRadius: 6, gap: 8 }}>
-              <span style={{ fontWeight: 600 }}>{BTN_LABEL[btn]}</span>
+              <span style={{ fontWeight: 600 }}>{buttonLabels[btn] ?? BTN_LABEL[btn]}</span>
               <Button size="small" type={binding === btn ? 'primary' : 'default'} onClick={() => { setGamepadBindingMode('replace'); setBinding(binding === btn ? null : btn); }} style={{ minWidth: 150, textAlign: 'left', height: 'auto', whiteSpace: 'normal' }}>
-                {binding === btn ? '按下按键或手柄按钮...' : (
+                {binding === btn ? et('keymap.capturing', '按下按键或手柄按钮...') : (
                   <span>
                     <span>{codeLabel(keyMap[btn] || '?')}</span>
                     <span style={{ display: 'block', fontSize: 11, opacity: 0.8 }}>{formatGamepadButtons(gamepadMap[btn])}</span>
                   </span>
                 )}
               </Button>
-              <Button size="small" onClick={() => { setGamepadBindingMode('add'); setBinding(btn); }}>追加手柄</Button>
-              <Button size="small" danger onClick={() => setGamepadMap((prev) => ({ ...prev, [btn]: [] }))}>清除手柄</Button>
+              <Button size="small" onClick={() => { setGamepadBindingMode('add'); setBinding(btn); }}>{et('keymap.addGamepad', '追加手柄')}</Button>
+              <Button size="small" danger onClick={() => setGamepadMap((prev) => ({ ...prev, [btn]: [] }))}>{et('keymap.clearGamepad', '清除手柄')}</Button>
             </div>
           ))}
         </div>
         <div style={{ marginTop: 12 }}>
-          <Button size="small" onClick={() => { setKeyMap({...DEFAULT_KEYS}); setGamepadMap(cloneGamepadBinds(DEFAULT_GBA_GAMEPAD_BINDS)); setGamepadDeadzone(GAMEPAD_DEADZONE_DEFAULT); }}>恢复默认</Button>
+          <Button size="small" onClick={() => { setKeyMap({...DEFAULT_KEYS}); setGamepadMap(cloneGamepadBinds(DEFAULT_GBA_GAMEPAD_BINDS)); setGamepadDeadzone(GAMEPAD_DEADZONE_DEFAULT); }}>{et('keymap.restoreDefault', '恢复默认')}</Button>
         </div>
         <div style={{ marginTop: 12, background: '#fafafa', borderRadius: 6, padding: 10 }}>
-          <div style={{ fontSize: 12, marginBottom: 6 }}>摇杆 deadzone: {gamepadDeadzone.toFixed(2)}</div>
+          <div style={{ fontSize: 12, marginBottom: 6 }}>{et('keymap.stickDeadzone', '摇杆 deadzone: {{value}}', { value: gamepadDeadzone.toFixed(2) })}</div>
           <Slider min={0} max={1} step={0.05} value={gamepadDeadzone} onChange={setGamepadDeadzone} />
         </div>
       </Modal>
@@ -362,7 +381,7 @@ const EmulatorPage: React.FC = () => {
       />
 
       <div style={{ textAlign: 'center', color: '#555', fontSize: 11, marginTop: 4 }}>
-        {GBA_BTNS.slice(0,4).map(b=>codeLabel(keyMap[b]||'?')).join('')} 方向 | {codeLabel(keyMap['A']||'?')}=A {codeLabel(keyMap['B']||'?')}=B | {formatGamepadButtons(gamepadMap['A'])}=🎮A {formatGamepadButtons(gamepadMap['B'])}=🎮B
+        {GBA_BTNS.slice(0,4).map(b=>codeLabel(keyMap[b]||'?')).join('')} {et('summary.direction', '方向')} | {codeLabel(keyMap['A']||'?')}=A {codeLabel(keyMap['B']||'?')}=B | {formatGamepadButtons(gamepadMap['A'])}=🎮A {formatGamepadButtons(gamepadMap['B'])}=🎮B
       </div>
 
       {/* Mobile touch gamepad */}
@@ -382,8 +401,8 @@ const EmulatorPage: React.FC = () => {
           </div>
           {/* Center: Start/Select */}
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8 }}>
-            <TouchBtn label="Select" onPress={() => emuRef.current?.buttonPress('Select')} onRelease={() => emuRef.current?.buttonUnpress('Select')} small />
-            <TouchBtn label="Start" onPress={() => emuRef.current?.buttonPress('Start')} onRelease={() => emuRef.current?.buttonUnpress('Start')} small />
+            <TouchBtn label={et('button.select', 'Select')} onPress={() => emuRef.current?.buttonPress('Select')} onRelease={() => emuRef.current?.buttonUnpress('Select')} small />
+            <TouchBtn label={et('button.start', 'Start')} onPress={() => emuRef.current?.buttonPress('Start')} onRelease={() => emuRef.current?.buttonUnpress('Start')} small />
           </div>
           {/* A/B + L/R */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
 import { useDiagnosticStore } from './stores/diagnosticStore';
+import './i18n/i18n';
 
 // ── Device ID (持久化到 localStorage，每个浏览器/电脑唯一) ─────
 const DEVICE_KEY = 'pkmanager_device_id';

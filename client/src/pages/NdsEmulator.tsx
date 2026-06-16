@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button, Space, Tag, Slider, Modal, Switch, Tooltip } from 'antd';
 import { ArrowLeftOutlined, ReloadOutlined, SettingOutlined, SaveOutlined, CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import { createNdsEmulator, type NdsEmulator, NDS_VERSION_MAP, NDS_ROM_NAMES } from '../lib/melonds';
+import { useTranslation } from 'react-i18next';
+import { createNdsEmulator, type NdsEmulator, getNdsRomDisplayName } from '../lib/melonds';
 import type { DsInputButton } from '../lib/melonds';
+import { NDS_VERSION_MAP } from '../constants/games';
 import {
   cloneGamepadBinds,
   codeLabel,
@@ -20,6 +22,7 @@ import {
   saveNumberSetting,
   toArrayBuffer,
 } from '../lib/inputUtil';
+import { getI18nText } from '../i18n/i18n';
 
 type ScreenScale = 1 | 2;
 const SZ: Record<ScreenScale, { w: number; h: number }> = { 1: { w: 256, h: 192 }, 2: { w: 512, h: 384 } };
@@ -67,6 +70,7 @@ function u8b64(data: Uint8Array): string {
 
 const NdsEmulatorPage: React.FC = () => {
   const { saveFileId, gameId } = useParams<{ saveFileId?: string; gameId?: string }>();
+  const { t } = useTranslation('emulator');
   const isNewGame = !!gameId;
   const topRef = useRef<HTMLCanvasElement>(null);
   const bottomRef = useRef<HTMLCanvasElement>(null);
@@ -77,9 +81,9 @@ const NdsEmulatorPage: React.FC = () => {
   const [volume, setVolume] = useState(100);
   const [fps, setFps] = useState(0);
   const [romName, setRomName] = useState('');
-  const [saveName, setSaveName] = useState(isNewGame ? '新游戏' : '');
+  const [saveName, setSaveName] = useState(isNewGame ? getI18nText('newGame', undefined, 'emulator') : '');
   const [ready, setReady] = useState(false);
-  const [status, setStatus] = useState('初始化中...');
+  const [status, setStatus] = useState(getI18nText('status.initializing', undefined, 'emulator'));
   const [keyMap, setKeyMap] = useState<Record<string,string>>(loadKM);
   const [gamepadMap, setGamepadMap] = useState<Record<string, number[]>>(loadGamepadKM);
   const [gamepadDeadzone, setGamepadDeadzone] = useState<number>(() => loadNumberSetting(NDS_GAMEPAD_DEADZONE_KEY, GAMEPAD_DEADZONE_DEFAULT));
@@ -99,6 +103,21 @@ const NdsEmulatorPage: React.FC = () => {
   const initialGamepadDeadzoneRef = useRef(gamepadDeadzone);
   const initialGamepadRumbleRef = useRef(gamepadRumble);
   const initialGamepadRumbleIntensityRef = useRef(gamepadRumbleIntensity);
+  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) => t(key, { defaultValue, ...(options ?? {}) });
+  const buttonLabels: Record<string, string> = {
+    DPAD_UP: et('button.up', '↑上'),
+    DPAD_DOWN: et('button.down', '↓下'),
+    DPAD_LEFT: et('button.left', '←左'),
+    DPAD_RIGHT: et('button.right', '→右'),
+    A: 'A',
+    B: 'B',
+    X: 'X',
+    Y: 'Y',
+    L: 'L',
+    R: 'R',
+    START: et('button.start', 'Start'),
+    SELECT: et('button.select', 'Select'),
+  };
 
   // Init emulator
   useEffect(() => {
@@ -109,23 +128,23 @@ const NdsEmulatorPage: React.FC = () => {
       try {
         let gid: string;
         if (saveFileId) {
-          setStatus('获取存档信息...');
+          setStatus(et('status.fetchingSaveInfo', '获取存档信息...'));
           const infoRes = await fetch(`/api/SaveFile/${saveFileId}`, { headers: { Authorization: auth } });
-          if (!infoRes.ok) { setStatus('存档不存在'); return; }
+          if (!infoRes.ok) { setStatus(et('status.saveMissing', '存档不存在')); return; }
           const sd = (await infoRes.json()).data;
           setSaveName(sd.filename);
           gid = NDS_VERSION_MAP[sd.gameVersion] || 'pkm_diamond';
         } else if (gameId) {
           gid = gameId;
-          setSaveName(NDS_ROM_NAMES[gid] || gid);
+          setSaveName(getNdsRomDisplayName(gid));
         } else {
-          setStatus('缺少参数'); return;
+          setStatus(et('status.missingParams', '缺少参数')); return;
         }
-        setRomName(NDS_ROM_NAMES[gid] || gid);
+        setRomName(getNdsRomDisplayName(gid));
 
-        setStatus('下载ROM...');
+        setStatus(et('status.downloadingRom', '下载ROM...'));
         const romRes = await fetch(`/api/Emulator/roms/${gid}`, { headers: { Authorization: auth } });
-        if (!romRes.ok) { setStatus(`ROM缺失: ${gid}`); return; }
+        if (!romRes.ok) { setStatus(et('status.romMissing', 'ROM缺失: {{gameId}}', { gameId: gid })); return; }
         const rom = new Uint8Array(await romRes.arrayBuffer());
 
         // 加载已有存档
@@ -134,7 +153,7 @@ const NdsEmulatorPage: React.FC = () => {
           if (rawRes.ok) { const sav = new Uint8Array(await rawRes.arrayBuffer()); if (sav.length > 0) { /* pre-load below */ } }
         }
 
-        setStatus('启动模拟器...');
+        setStatus(et('status.starting', '启动模拟器...'));
         const emu = await createNdsEmulator(topRef.current!, bottomRef.current!);
         emuRef.current = emu;
         const savedSettings = emu.getInputSettings?.();
@@ -154,10 +173,10 @@ const NdsEmulatorPage: React.FC = () => {
           if (rawRes.ok) { const sav = new Uint8Array(await rawRes.arrayBuffer()); if (sav.length > 0) emu.loadSave(sav); }
         }
         await emu.loadRom(rom);
-        setReady(true); setStatus('就绪');
-      } catch (err: unknown) { setStatus(`失败: ${errorMessage(err)}`); }
+        setReady(true); setStatus(et('status.ready', '就绪'));
+      } catch (err: unknown) { setStatus(et('status.failed', '失败: {{error}}', { error: errorMessage(err) })); }
     })();
-  }, [saveFileId, gameId]);
+  }, [saveFileId, gameId, t]);
 
   useEffect(() => {
     saveKM(keyMap);
@@ -192,7 +211,7 @@ const NdsEmulatorPage: React.FC = () => {
     const emu = emuRef.current;
     if (!emu) return false;
     const sd = emu.getSave();
-    if (!sd?.length) { setStatus('尚未在游戏中存档，无法同步'); setTimeout(() => { if (ready) setStatus('就绪'); }, 2500); return false; }
+    if (!sd?.length) { setStatus(et('status.noInGameSaveCannotSync', '尚未在游戏中存档，无法同步')); setTimeout(() => { if (ready) setStatus(et('status.ready', '就绪')); }, 2500); return false; }
     const token = localStorage.getItem('access_token');
     if (!token) return false;
     setSyncing(true); setSynced(false);
@@ -212,13 +231,15 @@ const NdsEmulatorPage: React.FC = () => {
       if (r.ok) {
         const resp = await r.json();
         if (resp.data?.skipped) {
-          setStatus(resp.message || '尚未在游戏中存档，未创建存档');
-          setTimeout(() => { if (ready) setStatus('就绪'); }, 2500);
+          setStatus(resp.message || et('status.noInGameSaveNoCreate', '尚未在游戏中存档，未创建存档'));
+          setTimeout(() => { if (ready) setStatus(et('status.ready', '就绪')); }, 2500);
           return false;
         }
         if (resp.data?.saveFileId && !effectiveSaveId.current) {
           effectiveSaveId.current = resp.data.saveFileId;
-          setSaveName(`存档 - ${resp.data.trainerName || '训练家'}`);
+          setSaveName(et('saveNameTemplate', '存档 - {{trainerName}}', {
+            trainerName: resp.data.trainerName || et('trainerFallback', '训练家'),
+          }));
           console.log(`[ndsSync] New save created: ${effectiveSaveId.current}`);
         }
         setSynced(true);
@@ -359,31 +380,31 @@ const NdsEmulatorPage: React.FC = () => {
     <div style={{ minHeight: '100vh', background: '#1a1a2e', color: '#eee' }}>
       {/* Toolbar */}
       <div style={{ background: '#16213e', padding: '6px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #0f3460', flexWrap: 'wrap' }}>
-        <Button icon={<ArrowLeftOutlined />} ghost size="small" onClick={async () => { await syncSaveNow(); setTimeout(() => window.close(), 300); }}>关闭</Button>
+        <Button icon={<ArrowLeftOutlined />} ghost size="small" onClick={async () => { await syncSaveNow(); setTimeout(() => window.close(), 300); }}>{et('toolbar.close', '关闭')}</Button>
         <Button ghost size="small" icon={synced ? <CheckCircleOutlined /> : <SaveOutlined />}
           onClick={syncSaveNow} loading={syncing} disabled={!ready}
-          style={{ color: synced ? '#52c41a' : undefined }}>同步存档</Button>
+          style={{ color: synced ? '#52c41a' : undefined }}>{et('toolbar.syncSave', '同步存档')}</Button>
         <span style={{ fontWeight: 600, fontSize: 13 }}>{saveName || 'NDS'}</span>
         <Tag color="purple" style={{ fontSize: 11 }}>{romName}</Tag>
         <div style={{ flex: 1 }} />
         <Space size={4} wrap>
-          <span style={{ fontSize: 11, color: '#888' }}>画面</span>
+          <span style={{ fontSize: 11, color: '#888' }}>{et('toolbar.screen', '画面')}</span>
           {([1,2] as const).map(s => (
             <Button key={`scale-${s}`} ghost size="small" type={scale===s?'primary':'default'}
               onClick={() => setScale(s)} disabled={!ready} style={{ padding: '0 8px', fontSize: 12 }}>{s}×</Button>
           ))}
-          <span style={{ fontSize: 11, color: '#888', marginLeft: 4 }}>速度</span>
+          <span style={{ fontSize: 11, color: '#888', marginLeft: 4 }}>{et('toolbar.speed', '速度')}</span>
           {([1,2,4] as const).map(s => (
             <Button key={`speed-${s}`} ghost size="small" type={speed===s?'primary':'default'}
               onClick={() => { emuRef.current?.setSpeed(s); setSpeed(s); }} disabled={!ready} style={{ padding: '0 8px', fontSize: 12 }}>{s}×</Button>
           ))}
           <Button ghost size="small" onClick={() => { const e=emuRef.current; if(!e)return; if(paused){e.resume();setPaused(false);}else{e.pause();setPaused(true);} }} disabled={!ready}>
-            {paused ? '继续' : '暂停'}
+            {paused ? et('toolbar.resume', '继续') : et('toolbar.pause', '暂停')}
           </Button>
-          <Button ghost size="small" icon={<ReloadOutlined />} onClick={() => { /* NDS restart requires reload */ window.location.reload(); }} disabled={!ready}>重置</Button>
-          <Tooltip title="melonDS WASM 当前未暴露金手指接口，请使用桌面版模拟器">
+          <Button ghost size="small" icon={<ReloadOutlined />} onClick={() => { window.location.reload(); }} disabled={!ready}>{et('toolbar.reset', '重置')}</Button>
+          <Tooltip title={et('tooltip.ndsCheatsUnavailable', 'melonDS WASM 当前未暴露金手指接口，请使用桌面版模拟器')}>
             <span>
-              <Button ghost size="small" icon={<ThunderboltOutlined />} disabled>金手指</Button>
+              <Button ghost size="small" icon={<ThunderboltOutlined />} disabled>{et('toolbar.cheats', '金手指')}</Button>
             </span>
           </Tooltip>
           <div style={{ width: 80, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -397,8 +418,8 @@ const NdsEmulatorPage: React.FC = () => {
             onClick={() => { const next = !micOn; setMicOn(next); emuRef.current?.setMicNoise(next); }}
             type={micOn ? 'primary' : 'default'}
             style={{ padding: '0 6px', fontSize: 11 }}>🎤</Button>
-          {gpConnected && <Tag color="cyan" style={{ fontSize: 11 }} title={gpId || undefined}>🎮 已连接</Tag>}
-          <Button ghost size="small" icon={<SettingOutlined />} disabled={!ready} onClick={() => setKeyDlg(true)}>按键</Button>
+          {gpConnected && <Tag color="cyan" style={{ fontSize: 11 }} title={gpId || undefined}>🎮 {et('toolbar.connected', '已连接')}</Tag>}
+          <Button ghost size="small" icon={<SettingOutlined />} disabled={!ready} onClick={() => setKeyDlg(true)}>{et('toolbar.buttons', '按键')}</Button>
           <Tag color="green" style={{ fontSize: 11 }}>{fps} FPS</Tag>
         </Space>
       </div>
@@ -421,43 +442,43 @@ const NdsEmulatorPage: React.FC = () => {
         <div style={{ position: 'relative', width: w, height: h }}>
           <canvas ref={bottomRef} width={256} height={192}
             style={{ width: w, height: h, imageRendering: 'pixelated', border: '3px solid #2a2a2a', borderRadius: '0 0 6px 6px', background: '#000', cursor: 'crosshair', display: ready ? 'block' : 'none' }}
-            title="触摸屏 (webmelon 自动处理触控)"
+            title={et('screen.touchTitle', '触摸屏 (webmelon 自动处理触控)')}
           />
           {!ready && (
             <div style={{
               position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               background: '#000', color: '#888', borderRadius: '0 0 6px 6px'
             }}>
-              <div style={{ fontSize: 16 }}>加载中...</div>
+              <div style={{ fontSize: 16 }}>{et('loading', '加载中...')}</div>
               <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{status}</div>
             </div>
           )}
         </div>
         {/* Bottom label */}
         <div style={{ color: '#555', fontSize: 10, marginTop: 8, textAlign: 'center' }}>
-          下屏 — 触摸屏 (鼠标点击 / 触屏)
+          {et('screen.touchLabel', '下屏 — 触摸屏 (鼠标点击 / 触屏)')}
         </div>
       </div>
 
       {/* Key Mapping Modal */}
-      <Modal title="NDS 按键映射设置" open={keyDlg} onCancel={() => setKeyDlg(false)} footer={null} width={420}>
+      <Modal title={et('keymap.ndsTitle', 'NDS 按键映射设置')} open={keyDlg} onCancel={() => setKeyDlg(false)} footer={null} width={420}>
         <div style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>
-          按下按键或手柄按钮，先捕获到的绑定生效。
+          {et('keymap.captureHint', '按下按键或手柄按钮，先捕获到的绑定生效。')}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
           {NDS_BTNS.map(btn => (
             <div key={btn} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#f5f5f5', borderRadius: 6, gap: 8 }}>
-              <span style={{ fontWeight: 600 }}>{BTN_LABEL[btn]}</span>
+              <span style={{ fontWeight: 600 }}>{buttonLabels[btn] ?? BTN_LABEL[btn]}</span>
               <Button size="small" type={binding === btn ? 'primary' : 'default'} onClick={() => { setGamepadBindingMode('replace'); setBinding(binding === btn ? null : btn); }} style={{ minWidth: 170, textAlign: 'left', height: 'auto', whiteSpace: 'normal' }}>
-                {binding === btn ? '按下按键或手柄按钮...' : (
+                {binding === btn ? et('keymap.capturing', '按下按键或手柄按钮...') : (
                   <span>
                     <span>{codeLabel(keyMap[btn] || '?')}</span>
                     <span style={{ display: 'block', fontSize: 11, opacity: 0.8 }}>{formatGamepadButtons(gamepadMap[btn])}</span>
                   </span>
                 )}
               </Button>
-              <Button size="small" onClick={() => { setGamepadBindingMode('add'); setBinding(btn); }}>追加手柄</Button>
-              <Button size="small" danger onClick={() => setGamepadMap((prev) => ({ ...prev, [btn]: [] }))}>清除手柄</Button>
+              <Button size="small" onClick={() => { setGamepadBindingMode('add'); setBinding(btn); }}>{et('keymap.addGamepad', '追加手柄')}</Button>
+              <Button size="small" danger onClick={() => setGamepadMap((prev) => ({ ...prev, [btn]: [] }))}>{et('keymap.clearGamepad', '清除手柄')}</Button>
             </div>
           ))}
         </div>
@@ -468,23 +489,23 @@ const NdsEmulatorPage: React.FC = () => {
             setGamepadDeadzone(GAMEPAD_DEADZONE_DEFAULT);
             setGamepadRumble(true);
             setGamepadRumbleIntensity(0.5);
-          }}>恢复默认</Button>
+          }}>{et('keymap.restoreDefault', '恢复默认')}</Button>
         </div>
         <div style={{ marginTop: 12, background: '#fafafa', borderRadius: 6, padding: 10 }}>
-          <div style={{ fontSize: 12, marginBottom: 6 }}>手柄 deadzone: {gamepadDeadzone.toFixed(2)}</div>
+          <div style={{ fontSize: 12, marginBottom: 6 }}>{et('keymap.gamepadDeadzone', '手柄 deadzone: {{value}}', { value: gamepadDeadzone.toFixed(2) })}</div>
           <Slider min={0} max={1} step={0.05} value={gamepadDeadzone} onChange={setGamepadDeadzone} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
-            <span style={{ fontSize: 12 }}>震动</span>
+            <span style={{ fontSize: 12 }}>{et('keymap.rumble', '震动')}</span>
             <Switch checked={gamepadRumble} onChange={setGamepadRumble} />
           </div>
-          <div style={{ fontSize: 12, marginTop: 12, marginBottom: 6 }}>震动强度: {gamepadRumbleIntensity.toFixed(2)}</div>
+          <div style={{ fontSize: 12, marginTop: 12, marginBottom: 6 }}>{et('keymap.rumbleIntensity', '震动强度: {{value}}', { value: gamepadRumbleIntensity.toFixed(2) })}</div>
           <Slider min={0} max={1} step={0.05} value={gamepadRumbleIntensity} onChange={setGamepadRumbleIntensity} disabled={!gamepadRumble} />
         </div>
       </Modal>
 
       {/* Key guide */}
       <div style={{ textAlign: 'center', color: '#555', fontSize: 11, marginTop: 4 }}>
-        {NDS_BTNS.slice(0,4).map(b=>codeLabel(keyMap[b]||'?')).join('')} 方向 |
+        {NDS_BTNS.slice(0,4).map(b=>codeLabel(keyMap[b]||'?')).join('')} {et('summary.direction', '方向')} |
         A={codeLabel(keyMap['A']||'?')} B={codeLabel(keyMap['B']||'?')} X={codeLabel(keyMap['X']||'?')} Y={codeLabel(keyMap['Y']||'?')} |
         L={codeLabel(keyMap['L']||'?')} R={codeLabel(keyMap['R']||'?')} |
         {formatGamepadButtons(gamepadMap['A'])} A {formatGamepadButtons(gamepadMap['B'])} B
@@ -507,8 +528,8 @@ const NdsEmulatorPage: React.FC = () => {
           </div>
           {/* Center: Select/Start */}
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
-            <NdsTouchBtn label="Sel" onPress={() => emuRef.current?.pressButton('SELECT')} onRelease={() => emuRef.current?.releaseButton('SELECT')} small />
-            <NdsTouchBtn label="Start" onPress={() => emuRef.current?.pressButton('START')} onRelease={() => emuRef.current?.releaseButton('START')} small />
+            <NdsTouchBtn label={et('button.selectShort', 'Sel')} onPress={() => emuRef.current?.pressButton('SELECT')} onRelease={() => emuRef.current?.releaseButton('SELECT')} small />
+            <NdsTouchBtn label={et('button.start', 'Start')} onPress={() => emuRef.current?.pressButton('START')} onRelease={() => emuRef.current?.releaseButton('START')} small />
           </div>
           {/* Action buttons */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>

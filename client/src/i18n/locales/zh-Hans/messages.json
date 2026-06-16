@@ -1,0 +1,19 @@
+{
+  "saveSuccess": "保存成功",
+  "saveFailed": "保存失败",
+  "loginSuccess": "登录成功",
+  "loginFailed": "登录失败",
+  "loadSaveListFailed": "加载存档列表失败",
+  "emulatorAlreadyRunning": "该存档的模拟器已在运行中",
+  "launchFailed": "启动失败",
+  "uploadSaveSuccess": "存档上传并解析成功！",
+  "uploadFailedCheckFormat": "上传失败，请检查文件格式",
+  "saveDeleted": "存档已删除",
+  "deleteFailed": "删除失败",
+  "localEmulatorNotReady": "本地模拟器未就绪",
+  "showdownInputRequired": "请输入 Showdown 文本",
+  "showdownParseSuccess": "解析成功: {{species}}",
+  "showdownParseFailed": "解析失败",
+  "showdownImportSuccess": "Showdown 导入成功！",
+  "showdownGenerateFailed": "生成失败"
+}

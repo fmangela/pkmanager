@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using PKHeX.Core;
+using PkManager.Server.Helpers;
 using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
 
@@ -13,10 +14,14 @@ namespace PkManager.Server.Services;
 public class LegalizationService
 {
     private readonly PokemonEditService _editService;
+    private readonly ParseService _parseService;
+    private readonly IPkhexStringProvider _pkhexStrings;
 
-    public LegalizationService(PokemonEditService editService)
+    public LegalizationService(PokemonEditService editService, ParseService parseService, IPkhexStringProvider pkhexStrings)
     {
         _editService = editService;
+        _parseService = parseService;
+        _pkhexStrings = pkhexStrings;
     }
 
     // ── URL 获取辅助 ──────────────────────────────────────
@@ -484,7 +489,7 @@ public class LegalizationService
         var postLa = new LegalityAnalysis(pkm);
         result.Status = ComputeLegalityStatus(postLa);
         result.Fixed = result.AppliedFixes.Count > 0;
-        result.UpdatedPokemon = ParseService.MapToPokemonDto(pkm);
+        result.UpdatedPokemon = _parseService.MapToPokemonDto(pkm);
         result.PkmDataBase64 = GetPkmBase64(pkm);
         result.Judgements = postLa.Results.Select(r => new JudgementDto
         {
@@ -515,7 +520,7 @@ public class LegalizationService
             throw new BusinessException(urlError);
 
         var sets = ShowdownParsing.GetShowdownSets(resolvedText!).ToList();
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings();
 
         return sets.Select(set =>
         {
@@ -759,7 +764,7 @@ public class LegalizationService
     public EncounterSearchResultDto SearchEncounters(EncounterSearchRequest request, ITrainerInfo trainerInfo)
     {
         var result = new EncounterSearchResultDto();
-        var strings = GameInfo.GetStrings("zh");
+        var strings = _pkhexStrings.GetStrings();
 
         // 1. 创建空白 PKM
         var blank = EntityBlank.GetBlank(trainerInfo);
@@ -850,7 +855,7 @@ public class LegalizationService
 
         // 5. 返回更新后的 DTO（含新 base64）
         result.Success = true;
-        result.Pokemon = ParseService.MapToPokemonDto(pkm);
+        result.Pokemon = _parseService.MapToPokemonDto(pkm);
         return result;
     }
 

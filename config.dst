@@ -146,4 +146,7 @@ VITE_API_TARGET=https://localhost:5001
 #   Trace, Debug, Information, Warning, Error, Critical, None
 # Development / 开发: Information
 # Production / 生产: Warning
+# i18n default language / 默认界面语言 (zh-Hans / en / ja / fr / it / de / es / es-419 / ko / zh-Hant)
+DEFAULT_LANG=zh-Hans
+
 LOG_LEVEL=Information

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Select, Input, InputNumber, Switch, Space, Tag, Button } from 'antd';
 import { RocketOutlined } from '@ant-design/icons';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import type { PokemonDto } from '../../api/saveFile';
 import type { EvolveResultDto } from '../../api/evolution';
 import { useResourceStore } from '../../stores/resourceStore';
@@ -39,6 +41,7 @@ const getLevelFromExp = (exp: number, table: number[]) => {
 };
 
 const MainTab: React.FC<Props> = ({ pokemon, generation, onChange, saveFileId, boxIndex, slotIndex, isParty, editSnapshot, onEvolved }) => {
+  const { t, i18n } = useTranslation('editor');
   const { species, abilities, natures, items, balls } = useResourceStore();
   const isGen12 = generation <= 2;
   const isGen8Plus = generation >= 8;
@@ -49,7 +52,7 @@ const MainTab: React.FC<Props> = ({ pokemon, generation, onChange, saveFileId, b
   const [expTable, setExpTable] = useState<number[]>([]);
   useEffect(() => {
     if (pokemon.species > 0) {
-      resourceApi.speciesAbilities(pokemon.species, generation, pokemon.form).then(res => {
+      resourceApi.speciesAbilities(pokemon.species, generation, pokemon.form, i18n.language).then(res => {
         setSpeciesAbilities(res.data || []);
       }).catch((err: any) => {
         setSpeciesAbilities([]);
@@ -60,7 +63,7 @@ const MainTab: React.FC<Props> = ({ pokemon, generation, onChange, saveFileId, b
         });
       });
 
-      resourceApi.speciesExperience(pokemon.species, generation, pokemon.form).then(res => {
+      resourceApi.speciesExperience(pokemon.species, generation, pokemon.form, i18n.language).then(res => {
         setExpTable(res.data?.expTable || []);
       }).catch((err: any) => {
         setExpTable([]);
@@ -74,7 +77,7 @@ const MainTab: React.FC<Props> = ({ pokemon, generation, onChange, saveFileId, b
       setSpeciesAbilities([]);
       setExpTable([]);
     }
-  }, [pokemon.species, pokemon.form, generation]);
+  }, [pokemon.species, pokemon.form, generation, i18n.language]);
 
   const abilityOptions = (speciesAbilities.length > 0 ? speciesAbilities : abilities)
     .map((a, i) => ({ value: a.id, label: a.name, slot: a.slot, key: `${a.id}_${i}` }));
@@ -89,8 +92,7 @@ const MainTab: React.FC<Props> = ({ pokemon, generation, onChange, saveFileId, b
   const itemOptions = [{ value: 0, label: '无' }, ...items.filter(i => i.id > 0).map(i => ({ value: i.id, label: i.name }))];
   const ballOptions = balls.map(b => ({ value: b.id, label: b.name }));
 
-  const natureName = natures.find(n => n.id === pokemon.nature)?.name;
-  const natureMod = natureName ? natureModifiers[natureName] : null;
+  const natureMod = getNatureModifier(pokemon.nature, t);
 
   const set = (key: keyof PokemonDto, val: any) => { (pokemon as any)[key] = val; ch(); };
 
@@ -331,17 +333,24 @@ const MainTab: React.FC<Props> = ({ pokemon, generation, onChange, saveFileId, b
   );
 };
 
-const natureModifiers: Record<string, { up: string; down: string }> = {
-  '怕寂寞': { up: '攻击', down: '防御' }, '勇敢': { up: '攻击', down: '速度' },
-  '固执': { up: '攻击', down: '特攻' }, '顽皮': { up: '攻击', down: '特防' },
-  '大胆': { up: '防御', down: '攻击' }, '悠闲': { up: '防御', down: '速度' },
-  '淘气': { up: '防御', down: '特攻' }, '乐天': { up: '防御', down: '特防' },
-  '胆小': { up: '速度', down: '攻击' }, '急躁': { up: '速度', down: '防御' },
-  '爽朗': { up: '速度', down: '特攻' }, '天真': { up: '速度', down: '特防' },
-  '内敛': { up: '特攻', down: '攻击' }, '慢吞吞': { up: '特攻', down: '防御' },
-  '冷静': { up: '特攻', down: '速度' }, '马虎': { up: '特攻', down: '特防' },
-  '温和': { up: '特防', down: '攻击' }, '温顺': { up: '特防', down: '防御' },
-  '自大': { up: '特防', down: '速度' }, '慎重': { up: '特防', down: '特攻' },
-};
+function getNatureModifier(
+  nature: number,
+  t: TFunction<'editor'>,
+): { up: string; down: string } | null {
+  if (nature < 0 || nature > 24) return null;
+  const up = Math.floor(nature / 5);
+  const down = nature % 5;
+  if (up === down) return null;
+
+  const labels = [
+    t('stats.atkShort', 'ATK'),
+    t('stats.defShort', 'DEF'),
+    t('stats.spaShort', 'SPA'),
+    t('stats.spdShort', 'SPD'),
+    t('stats.speShort', 'SPE'),
+  ];
+
+  return { up: labels[up], down: labels[down] };
+}
 
 export default MainTab;

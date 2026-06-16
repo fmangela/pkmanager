@@ -14,6 +14,11 @@ namespace PkManager.Server.Services;
 
 public class AuthService
 {
+    private static readonly HashSet<string> SupportedLangs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "zh-Hans", "zh-Hant", "en", "ja", "fr", "it", "de", "es", "es-419", "ko"
+    };
+
     private readonly NpgsqlConnection _db;
     private readonly IConfiguration _configuration;
 
@@ -26,7 +31,7 @@ public class AuthService
     /// <summary>
     /// 用户注册 — BCrypt 哈希 + 插入 users 表
     /// </summary>
-    public async Task<AuthResponse> Register(RegisterRequest request)
+    public async Task<AuthResponse> Register(RegisterRequest request, string? acceptLanguage = null)
     {
         // 检查用户名/邮箱唯一性
         var existing = await _db.QueryFirstOrDefaultAsync<User>(
@@ -43,13 +48,14 @@ public class AuthService
 
         var passwordHash = BCrypt.Net.BCrypt.EnhancedHashPassword(request.Password, 12);
         var userId = Guid.NewGuid();
+        var preferredLang = NormalizeFirstLang(acceptLanguage);
 
         await _db.ExecuteAsync(@"
-            INSERT INTO users (id, username, email, password_hash)
-            VALUES (@Id, @Username, @Email, @PasswordHash)",
-            new { Id = userId, request.Username, request.Email, PasswordHash = passwordHash });
+            INSERT INTO users (id, username, email, password_hash, preferred_lang)
+            VALUES (@Id, @Username, @Email, @PasswordHash, @PreferredLang)",
+            new { Id = userId, request.Username, request.Email, PasswordHash = passwordHash, PreferredLang = preferredLang });
 
-        return GenerateTokens(userId, request.Username, request.Email);
+        return GenerateTokens(userId, request.Username, request.Email, preferredLang);
     }
 
     /// <summary>
@@ -67,7 +73,7 @@ public class AuthService
         if (!BCrypt.Net.BCrypt.EnhancedVerify(request.Password, user.PasswordHash))
             throw new BusinessException("用户名或密码错误");
 
-        return GenerateTokens(user.Id, user.Username, user.Email);
+        return GenerateTokens(user.Id, user.Username, user.Email, user.PreferredLang);
     }
 
     /// <summary>
@@ -102,7 +108,7 @@ public class AuthService
             if (user == null)
                 throw new BusinessException("用户不存在或已禁用");
 
-            return GenerateTokens(user.Id, user.Username, user.Email);
+            return GenerateTokens(user.Id, user.Username, user.Email, user.PreferredLang);
         }
         catch (SecurityTokenException)
         {
@@ -116,7 +122,7 @@ public class AuthService
     public async Task<UserDto> GetCurrentUser(Guid userId)
     {
         var user = await _db.QueryFirstOrDefaultAsync<User>(
-            "SELECT id, username, email FROM users WHERE id = @Id",
+            "SELECT id, username, email, preferred_lang FROM users WHERE id = @Id",
             new { Id = userId });
 
         if (user == null)
@@ -126,13 +132,27 @@ public class AuthService
         {
             Id = user.Id,
             Username = user.Username,
-            Email = user.Email
+            Email = user.Email,
+            PreferredLang = NormalizeLang(user.PreferredLang)
         };
+    }
+
+    public async Task<string> SetPreferredLang(Guid userId, string lang)
+    {
+        var normalized = NormalizeLang(lang);
+        if (!IsSupportedLang(normalized))
+            throw new BusinessException("不支持的语言", 400);
+
+        await _db.ExecuteAsync(
+            "UPDATE users SET preferred_lang = @Lang, updated_at = NOW() WHERE id = @UserId",
+            new { Lang = normalized, UserId = userId });
+
+        return normalized;
     }
 
     // ── 私有方法 ────────────────────────────────────────
 
-    private AuthResponse GenerateTokens(Guid userId, string username, string email)
+    private AuthResponse GenerateTokens(Guid userId, string username, string email, string preferredLang)
     {
         var accessToken = GenerateJwt(userId, username,
             int.Parse(_configuration["Jwt:ExpireHours"] ?? "2"));
@@ -147,10 +167,44 @@ public class AuthService
             {
                 Id = userId,
                 Username = username,
-                Email = email
+                Email = email,
+                PreferredLang = NormalizeLang(preferredLang)
             }
         };
     }
+
+    private static bool IsSupportedLang(string? lang) =>
+        !string.IsNullOrWhiteSpace(lang) && SupportedLangs.Contains(NormalizeLang(lang));
+
+    private static string NormalizeFirstLang(string? acceptLanguage)
+    {
+        if (string.IsNullOrWhiteSpace(acceptLanguage))
+            return "zh-Hans";
+
+        var first = acceptLanguage.Split(',')[0].Split(';')[0].Trim();
+        var normalized = NormalizeLang(first);
+        return IsSupportedLang(normalized) ? normalized : "zh-Hans";
+    }
+
+    private static string NormalizeLang(string? lang) => lang switch
+    {
+        "zh" or "zh-CN" or "zh-cn" => "zh-Hans",
+        "zh-TW" or "zh-tw" => "zh-Hant",
+        "en-US" or "en-us" or "en-GB" or "en-gb" => "en",
+        "es-MX" or "es-mx" or "es-AR" or "es-ar" => "es-419",
+        _ when string.IsNullOrWhiteSpace(lang) => "zh-Hans",
+        _ when lang.StartsWith("zh-", StringComparison.OrdinalIgnoreCase) =>
+            lang.Equals("zh-HK", StringComparison.OrdinalIgnoreCase) ||
+            lang.Equals("zh-MO", StringComparison.OrdinalIgnoreCase)
+                ? "zh-Hant"
+                : "zh-Hans",
+        _ when lang.StartsWith("es-", StringComparison.OrdinalIgnoreCase) =>
+            lang.Equals("es-419", StringComparison.OrdinalIgnoreCase) ? "es-419" : "es",
+        _ when lang.Contains('-', StringComparison.Ordinal) => lang.Split('-')[0],
+        _ => lang
+    };
+
+    public static string NormalizeForClient(string? lang) => NormalizeLang(lang);
 
     private string GenerateJwt(Guid userId, string username, int expireHours)
     {

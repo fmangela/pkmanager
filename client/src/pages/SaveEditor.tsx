@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/core';
 import { saveFileApi, type SaveFileDetail, type BoxSlotDto, type PokemonDto, type SaveBackupDto, type LegalityStatus, type SaveBoxSortBy } from '../api/saveFile';
 import { useDiagnosticStore } from '../stores/diagnosticStore';
-import { useTheme, type ThemeMode } from '../components/ThemeProvider';
+import { useTheme, type ThemeMode } from '../components/theme-context';
 import { bankApi, type BankListItem } from '../api/bank';
 import EditPanel from '../components/editor/EditPanel';
 import BagPanel from '../components/editor/BagPanel';

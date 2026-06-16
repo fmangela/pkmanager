@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     email           VARCHAR(255) NOT NULL UNIQUE,
     password_hash   VARCHAR(255) NOT NULL,
     avatar_url      VARCHAR(500),
+    preferred_lang  VARCHAR(10)  NOT NULL DEFAULT 'zh-Hans',
     is_active       BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 COMMENT ON TABLE users IS '用户账号表';
 COMMENT ON COLUMN users.password_hash IS 'BCrypt 哈希后的密码';
+COMMENT ON COLUMN users.preferred_lang IS '账号级界面语言偏好';
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
 CREATE INDEX IF NOT EXISTS idx_users_email    ON users (email);
