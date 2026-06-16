@@ -1,4 +1,5 @@
 using System.Text;
+using Dapper;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -173,12 +174,20 @@ var app = builder.Build();
 try
 {
     using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<Npgsql.NpgsqlConnection>();
+    await db.ExecuteAsync("""
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS preferred_lang VARCHAR(10) NOT NULL DEFAULT 'zh-Hans';
+
+        COMMENT ON COLUMN users.preferred_lang IS '账号级界面语言偏好';
+        """);
+
     var saveFileService = scope.ServiceProvider.GetRequiredService<SaveFileService>();
     await saveFileService.MigrateSavePaths();
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"[Startup] Save path migration skipped: {ex.Message}");
+    Console.WriteLine($"[Startup] Schema/bootstrap migration skipped: {ex.Message}");
 }
 
 // ── 中间件管道 ───────────────────────────────────────────

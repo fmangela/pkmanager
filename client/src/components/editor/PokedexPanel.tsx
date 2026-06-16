@@ -4,18 +4,13 @@ import {
   Pagination, Popconfirm, Space, Alert, Tag, Popover, Select, InputNumber,
 } from 'antd';
 import { SearchOutlined, SaveOutlined, EyeOutlined, AimOutlined, ClearOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { saveFileApi, type PokedexDto, type PokedexEntryDto } from '../../api/saveFile';
 import { useResourceStore } from '../../stores/resourceStore';
 
 const { Text } = Typography;
 const PAGE_SIZE = 100;
-const GEN4_LANGUAGE_LABELS = ['日', '英', '法', '意', '德', '西'];
-const GENDER_OPTIONS = [
-  { value: 0, label: '未记录' },
-  { value: 1, label: '仅♂' },
-  { value: 2, label: '仅♀' },
-  { value: 3, label: '♂♀' },
-];
+const GEN4_LANGUAGE_LABELS = ['JPN', 'ENG', 'FRE', 'ITA', 'GER', 'SPA'];
 
 const getGenderTag = (seenGender?: number | null) => {
   switch (seenGender) {
@@ -73,6 +68,13 @@ const DexCell: React.FC<{
   onCaughtChange,
   onEntryChange,
 }) => {
+  const { t } = useTranslation('editor');
+  const genderOptions = [
+    { value: 0, label: t('pokedex.genderUnknown', '未记录') },
+    { value: 1, label: t('pokedex.genderMaleOnly', '仅♂') },
+    { value: 2, label: t('pokedex.genderFemaleOnly', '仅♀') },
+    { value: 3, label: t('pokedex.genderBoth', '♂♀') },
+  ];
   const dexNum = String(species).padStart(3, '0');
   const genderTag = getGenderTag(seenGender);
   const canEditGen4Extras = generation === 4;
@@ -122,7 +124,7 @@ const DexCell: React.FC<{
           onChange={e => onSeenChange(e.target.checked)}
           style={{ fontSize: 11 }}
         >
-          <Text style={{ fontSize: 11 }}>见</Text>
+          <Text style={{ fontSize: 11 }}>{t('pokedex.seenShort', '见')}</Text>
         </Checkbox>
         <Checkbox
           checked={caught}
@@ -130,7 +132,7 @@ const DexCell: React.FC<{
           onChange={e => onCaughtChange(e.target.checked)}
           style={{ fontSize: 11 }}
         >
-          <Text style={{ fontSize: 11 }}>捕</Text>
+          <Text style={{ fontSize: 11 }}>{t('pokedex.caughtShort', '捕')}</Text>
         </Checkbox>
       </div>
       {canEditGen4Extras && (
@@ -139,12 +141,12 @@ const DexCell: React.FC<{
             size="small"
             value={seenGender ?? 0}
             style={{ width: 92 }}
-            options={GENDER_OPTIONS}
+            options={genderOptions}
             onChange={(value) => onEntryChange({ seenGender: value })}
           />
           {formEditor && (
-            <Popover content={formEditor} title="形态跟踪" trigger="click">
-              <Button size="small">形态</Button>
+            <Popover content={formEditor} title={t('pokedex.formTracking', '形态跟踪')} trigger="click">
+              <Button size="small">{t('pokedex.form', '形态')}</Button>
             </Popover>
           )}
           {species === 327 && (
@@ -160,7 +162,7 @@ const DexCell: React.FC<{
           {languageFlags != null && (
             <Popover
               trigger="click"
-              title="语言条目"
+              title={t('pokedex.languageEntries', '语言条目')}
               content={
                 <Space direction="vertical" size={4}>
                   {GEN4_LANGUAGE_LABELS.map((label, index) => {
@@ -182,7 +184,7 @@ const DexCell: React.FC<{
                 </Space>
               }
             >
-              <Button size="small">语言</Button>
+              <Button size="small">{t('trainer.language', '语言')}</Button>
             </Popover>
           )}
         </Space>
@@ -192,6 +194,11 @@ const DexCell: React.FC<{
 };
 
 const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
+  const { t } = useTranslation(['editor', 'messages', 'common']);
+  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'editor', defaultValue, ...(options ?? {}) });
+  const ct = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'common', defaultValue, ...(options ?? {}) });
   const [data, setData] = useState<PokedexDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -223,11 +230,11 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
       setPage(1);
       setSearch('');
     } catch {
-      message.error('加载图鉴数据失败');
+      message.error(et('pokedex.loadFailed', '加载图鉴数据失败'));
     } finally {
       setLoading(false);
     }
-  }, [saveFileId, message]);
+  }, [saveFileId, message, t]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -344,15 +351,15 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
       await saveFileApi.savePokedex(saveFileId, { ...data, entries: fullEntries });
       setDirty(false);
       setDirtyEntries(new Map());
-      message.success('图鉴已保存');
+      message.success(et('pokedex.saved', '图鉴已保存'));
       // 回读确保一致性
       await fetchData();
     } catch {
-      message.error('保存图鉴失败');
+      message.error(et('pokedex.saveFailed', '保存图鉴失败'));
     } finally {
       setSaving(false);
     }
-  }, [data, mergedEntries, saveFileId, message, fetchData]);
+  }, [data, mergedEntries, saveFileId, message, fetchData, t]);
 
   // ── 批量操作 ──
   const handleBatch = useCallback(async (action: string) => {
@@ -363,15 +370,19 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
       setDirtyEntries(new Map());
       setDirty(false);
       setPage(1);
-      message.success(action === 'seenAll' ? '已全部标记为见过'
-        : action === 'caughtAll' ? '已全部标记为见过并捕获'
-        : '已全部清除');
+      message.success(
+        action === 'seenAll'
+          ? et('pokedex.seenAll', '已全部标记为见过')
+          : action === 'caughtAll'
+            ? et('pokedex.caughtAll', '已全部标记为见过并捕获')
+            : et('pokedex.cleared', '已全部清除'),
+      );
     } catch {
-      message.error('批量操作失败');
+      message.error(et('pokedex.batchFailed', '批量操作失败'));
     } finally {
       setBatching(null);
     }
-  }, [saveFileId, message]);
+  }, [saveFileId, message, t]);
 
   // ── 不支持的面板 ──
   if (!loading && data && !data.isSupported) {
@@ -380,8 +391,8 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
         <Alert
           type="warning"
           showIcon
-          message="暂不支持"
-          description={data.unsupportedReason || '该存档的图鉴格式暂未支持'}
+          message={et('pokedex.unsupported', '暂不支持')}
+          description={data.unsupportedReason || et('pokedex.unsupportedDesc', '该存档的图鉴格式暂未支持')}
         />
       </div>
     );
@@ -389,7 +400,7 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
 
   // ── 加载中 ──
   if (loading) {
-    return <div style={{ padding: 48, textAlign: 'center' }}><Spin size="large" tip="加载图鉴数据..." /></div>;
+    return <div style={{ padding: 48, textAlign: 'center' }}><Spin size="large" tip={et('pokedex.loading', '加载图鉴数据...')} /></div>;
   }
 
   if (!data) return null;
@@ -400,7 +411,7 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <EyeOutlined style={{ color: '#52c41a' }} />
-          <Text style={{ width: 40, fontSize: 13 }}>见过</Text>
+          <Text style={{ width: 40, fontSize: 13 }}>{et('pokedex.seen', '见过')}</Text>
           <Progress
             percent={stats.percentSeen}
             size="small"
@@ -411,7 +422,7 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
           <AimOutlined style={{ color: '#1677ff' }} />
-          <Text style={{ width: 40, fontSize: 13 }}>捕获</Text>
+          <Text style={{ width: 40, fontSize: 13 }}>{et('pokedex.caught', '捕获')}</Text>
           <Progress
             percent={stats.percentCaught}
             size="small"
@@ -425,20 +436,20 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
       {/* ── 工具栏 ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <Space>
-          <Popconfirm title="确认将所有物种标记为「见过」？" onConfirm={() => handleBatch('seenAll')}>
-            <Button size="small" icon={<EyeOutlined />} loading={batching === 'seenAll'}>全见过</Button>
+          <Popconfirm title={et('pokedex.confirmSeenAll', '确认将所有物种标记为「见过」？')} onConfirm={() => handleBatch('seenAll')}>
+            <Button size="small" icon={<EyeOutlined />} loading={batching === 'seenAll'}>{et('pokedex.markSeenAll', '全见过')}</Button>
           </Popconfirm>
-          <Popconfirm title="确认将所有物种标记为「见过并捕获」？" onConfirm={() => handleBatch('caughtAll')}>
-            <Button size="small" icon={<AimOutlined />} loading={batching === 'caughtAll'}>全捕获</Button>
+          <Popconfirm title={et('pokedex.confirmCaughtAll', '确认将所有物种标记为「见过并捕获」？')} onConfirm={() => handleBatch('caughtAll')}>
+            <Button size="small" icon={<AimOutlined />} loading={batching === 'caughtAll'}>{et('pokedex.markCaughtAll', '全捕获')}</Button>
           </Popconfirm>
-          <Popconfirm title="确认清除所有图鉴数据？此操作不可撤销。" onConfirm={() => handleBatch('clearAll')}>
-            <Button size="small" icon={<ClearOutlined />} danger loading={batching === 'clearAll'}>全清除</Button>
+          <Popconfirm title={et('pokedex.confirmClearAll', '确认清除所有图鉴数据？此操作不可撤销。')} onConfirm={() => handleBatch('clearAll')}>
+            <Button size="small" icon={<ClearOutlined />} danger loading={batching === 'clearAll'}>{et('pokedex.clearAll', '全清除')}</Button>
           </Popconfirm>
         </Space>
         <Space>
           <Input
             size="small"
-            placeholder="搜索编号或名称..."
+            placeholder={et('pokedex.searchPlaceholder', '搜索编号或名称...')}
             prefix={<SearchOutlined />}
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -453,7 +464,7 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
             danger={dirty}
             onClick={handleSave}
           >
-            {dirty ? '保存 *' : '保存'}
+            {dirty ? et('pokedex.saveDirty', '保存 *') : ct('save', '保存')}
           </Button>
         </Space>
       </div>
@@ -469,7 +480,7 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
           <DexCell
             key={e.species}
             species={e.species}
-            name={speciesNameMap.get(e.species) ?? `物种 #${e.species}`}
+            name={speciesNameMap.get(e.species) ?? et('pokedex.speciesFallback', '物种 #{{species}}', { species: e.species })}
             generation={data.generation}
             seen={e.seen}
             caught={e.caught}
@@ -502,7 +513,10 @@ const PokedexPanel: React.FC<Props> = ({ saveFileId }) => {
       {search.trim() && (
         <div style={{ textAlign: 'center', marginTop: 4 }}>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            搜索 "{search}" — 找到 {filteredEntries.length} 个结果
+            {et('pokedex.searchSummary', '搜索 "{{search}}" — 找到 {{count}} 个结果', {
+              search,
+              count: filteredEntries.length,
+            })}
           </Text>
         </div>
       )}

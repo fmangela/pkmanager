@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 // ── 轴配置：6 项能力的角度（deg），显式指定 statIndex → values[] 映射 ──
 interface AxisConfig {
@@ -6,15 +7,6 @@ interface AxisConfig {
   statIndex: number; // 0=HP, 1=ATK, 2=DEF, 3=SPA, 4=SPD, 5=SPE
   angle: number;     // 数学角度，0=右，顺时针
 }
-
-const AXES: AxisConfig[] = [
-  { label: 'HP',   statIndex: 0, angle: -90 },
-  { label: '攻击', statIndex: 1, angle: -30 },
-  { label: '防御', statIndex: 2, angle:  30 },
-  { label: '特攻', statIndex: 3, angle:  90 },
-  { label: '特防', statIndex: 4, angle: 150 },
-  { label: '速度', statIndex: 5, angle: 210 },
-];
 
 interface Props {
   values: number[];      // 6 项能力值，按 [HP, ATK, DEF, SPA, SPD, SPE]
@@ -24,6 +16,15 @@ interface Props {
 }
 
 const StatsRadar: React.FC<Props> = ({ values, maxValue = 255, size = 220, title }) => {
+  const { t } = useTranslation('editor');
+  const AXES: AxisConfig[] = [
+    { label: 'HP', statIndex: 0, angle: -90 },
+    { label: t('stats.atkShort', '攻击'), statIndex: 1, angle: -30 },
+    { label: t('stats.defShort', '防御'), statIndex: 2, angle: 30 },
+    { label: t('stats.spaShort', '特攻'), statIndex: 3, angle: 90 },
+    { label: t('stats.spdShort', '特防'), statIndex: 4, angle: 150 },
+    { label: t('stats.speShort', '速度'), statIndex: 5, angle: 210 },
+  ];
   const cx = size / 2;
   const cy = size / 2;
   const r = size * 0.33;                     // 数据半径（留标签空间）
@@ -62,7 +63,7 @@ const StatsRadar: React.FC<Props> = ({ values, maxValue = 255, size = 220, title
       viewBox={`0 0 ${size} ${size}`}
       style={{ display: 'block' }}
       role="img"
-      aria-label={title ?? '种族值雷达图'}
+      aria-label={title ?? t('stats.radarTitle', '种族值雷达图')}
     >
       {/* 背景刻度环 */}
       {rings.map((d, i) => (

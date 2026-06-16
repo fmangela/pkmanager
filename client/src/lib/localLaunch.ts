@@ -1,6 +1,7 @@
 import type { MessageInstance } from 'antd/es/message/interface';
 import { emulatorApi, type LaunchLocalResult } from '../api/saveFile';
 import { buildWindowsScript } from './windowsLauncherScript';
+import { getI18nText } from '../i18n/i18n';
 
 const detectProtocolSupport = (protoUrl: string) => new Promise<boolean>((resolve) => {
   let done = false;
@@ -142,10 +143,10 @@ export const launchLocalSave = async (
     const tokenRes = await emulatorApi.createLaunchToken(saveFileId);
     const token = tokenRes.data.token;
     const protoUrl = `pkmanager://launch/${token}?backend=${encodeURIComponent(backendBase)}`;
-    message.info('如果浏览器提示打开外部应用，请点击允许');
+    message.info(getI18nText('localLaunch.allowExternalApp', undefined, 'messages') || '如果浏览器提示打开外部应用，请点击允许');
     const supported = await detectProtocolSupport(protoUrl);
     if (supported) {
-      message.success('正在启动模拟器...');
+      message.success(getI18nText('localLaunch.launching', undefined, 'messages') || '正在启动模拟器...');
       return;
     }
   } catch {
@@ -155,7 +156,7 @@ export const launchLocalSave = async (
   const res = await emulatorApi.launchLocal(saveFileId);
   const pkg = res.data as LaunchLocalResult;
   if (!pkg.romPath) {
-    throw new Error('未找到游戏内容文件路径，请检查模拟器数据目录配置');
+    throw new Error(getI18nText('localLaunch.romPathMissing', undefined, 'messages') || '未找到游戏内容文件路径，请检查模拟器数据目录配置');
   }
 
   const { fileName, scriptContent } = isWin
@@ -163,5 +164,9 @@ export const launchLocalSave = async (
     : buildPosixScript(pkg, backendBase, fallbackName);
 
   triggerDownload(scriptContent, fileName, isWin ? 'text/plain' : 'text/x-sh');
-  message.info(`未检测到一键启动协议，已下载启动脚本（${fileName}）。运行该脚本以注入存档、启动模拟器，并在退出后自动同步。`, 8);
+  message.info(
+    getI18nText('localLaunch.scriptDownloaded', { fileName }, 'messages')
+    || `未检测到一键启动协议，已下载启动脚本（${fileName}）。运行该脚本以注入存档、启动模拟器，并在退出后自动同步。`,
+    8,
+  );
 };

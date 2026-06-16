@@ -24,6 +24,7 @@ import {
   CloseCircleOutlined,
   InfoCircleOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { useDiagnosticStore, type DiagCategory, type DiagLevel } from '../stores/diagnosticStore';
 
 const { Text } = Typography;
@@ -79,6 +80,7 @@ const DiagnosticPanel: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [levelFilter, setLevelFilter] = useState<FilterLevel>('all');
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>('all');
+  const { t } = useTranslation(['common', 'messages']);
 
   const entries = useDiagnosticStore((s) => s.entries);
   const healthStatus = useDiagnosticStore((s) => s.healthStatus);
@@ -135,7 +137,7 @@ const DiagnosticPanel: React.FC = () => {
     const text = exportText();
     try {
       await navigator.clipboard.writeText(text);
-      message.success('已复制到剪贴板');
+      message.success(t('copySuccess', { ns: 'messages', defaultValue: '已复制到剪贴板' }));
     } catch {
       // Fallback
       const ta = document.createElement('textarea');
@@ -144,14 +146,14 @@ const DiagnosticPanel: React.FC = () => {
       ta.select();
       document.execCommand('copy');
       document.body.removeChild(ta);
-      message.success('已复制到剪贴板');
+      message.success(t('copySuccess', { ns: 'messages', defaultValue: '已复制到剪贴板' }));
     }
-  }, [exportText]);
+  }, [exportText, t]);
 
   const handleClear = useCallback(() => {
     clear();
-    message.success('日志已清空');
-  }, [clear]);
+    message.success(t('logsCleared', { ns: 'messages', defaultValue: '日志已清空' }));
+  }, [clear, t]);
 
   // ── Health indicator ─────────────────────────────────────────────
 
@@ -172,14 +174,14 @@ const DiagnosticPanel: React.FC = () => {
         }}
         badge={{ count: stats.error, color: '#ff4d4f' }}
         onClick={() => setOpen(true)}
-        tooltip="诊断面板 (Ctrl+Shift+D)"
+        tooltip={`${t('diagnosticPanel', { ns: 'common', defaultValue: '诊断面板' })} (Ctrl+Shift+D)`}
       />
 
       <Drawer
         title={
           <Space>
             <BugOutlined />
-            <span>诊断面板</span>
+            <span>{t('diagnosticPanel', { ns: 'common', defaultValue: '诊断面板' })}</span>
             <Tag>{h.icon} {h.label}</Tag>
           </Space>
         }
@@ -189,7 +191,7 @@ const DiagnosticPanel: React.FC = () => {
         onClose={() => setOpen(false)}
         extra={
           <Space>
-            <Tooltip title="刷新">
+            <Tooltip title={t('refresh', { ns: 'common', defaultValue: '刷新' })}>
               <Button
                 size="small"
                 icon={<ReloadOutlined />}
@@ -201,17 +203,17 @@ const DiagnosticPanel: React.FC = () => {
               />
             </Tooltip>
             <Popconfirm
-              title="确定清空所有日志？"
+              title={t('diagnostic.clearConfirm', '确定清空所有日志？')}
               onConfirm={handleClear}
-              okText="确定"
-              cancelText="取消"
+              okText={t('confirm', { ns: 'common', defaultValue: '确定' })}
+              cancelText={t('cancel', { ns: 'common', defaultValue: '取消' })}
             >
               <Button size="small" icon={<DeleteOutlined />} danger>
-                清空
+                {t('clear', { ns: 'common', defaultValue: '清空' })}
               </Button>
             </Popconfirm>
             <Button size="small" icon={<CopyOutlined />} onClick={handleCopy}>
-              复制全部
+              {t('diagnostic.copyAll', '复制全部')}
             </Button>
             <Button
               size="small"
@@ -241,10 +243,10 @@ const DiagnosticPanel: React.FC = () => {
             value={levelFilter}
             onChange={(val) => setLevelFilter(val as FilterLevel)}
             options={[
-              { label: `全部 (${entries.length})`, value: 'all' },
-              { label: `🔴 错误 (${stats.error})`, value: 'error' },
-              { label: `🟡 警告 (${stats.warn})`, value: 'warn' },
-              { label: `🔵 信息 (${stats.info})`, value: 'info' },
+              { label: `${t('all', { ns: 'common', defaultValue: '全部' })} (${entries.length})`, value: 'all' },
+              { label: `🔴 ${t('diagnostic.errors', '错误')} (${stats.error})`, value: 'error' },
+              { label: `🟡 ${t('diagnostic.warnings', '警告')} (${stats.warn})`, value: 'warn' },
+              { label: `🔵 ${t('diagnostic.info', '信息')} (${stats.info})`, value: 'info' },
             ]}
           />
           <Segmented
@@ -252,7 +254,7 @@ const DiagnosticPanel: React.FC = () => {
             value={categoryFilter}
             onChange={(val) => setCategoryFilter(val as FilterCategory)}
             options={[
-              { label: '全部分类', value: 'all' },
+              { label: t('allCategories', { ns: 'common', defaultValue: '全部分类' }), value: 'all' },
               { label: 'API', value: 'api' },
               { label: 'Render', value: 'render' },
               { label: 'WASM', value: 'wasm' },
@@ -269,8 +271,8 @@ const DiagnosticPanel: React.FC = () => {
               <CheckCircleOutlined style={{ fontSize: 32, marginBottom: 8 }} />
               <br />
               {entries.length === 0
-                ? '暂无日志 — 一切正常'
-                : '当前筛选条件下无匹配日志'}
+                ? t('diagnostic.emptyOk', '暂无日志 — 一切正常')
+                : t('diagnostic.emptyFiltered', '当前筛选条件下无匹配日志')}
             </div>
           ) : (
             <Timeline
@@ -313,7 +315,7 @@ const DiagnosticPanel: React.FC = () => {
                     {entry.stack && (
                       <details style={{ marginTop: 4 }}>
                         <summary style={{ cursor: 'pointer', fontSize: 11, color: '#999' }}>
-                          堆栈详情
+                          {t('stackDetails', { ns: 'common', defaultValue: '堆栈详情' })}
                         </summary>
                         <pre
                           style={{
@@ -364,11 +366,11 @@ const DiagnosticPanel: React.FC = () => {
           }}
         >
           <Text type="secondary" style={{ fontSize: 11 }}>
-            Ctrl+Shift+D 切换面板 · 错误自动上报服务端
+            {t('diagnostic.footerHint', 'Ctrl+Shift+D 切换面板 · 错误自动上报服务端')}
           </Text>
           <Space size={4}>
             <Text type="secondary" style={{ fontSize: 11 }}>
-              {entries.length} 条记录
+              {t('diagnostic.recordCount', '{{count}} 条记录', { count: entries.length })}
             </Text>
           </Space>
         </div>

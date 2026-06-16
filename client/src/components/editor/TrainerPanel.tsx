@@ -4,32 +4,38 @@ import {
   Row, Col, Tooltip, Space,
 } from 'antd';
 import { SaveOutlined, CopyOutlined, ReloadOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { saveFileApi, type TrainerInfoDto } from '../../api/saveFile';
 
 const { Text } = Typography;
-
-const LANGUAGE_OPTIONS = [
-  { value: 1, label: '日本語 (JPN)' },
-  { value: 2, label: 'English (ENG)' },
-  { value: 3, label: 'Français (FRE)' },
-  { value: 4, label: 'Italiano (ITA)' },
-  { value: 5, label: 'Deutsch (GER)' },
-  { value: 7, label: 'Español (SPA)' },
-  { value: 8, label: '한국어 (KOR)' },
-  { value: 9, label: '简体中文 (CHS)' },
-  { value: 10, label: '繁體中文 (CHT)' },
-];
-
-const GENDER_OPTIONS = [
-  { value: 0, label: '男' },
-  { value: 1, label: '女' },
-];
 
 interface Props {
   saveFileId: string;
 }
 
 const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
+  const { t } = useTranslation(['editor', 'messages', 'common']);
+  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'editor', defaultValue, ...(options ?? {}) });
+  const mt = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'messages', defaultValue, ...(options ?? {}) });
+  const ct = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'common', defaultValue, ...(options ?? {}) });
+  const LANGUAGE_OPTIONS = [
+    { value: 1, label: '日本語 (JPN)' },
+    { value: 2, label: 'English (ENG)' },
+    { value: 3, label: 'Français (FRE)' },
+    { value: 4, label: 'Italiano (ITA)' },
+    { value: 5, label: 'Deutsch (GER)' },
+    { value: 7, label: 'Español (SPA)' },
+    { value: 8, label: '한국어 (KOR)' },
+    { value: 9, label: '简体中文 (CHS)' },
+    { value: 10, label: '繁體中文 (CHT)' },
+  ];
+  const GENDER_OPTIONS = [
+    { value: 0, label: et('otmisc.male', '男 ♂') },
+    { value: 1, label: et('otmisc.female', '女 ♀') },
+  ];
   const [info, setInfo] = useState<TrainerInfoDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -41,11 +47,11 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
       const res = await saveFileApi.getTrainerInfo(saveFileId);
       setInfo(res.data);
     } catch {
-      message.error('加载训练家信息失败');
+      message.error(et('trainer.loadFailed', '加载训练家信息失败'));
     } finally {
       setLoading(false);
     }
-  }, [saveFileId]);
+  }, [saveFileId, t]);
 
   useEffect(() => { fetchInfo(); }, [fetchInfo]);
 
@@ -65,9 +71,9 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
     setSaving(true);
     try {
       await saveFileApi.saveTrainerInfo(saveFileId, info);
-      message.success('训练家信息已保存');
+      message.success(et('trainer.saved', '训练家信息已保存'));
     } catch {
-      message.error('保存失败');
+      message.error(mt('saveFailed', '保存失败'));
     } finally {
       setSaving(false);
     }
@@ -76,25 +82,25 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
   const copyGameSync = () => {
     if (info?.gameSyncID) {
       navigator.clipboard.writeText(info.gameSyncID).then(
-        () => message.success('已复制 GameSync ID'),
-        () => message.error('复制失败'),
+        () => message.success(et('trainer.copyGameSync', '已复制 GameSync ID')),
+        () => message.error(mt('saveFailed', '保存失败')),
       );
     }
   };
 
   if (loading) return <div style={{ padding: 48, textAlign: 'center' }}><Spin /></div>;
-  if (!info) return <div style={{ padding: 48, textAlign: 'center' }}><Text type="secondary">加载训练家信息失败</Text></div>;
+  if (!info) return <div style={{ padding: 48, textAlign: 'center' }}><Text type="secondary">{et('trainer.loadFailed', '加载训练家信息失败')}</Text></div>;
 
   const cap = info.capability;
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', paddingBottom: 60 }}>
       {/* 基本信息 */}
-      <Card title="基本信息" size="small" style={{ marginBottom: 12 }}>
+      <Card title={et('trainer.basic', '基本信息')} size="small" style={{ marginBottom: 12 }}>
         <Row gutter={[16, 8]}>
           <Col span={12}>
             <div style={{ marginBottom: 8 }}>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>训练家名称</Text>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.name', '训练家名称')}</Text>
               <Input
                 value={info.ot}
                 onChange={e => updateField('ot', e.target.value)}
@@ -105,7 +111,7 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
           </Col>
           <Col span={12}>
             <div style={{ marginBottom: 8 }}>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>性别</Text>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.gender', '性别')}</Text>
               <Radio.Group
                 options={GENDER_OPTIONS}
                 value={info.gender}
@@ -138,7 +144,7 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
             <>
               <Col span={6}>
                 <div style={{ marginBottom: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>显示 TID (只读)</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.displayTid', '显示 TID (只读)')}</Text>
                   <Input
                     value={String(info.displayTID).padStart(6, '0')}
                     readOnly
@@ -148,7 +154,7 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
               </Col>
               <Col span={6}>
                 <div style={{ marginBottom: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>显示 SID (只读)</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.displaySid', '显示 SID (只读)')}</Text>
                   <Input
                     value={String(info.displaySID).padStart(4, '0')}
                     readOnly
@@ -160,7 +166,7 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
           )}
           <Col span={12}>
             <div style={{ marginBottom: 8 }}>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>语言</Text>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.language', '语言')}</Text>
               <Select
                 value={info.language}
                 onChange={v => updateField('language', v)}
@@ -172,25 +178,25 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
           </Col>
           <Col span={12}>
             <div style={{ marginBottom: 8 }}>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>游戏版本</Text>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.gameVersion', '游戏版本')}</Text>
               <Input value={info.gameVersionName || `Gen ${info.generation}`} readOnly style={{ maxWidth: 200 }} />
             </div>
           </Col>
           <Col span={4}>
             <div style={{ marginBottom: 8 }}>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>时</Text>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.hours', '时')}</Text>
               <InputNumber value={info.playedHours} min={0} max={999} onChange={v => updateField('playedHours', v ?? 0)} style={{ width: '100%' }} />
             </div>
           </Col>
           <Col span={4}>
             <div style={{ marginBottom: 8 }}>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>分</Text>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.minutes', '分')}</Text>
               <InputNumber value={info.playedMinutes} min={0} max={59} onChange={v => updateField('playedMinutes', v ?? 0)} style={{ width: '100%' }} />
             </div>
           </Col>
           <Col span={4}>
             <div style={{ marginBottom: 8 }}>
-              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>秒</Text>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.seconds', '秒')}</Text>
               <InputNumber value={info.playedSeconds} min={0} max={59} onChange={v => updateField('playedSeconds', v ?? 0)} style={{ width: '100%' }} />
             </div>
           </Col>
@@ -199,12 +205,12 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
 
       {/* 货币 */}
       {(info.money != null || cap.hasCoins || cap.hasBP || cap.hasLeaguePoints) && (
-        <Card title="货币" size="small" style={{ marginBottom: 12 }}>
+        <Card title={et('trainer.currency', '货币')} size="small" style={{ marginBottom: 12 }}>
           <Row gutter={[16, 8]}>
             {info.money != null && (
               <Col span={8}>
                 <div style={{ marginBottom: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>金钱 (Max: {cap.maxMoney.toLocaleString()})</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.money', '金钱 (Max: {{max}})', { max: cap.maxMoney.toLocaleString() })}</Text>
                   <InputNumber
                     value={info.money} min={0} max={cap.maxMoney}
                     onChange={v => updateField('money', v ?? 0)}
@@ -216,7 +222,7 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
             {cap.hasCoins && info.coins != null && (
               <Col span={8}>
                 <div style={{ marginBottom: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>代币 (Max: {cap.maxCoins?.toLocaleString()})</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.coins', '代币 (Max: {{max}})', { max: cap.maxCoins?.toLocaleString() ?? '' })}</Text>
                   <InputNumber
                     value={info.coins} min={0} max={cap.maxCoins ?? 99999}
                     onChange={v => updateField('coins', v ?? 0)}
@@ -228,7 +234,7 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
             {cap.hasBP && info.bp != null && (
               <Col span={8}>
                 <div style={{ marginBottom: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>战斗点数 (BP)</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.bp', '战斗点数 (BP)')}</Text>
                   <InputNumber
                     value={info.bp} min={0} max={99999}
                     onChange={v => updateField('bp', v ?? 0)}
@@ -240,7 +246,7 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
             {cap.hasLeaguePoints && info.leaguePoints != null && (
               <Col span={8}>
                 <div style={{ marginBottom: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>联盟点数 (LP)</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.lp', '联盟点数 (LP)')}</Text>
                   <InputNumber
                     value={info.leaguePoints} min={0} max={99999999}
                     onChange={v => updateField('leaguePoints', v ?? 0)}
@@ -255,7 +261,7 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
 
       {/* 徽章 */}
       {cap.hasBadges && info.badges != null && cap.badgeCount > 0 && (
-        <Card title="徽章" size="small" style={{ marginBottom: 12 }}>
+        <Card title={et('trainer.badges', '徽章')} size="small" style={{ marginBottom: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(cap.badgeCount, 8)}, 1fr)`, gap: 8, maxWidth: cap.badgeCount <= 8 ? 480 : 640 }}>
             {cap.badgeNames.map((name, i) => {
               const obtained = (info.badges! >> i) & 1;
@@ -292,7 +298,10 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
           </div>
           <div style={{ marginTop: 8 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              已获得 {(info.badges ?? 0).toString(2).split('1').length - 1} / {cap.badgeCount} 枚徽章
+              {et('trainer.badgesProgress', '已获得 {{count}} / {{total}} 枚徽章', {
+                count: (info.badges ?? 0).toString(2).split('1').length - 1,
+                total: cap.badgeCount,
+              })}
             </Text>
           </div>
         </Card>
@@ -300,12 +309,12 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
 
       {/* 训练家卡片 (Gen8 SwSh) */}
       {cap.hasTrainerCard && (
-        <Card title="训练家卡片" size="small" style={{ marginBottom: 12 }}>
+        <Card title={et('trainer.card', '训练家卡片')} size="small" style={{ marginBottom: 12 }}>
           <Row gutter={[16, 8]}>
             {cap.hasCardNumber && (
               <Col span={8}>
                 <div style={{ marginBottom: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>卡片编号</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.cardNumber', '卡片编号')}</Text>
                   <Input
                     value={info.cardNumber || ''}
                     onChange={e => updateField('cardNumber', e.target.value)}
@@ -324,10 +333,10 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
         <Card title="Game Sync ID" size="small" style={{ marginBottom: 12 }}>
           <Space>
             <Input value={info.gameSyncID} readOnly style={{ fontFamily: 'monospace', width: 300 }} />
-            <Tooltip title="复制">
+            <Tooltip title={et('trainer.copy', '复制')}>
               <Button icon={<CopyOutlined />} size="small" onClick={copyGameSync} />
             </Tooltip>
-            <Text type="secondary" style={{ fontSize: 11 }}>只读 — 修改会导致在线服务同步失败</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>{et('trainer.gameSyncReadonly', '只读 — 修改会导致在线服务同步失败')}</Text>
           </Space>
         </Card>
       )}
@@ -339,9 +348,9 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
         padding: '8px 24px', display: 'flex', justifyContent: 'center', gap: 12,
         zIndex: 10,
       }}>
-        <Button icon={<ReloadOutlined />} onClick={fetchInfo} loading={loading}>重置</Button>
+        <Button icon={<ReloadOutlined />} onClick={fetchInfo} loading={loading}>{ct('reset', '重置')}</Button>
         <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>
-          保存训练家信息
+          {et('trainer.save', '保存训练家信息')}
         </Button>
       </div>
     </div>

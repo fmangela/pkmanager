@@ -5,6 +5,7 @@ import { BankOutlined, SaveOutlined, PlusOutlined, SettingOutlined, SunOutlined,
 import { useTranslation } from 'react-i18next';
 import { useTheme, type ThemeMode } from '../components/theme-context';
 import { saveFileApi, type SaveFileInfo } from '../api/saveFile';
+import type { CheckLocalResponse } from '../api/saveFile';
 import { useDiagnosticStore } from '../stores/diagnosticStore';
 import { PLAYABLE_GAMES, GAME_META, getGameDisplayName, getGameShortName } from '../constants/games';
 import { emulatorApi } from '../api/saveFile';
@@ -12,6 +13,7 @@ import GameCover from '../components/GameCover';
 import PageContainer from '../components/PageContainer';
 import { launchLocalSave } from '../lib/localLaunch';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import type { ApiError } from '../api/axios';
 
 const { Title, Text } = Typography;
 
@@ -39,12 +41,12 @@ const DashboardPage: React.FC = () => {
     try {
       const res = await saveFileApi.list();
       setSaves(res.data || []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       useDiagnosticStore.getState().log({
         category: 'api',
         level: 'error',
         message: '加载存档列表失败',
-        stack: err?.message,
+        stack: (err as ApiError).message,
       });
     } finally {
       setLoadingSaves(false);
@@ -98,15 +100,16 @@ const DashboardPage: React.FC = () => {
     if (!selectedGame || !is3ds) { setCheckState({ loading: false }); return; }
     setCheckState({ loading: true });
     emulatorApi.checkLocal({ generation: selectedGame.generation, gameVersion: gameVersion, gameId: selectedGame.gameId })
-      .then((res: any) => {
-        const d = res.data || res;
+      .then((res: { data: CheckLocalResponse }) => {
+        const d = res.data;
         const ready = d.azaharReady || d.desmumeReady;
         setCheckState({ loading: false, ready, error: ready ? undefined : (d.error || t('localEmulatorNotReady', { ns: 'messages', defaultValue: '本地模拟器未就绪' })) });
       })
-      .catch((err: any) => {
-        setCheckState({ loading: false, ready: false, error: err.response?.data?.message || err.message || 'Check failed' });
+      .catch((err: unknown) => {
+        const apiError = err as ApiError;
+        setCheckState({ loading: false, ready: false, error: apiError.response?.data?.message || apiError.message || 'Check failed' });
       });
-  }, [selectedGame?.gameId, selectedGame?.generation, is3ds, gameVersion, t]);
+  }, [gameVersion, is3ds, selectedGame, t]);
 
   const handleLocalPlay = async (saveFileId: string, filename?: string) => {
     if (is3ds && !checkState.ready) {
@@ -116,8 +119,9 @@ const DashboardPage: React.FC = () => {
     setSelectedGame(null);
     try {
       await launchLocalSave(saveFileId, message, filename);
-    } catch (err: any) {
-      message.error(err?.message || err?.response?.data?.message || t('launchFailed', { ns: 'messages', defaultValue: '启动失败' }));
+    } catch (err: unknown) {
+      const apiError = err as ApiError;
+      message.error(apiError.message || apiError.response?.data?.message || t('launchFailed', { ns: 'messages', defaultValue: '启动失败' }));
     }
   };
 

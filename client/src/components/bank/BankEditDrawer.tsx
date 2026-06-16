@@ -3,6 +3,8 @@ import {
   Drawer, Tabs, Button, App, Space, Tag, Modal, Select, Radio, Row, Col, Typography, Alert, Tooltip, Descriptions,
 } from 'antd';
 import { SaveOutlined, SendOutlined, ExperimentOutlined, ExportOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+import type { ApiError } from '../../api/axios';
 import type { PokemonDto, LegalityStatus, JudgementDto, EditResultDto, LegalityReportDto, SaveFileInfo, SaveFileDetail } from '../../api/saveFile';
 import { saveFileApi } from '../../api/saveFile';
 import { bankApi } from '../../api/bank';
@@ -25,6 +27,10 @@ const GENERATION_LABELS: Record<number, string> = {
   3: 'Gen3 (GBA)', 4: 'Gen4 (NDS)', 5: 'Gen5 (NDS)', 6: 'Gen6 (3DS)', 7: 'Gen7 (3DS)',
 };
 
+function applyPokemonUpdate(target: PokemonDto, updated: PokemonDto): void {
+  Object.assign(target, updated);
+}
+
 interface Props {
   open: boolean;
   pokemon: PokemonDto | null;
@@ -34,6 +40,7 @@ interface Props {
 }
 
 const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSaved }) => {
+  const { t } = useTranslation(['common', 'messages', 'pages', 'editor']);
   const [loading, setLoading] = useState(false);
   const [legality, setLegality] = useState<{
     status: LegalityStatus;
@@ -86,7 +93,7 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
   // ── Save ──────────────────────────────────────────────
 
   const handleExportShowdown = async () => {
-    if (!pokemon?.pkmDataBase64) { message.warning('缺少宝可梦数据，无法导出'); return; }
+    if (!pokemon?.pkmDataBase64) { message.warning(t('bankEdit.missingPokemonDataExport', { ns: 'editor', defaultValue: '缺少宝可梦数据，无法导出' })); return; }
     setExportLoading(true);
     try {
       const res = await saveFileApi.exportShowdown({
@@ -96,15 +103,18 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
       setExportText(res.data);
       setShowExport(true);
     } catch (err: unknown) {
-      message.error(getErrorMessage(err, '导出失败'));
+      message.error(getErrorMessage(err, t('exportFailed', { ns: 'messages', defaultValue: '导出失败' })));
     } finally { setExportLoading(false); }
   };
 
   const handleSave = async () => {
-    if (!hasPkmData) { message.error('该记录缺少原始数据，无法编辑'); return; }
+    if (!hasPkmData) { message.error(t('bankEdit.missingPokemonDataEdit', { ns: 'editor', defaultValue: '该记录缺少原始数据，无法编辑' })); return; }
 
-    const errors = validateFields(pokemon);
-    if (errors.length > 0) { message.error(`字段校验失败: ${errors.join('; ')}`); return; }
+    const errors = validateFields(
+      pokemon,
+      (key, defaultValue, options) => t(key, { ns: 'editor', defaultValue, ...(options ?? {}) }),
+    );
+    if (errors.length > 0) { message.error(t('bankEdit.validationFailed', { ns: 'editor', defaultValue: '字段校验失败: {{errors}}', errors: errors.join('; ') })); return; }
 
     const editSnapshot = buildEditRequest(pokemon);
     setLoading(true);
@@ -119,20 +129,16 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
         judgements: result.judgements || [],
       });
 
-      if (updated) {
-        for (const key of Object.keys(updated)) {
-          (pokemon as any)[key] = (updated as any)[key];
-        }
-      }
+      if (updated) applyPokemonUpdate(pokemon, updated);
       notifyChange();
       if (result.status === 'Legal') {
-        message.success('修改已保存！');
+        message.success(t('bankEdit.saved', { ns: 'editor', defaultValue: '修改已保存！' }));
       } else {
-        message.warning('已保存（⚠️ 宝可梦不合法）');
+        message.warning(t('bankEdit.savedIllegal', { ns: 'editor', defaultValue: '已保存（⚠️ 宝可梦不合法）' }));
       }
       setTimeout(() => onSaved(), 200);
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || '保存失败');
+    } catch (err: unknown) {
+      message.error(getErrorMessage(err, t('saveFailed', { ns: 'messages', defaultValue: '保存失败' })));
     } finally {
       setLoading(false);
     }
@@ -141,7 +147,7 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
   // ── Validate ──────────────────────────────────────────
 
   const handleValidate = async () => {
-    if (!hasPkmData) { message.warning('该记录缺少原始数据，无法验证'); return; }
+    if (!hasPkmData) { message.warning(t('bankEdit.missingPokemonDataValidate', { ns: 'editor', defaultValue: '该记录缺少原始数据，无法验证' })); return; }
     const editSnapshot = buildEditRequest(pokemon);
     try {
       const res = await saveFileApi.validateById(bankId, editSnapshot);
@@ -151,9 +157,9 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
         report: report.report,
         judgements: report.judgements || [],
       });
-      message.info('合法性验证完成');
+      message.info(t('bankEdit.validateDone', { ns: 'editor', defaultValue: '合法性验证完成' }));
     } catch {
-      message.error('验证失败');
+      message.error(t('bankEdit.validateFailed', { ns: 'editor', defaultValue: '验证失败' }));
     }
   };
 
@@ -169,7 +175,7 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
       setMoveTargetSlot(undefined);
       setMoveModalOpen(true);
     } catch {
-      message.error('加载存档列表失败');
+      message.error(t('loadSaveListFailed', { ns: 'messages', defaultValue: '加载存档列表失败' }));
     }
   };
 
@@ -181,7 +187,7 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
       const res = await saveFileApi.getDetail(saveFileId);
       setMoveSaveDetail(res.data);
     } catch {
-      message.error('加载存档详情失败');
+      message.error(t('loadSaveDetailFailed', { ns: 'messages', defaultValue: '加载存档详情失败' }));
     }
   };
 
@@ -194,12 +200,12 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
         targetBoxIndex: moveTargetBox,
         targetSlotIndex: moveTargetSlot,
       });
-      message.success('已发送到存档！');
+      message.success(t('moveToSaveSuccess', { ns: 'messages', defaultValue: '已发送到存档！' }));
       setMoveModalOpen(false);
       onSaved();
       onClose();
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || '移动失败');
+    } catch (err: unknown) {
+      message.error(getErrorMessage(err, t('moveFailed', { ns: 'messages', defaultValue: '移动失败' })));
     } finally {
       setMoveLoading(false);
     }
@@ -208,19 +214,19 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
   // ── Tab definitions ───────────────────────────────────
 
   const tabItems = [
-    { key: 'main', label: '基本信息', children: <MainTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
-    { key: 'stats', label: '能力值', children: <StatsTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
-    { key: 'moves', label: '招式', children: <MovesTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
-    { key: 'met', label: '相遇信息', children: <MetTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
-    { key: 'otmisc', label: '训练家/杂项', children: <OTMiscTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
-    { key: 'cosmetic', label: '外观/装饰', children: <CosmeticTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
-    { key: 'genspecific', label: '世代专属', children: <GenSpecificTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
+    { key: 'main', label: t('bankEdit.tabMain', { ns: 'editor', defaultValue: '基本信息' }), children: <MainTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
+    { key: 'stats', label: t('bankEdit.tabStats', { ns: 'editor', defaultValue: '能力值' }), children: <StatsTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
+    { key: 'moves', label: t('bankEdit.tabMoves', { ns: 'editor', defaultValue: '招式' }), children: <MovesTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
+    { key: 'met', label: t('bankEdit.tabMet', { ns: 'editor', defaultValue: '相遇信息' }), children: <MetTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
+    { key: 'otmisc', label: t('bankEdit.tabOtMisc', { ns: 'editor', defaultValue: '训练家/杂项' }), children: <OTMiscTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
+    { key: 'cosmetic', label: t('bankEdit.tabCosmetic', { ns: 'editor', defaultValue: '外观/装饰' }), children: <CosmeticTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
+    { key: 'genspecific', label: t('bankEdit.tabGenSpecific', { ns: 'editor', defaultValue: '世代专属' }), children: <GenSpecificTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
     {
       key: 'legality',
-      label: '合法性',
+      label: t('bankEdit.tabLegality', { ns: 'editor', defaultValue: '合法性' }),
       children: legality === null ? (
         <div style={{ textAlign: 'center', padding: 48 }}>
-          <Text type="secondary" style={{ fontSize: 16 }}>尚未验证合法性</Text>
+          <Text type="secondary" style={{ fontSize: 16 }}>{t('bankEdit.unverified', { ns: 'editor', defaultValue: '尚未验证合法性' })}</Text>
           <br />
           <Button
             type="primary"
@@ -229,7 +235,7 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
             style={{ marginTop: 16 }}
             disabled={!hasPkmData}
           >
-            验证合法性
+            {t('bankEdit.validate', { ns: 'editor', defaultValue: '验证合法性' })}
           </Button>
         </div>
       ) : (
@@ -246,10 +252,10 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
   ];
 
   const legalityChip =
-    legality === null ? <Tag>未验证</Tag>
-    : legality.status === 'Legal' ? <Tag color="success">✓ 合法</Tag>
-    : legality.status === 'Fishy' ? <Tag color="warning">⚠ 可疑</Tag>
-    : <Tag color="error">✗ 不合法</Tag>;
+    legality === null ? <Tag>{t('bankEdit.unverifiedTag', { ns: 'editor', defaultValue: '未验证' })}</Tag>
+    : legality.status === 'Legal' ? <Tag color="success">✓ {t('bankEdit.legal', { ns: 'editor', defaultValue: '合法' })}</Tag>
+    : legality.status === 'Fishy' ? <Tag color="warning">⚠ {t('bankEdit.fishy', { ns: 'editor', defaultValue: '可疑' })}</Tag>
+    : <Tag color="error">✗ {t('bankEdit.illegal', { ns: 'editor', defaultValue: '不合法' })}</Tag>;
 
   // ── Render ────────────────────────────────────────────
 
@@ -278,8 +284,8 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
             <span style={{ fontWeight: 600 }}>
               {pokemon.nickname || pokemon.speciesName} Lv.{pokemon.level}
             </span>
-            {pokemon.isShiny && <Tag color="gold">✨ 闪光</Tag>}
-            {pokemon.isEgg && <Tag>🥚 蛋</Tag>}
+            {pokemon.isShiny && <Tag color="gold">✨ {t('bank.shinyTag', { ns: 'pages', defaultValue: '闪光' })}</Tag>}
+            {pokemon.isEgg && <Tag>🥚 {t('bankEdit.egg', { ns: 'editor', defaultValue: '蛋' })}</Tag>}
             {generation > 0 && <Tag color="blue">{GENERATION_LABELS[generation] || `PK${generation}`}</Tag>}
             {legalityChip}
           </Space>
@@ -289,17 +295,17 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
         size="large"
         extra={
           <Space>
-            <Tooltip title={!hasPkmData ? '数据不完整，无法操作' : undefined}>
-              <Button icon={<SendOutlined />} onClick={openMoveModal} disabled={!hasPkmData}>发送到存档</Button>
+            <Tooltip title={!hasPkmData ? t('bankEdit.incompleteDataNoAction', { ns: 'editor', defaultValue: '数据不完整，无法操作' }) : undefined}>
+              <Button icon={<SendOutlined />} onClick={openMoveModal} disabled={!hasPkmData}>{t('bankEdit.sendToSave', { ns: 'editor', defaultValue: '发送到存档' })}</Button>
             </Tooltip>
-              <Tooltip title={!hasPkmData ? '数据不完整，无法操作' : undefined}>
+              <Tooltip title={!hasPkmData ? t('bankEdit.incompleteDataNoAction', { ns: 'editor', defaultValue: '数据不完整，无法操作' }) : undefined}>
               <Button icon={<ExportOutlined />} loading={exportLoading}
-                onClick={handleExportShowdown} disabled={!hasPkmData}>Showdown 导出</Button>
+                onClick={handleExportShowdown} disabled={!hasPkmData}>{t('bankEdit.showdownExport', { ns: 'editor', defaultValue: 'Showdown 导出' })}</Button>
               </Tooltip>
-            <Button onClick={onClose}>取消</Button>
-            <Tooltip title={!hasPkmData ? '数据不完整，无法编辑' : undefined}>
+            <Button onClick={onClose}>{t('cancel', { ns: 'common', defaultValue: '取消' })}</Button>
+            <Tooltip title={!hasPkmData ? t('bankEdit.incompleteDataNoEdit', { ns: 'editor', defaultValue: '数据不完整，无法编辑' }) : undefined}>
               <Button type="primary" icon={<SaveOutlined />} loading={loading} onClick={handleSave} disabled={!hasPkmData}>
-                保存修改
+                {t('bankEdit.saveChanges', { ns: 'editor', defaultValue: '保存修改' })}
               </Button>
             </Tooltip>
           </Space>
@@ -308,24 +314,24 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
         {!hasPkmData && (
           <Alert
             type="warning"
-            message="该记录缺少原始数据，仅可查看"
+            message={t('bankEdit.readOnlyMissingData', { ns: 'editor', defaultValue: '该记录缺少原始数据，仅可查看' })}
             style={{ marginBottom: 16 }}
             showIcon
           />
         )}
         {!hasPkmData ? (
           <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="物种">{pokemon.speciesName}</Descriptions.Item>
-            <Descriptions.Item label="等级">Lv.{pokemon.level}</Descriptions.Item>
-            {pokemon.nickname && <Descriptions.Item label="昵称">{pokemon.nickname}</Descriptions.Item>}
-            <Descriptions.Item label="性格">{pokemon.natureName || '-'}</Descriptions.Item>
-            <Descriptions.Item label="特性">{pokemon.abilityName || '-'}</Descriptions.Item>
-            <Descriptions.Item label="闪光">{pokemon.isShiny ? <Tag color="gold">✨ 是</Tag> : '否'}</Descriptions.Item>
-            <Descriptions.Item label="蛋">{pokemon.isEgg ? '是 🥚' : '否'}</Descriptions.Item>
-            {pokemon.heldItemName && <Descriptions.Item label="持有物">{pokemon.heldItemName}</Descriptions.Item>}
-            {pokemon.ballName && <Descriptions.Item label="球种">{pokemon.ballName}</Descriptions.Item>}
-            <Descriptions.Item label="来源游戏">{pokemon.originGameName || '-'}</Descriptions.Item>
-            <Descriptions.Item label="初训家">{pokemon.originalTrainerName || '-'}</Descriptions.Item>
+            <Descriptions.Item label={t('showdown.field.species', { ns: 'editor', defaultValue: '物种' })}>{pokemon.speciesName}</Descriptions.Item>
+            <Descriptions.Item label={t('showdown.field.level', { ns: 'editor', defaultValue: '等级' })}>Lv.{pokemon.level}</Descriptions.Item>
+            {pokemon.nickname && <Descriptions.Item label={t('showdown.field.nickname', { ns: 'editor', defaultValue: '昵称' })}>{pokemon.nickname}</Descriptions.Item>}
+            <Descriptions.Item label={t('showdown.field.nature', { ns: 'editor', defaultValue: '性格' })}>{pokemon.natureName || '-'}</Descriptions.Item>
+            <Descriptions.Item label={t('showdown.field.ability', { ns: 'editor', defaultValue: '特性' })}>{pokemon.abilityName || '-'}</Descriptions.Item>
+            <Descriptions.Item label={t('showdown.field.shiny', { ns: 'editor', defaultValue: '闪光' })}>{pokemon.isShiny ? <Tag color="gold">✨ {t('yes', { ns: 'common', defaultValue: '是' })}</Tag> : t('no', { ns: 'common', defaultValue: '否' })}</Descriptions.Item>
+            <Descriptions.Item label={t('bankEdit.egg', { ns: 'editor', defaultValue: '蛋' })}>{pokemon.isEgg ? `${t('yes', { ns: 'common', defaultValue: '是' })} 🥚` : t('no', { ns: 'common', defaultValue: '否' })}</Descriptions.Item>
+            {pokemon.heldItemName && <Descriptions.Item label={t('bankEdit.heldItem', { ns: 'editor', defaultValue: '持有物' })}>{pokemon.heldItemName}</Descriptions.Item>}
+            {pokemon.ballName && <Descriptions.Item label={t('bankEdit.ball', { ns: 'editor', defaultValue: '球种' })}>{pokemon.ballName}</Descriptions.Item>}
+            <Descriptions.Item label={t('bankEdit.originGame', { ns: 'editor', defaultValue: '来源游戏' })}>{pokemon.originGameName || '-'}</Descriptions.Item>
+            <Descriptions.Item label={t('bankEdit.originalTrainer', { ns: 'editor', defaultValue: '初训家' })}>{pokemon.originalTrainerName || '-'}</Descriptions.Item>
             <Descriptions.Item label="TID">{pokemon.tid}</Descriptions.Item>
             <Descriptions.Item label="SID">{pokemon.sid}</Descriptions.Item>
           </Descriptions>
@@ -342,19 +348,19 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
 
       {/* Move-to-save Modal */}
       <Modal
-        title="发送到存档"
+        title={t('bankEdit.sendToSave', { ns: 'editor', defaultValue: '发送到存档' })}
         open={moveModalOpen}
         onOk={handleMoveToSave}
         onCancel={() => setMoveModalOpen(false)}
-        okText="发送"
-        cancelText="取消"
+        okText={t('bankEdit.sendToSave', { ns: 'editor', defaultValue: '发送到存档' })}
+        cancelText={t('cancel', { ns: 'common', defaultValue: '取消' })}
         confirmLoading={moveLoading}
         okButtonProps={{ disabled: !moveTargetSaveId }}
       >
         <div style={{ marginBottom: 16 }}>
-          <Text strong>1. 选择目标存档</Text>
+          <Text strong>{t('bank.targetSaveStep', { ns: 'pages', defaultValue: '1. 选择目标存档' })}</Text>
           <Select
-            placeholder="选择存档..."
+            placeholder={t('bank.selectSavePlaceholder', { ns: 'pages', defaultValue: '选择存档...' })}
             style={{ width: '100%', marginTop: 8 }}
             value={moveTargetSaveId}
             onChange={handleMoveSaveSelected}
@@ -369,7 +375,7 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
 
         {moveSaveDetail && (
           <div style={{ marginBottom: 16 }}>
-            <Text strong>2. 选择目标箱子</Text>
+            <Text strong>{t('bank.targetBoxStep', { ns: 'pages', defaultValue: '2. 选择目标箱子' })}</Text>
             <Radio.Group
               style={{ width: '100%', marginTop: 8 }}
               value={moveTargetBox}
@@ -382,7 +388,7 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
                   return (
                     <Col span={12} key={i}>
                       <Radio value={i}>
-                        {box.boxName || `箱子 ${i + 1}`}
+                        {box.boxName || t('bank.boxLabel', { ns: 'pages', defaultValue: '箱子 {{index}}', index: i + 1 })}
                         <Text type="secondary" style={{ marginLeft: 8 }}>({used}/{capacity})</Text>
                       </Radio>
                     </Col>
@@ -396,13 +402,22 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
         {moveSaveDetail && generation > 0 && moveSaveDetail.generation !== generation && (
           <Alert
             type="info"
-            message={`目标存档世代（Gen${moveSaveDetail.generation}）与宝可梦世代（Gen${generation}）不同，将自动进行兼容转换`}
+            message={t('bankEdit.crossGenConvert', {
+              ns: 'editor',
+              defaultValue: '目标存档世代（Gen{{saveGen}}）与宝可梦世代（Gen{{pokemonGen}}）不同，将自动进行兼容转换',
+              saveGen: moveSaveDetail.generation,
+              pokemonGen: generation,
+            })}
             style={{ marginBottom: 12 }}
             showIcon
           />
         )}
 
-        <Text type="secondary">将 "{pokemon.nickname || pokemon.speciesName}" 发送到目标箱子（自动填充空位）</Text>
+        <Text type="secondary">{t('bankEdit.sendToSaveHint', {
+          ns: 'editor',
+          defaultValue: '将 "{{name}}" 发送到目标箱子（自动填充空位）',
+          name: pokemon.nickname || pokemon.speciesName,
+        })}</Text>
       </Modal>
     </>
   );
@@ -411,9 +426,5 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
 export default BankEditDrawer;
 
 function getErrorMessage(err: unknown, fallback: string): string {
-  if (typeof err === 'object' && err && 'response' in err) {
-    const response = (err as { response?: { data?: { message?: string } } }).response;
-    return response?.data?.message || fallback;
-  }
-  return fallback;
+  return (err as ApiError | undefined)?.response?.data?.message || fallback;
 }

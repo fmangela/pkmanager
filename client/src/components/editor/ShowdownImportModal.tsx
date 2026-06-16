@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Modal, Input, Select, Button, App, Descriptions, Tag, Space } from 'antd';
 import { ImportOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import type { ApiError } from '../../api/axios';
 import { saveFileApi } from '../../api/saveFile';
-import type { ShowdownSetPreviewDto } from '../../api/saveFile';
+import type { PokemonDto, ShowdownSetPreviewDto } from '../../api/saveFile';
 import { VERSION_TO_GAME_ID, getVersionDisplayName } from '../../constants/games';
 
 const { TextArea } = Input;
@@ -12,7 +13,7 @@ interface Props {
   open: boolean;
   saveFileId?: string;
   onClose: () => void;
-  onImported: (pokemon: any) => void;
+  onImported: (pokemon: PokemonDto) => void;
 }
 
 const ShowdownImportModal: React.FC<Props> = ({ open, saveFileId, onClose, onImported }) => {
@@ -56,8 +57,8 @@ const ShowdownImportModal: React.FC<Props> = ({ open, saveFileId, onClose, onImp
       } else {
         message.error(data.error || t('showdownParseFailed', { ns: 'messages', defaultValue: '解析失败' }));
       }
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || t('showdownParseFailed', { ns: 'messages', defaultValue: '解析失败' }));
+    } catch (err: unknown) {
+      message.error((err as ApiError).response?.data?.message || t('showdownParseFailed', { ns: 'messages', defaultValue: '解析失败' }));
     } finally {
       setParsing(false);
     }
@@ -80,8 +81,8 @@ const ShowdownImportModal: React.FC<Props> = ({ open, saveFileId, onClose, onImp
       } else {
         message.error(data.error || t('showdownGenerateFailed', { ns: 'messages', defaultValue: '生成失败' }));
       }
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || t('showdownGenerateFailed', { ns: 'messages', defaultValue: '生成失败' }));
+    } catch (err: unknown) {
+      message.error((err as ApiError).response?.data?.message || t('showdownGenerateFailed', { ns: 'messages', defaultValue: '生成失败' }));
     } finally {
       setGenerating(false);
     }

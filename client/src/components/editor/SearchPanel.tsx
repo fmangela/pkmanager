@@ -6,6 +6,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps } from 'antd';
 import { SearchOutlined, ReloadOutlined, SaveOutlined, FolderOpenOutlined, DeleteOutlined, ExportOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { saveFileApi, type PokemonSearchRequest, type PokemonSearchItemDto, type PokemonDto } from '../../api/saveFile';
 import { bankApi } from '../../api/bank';
 import { useResourceStore } from '../../stores/resourceStore';
@@ -46,6 +47,11 @@ const defaultFilters = (): PokemonSearchRequest => ({
 });
 
 const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
+  const { t } = useTranslation(['editor', 'messages', 'common']);
+  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'editor', defaultValue, ...(options ?? {}) });
+  const ct = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'common', defaultValue, ...(options ?? {}) });
   const { message } = App.useApp();
   const {
     species: speciesList,
@@ -126,11 +132,11 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
       setTotal(res.data.total);
       setPage(res.data.page);
     } catch {
-      message.error('搜索失败');
+      message.error(et('search.searchFailed', '搜索失败'));
     } finally {
       setLoading(false);
     }
-  }, [filters, page, scope, saveFileId, message]);
+  }, [filters, page, scope, saveFileId, message, t]);
 
   // 搜索按钮
   const handleSearch = () => {
@@ -151,19 +157,19 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
 
   // ── 保存 / 加载筛选器 ──
   const handleSaveFilter = () => {
-    const name = prompt('筛选器名称:');
+    const name = prompt(et('search.filterNamePrompt', '筛选器名称:'));
     if (!name) return;
     const list = [...savedFilters.filter(f => f.name !== name), { name, filters: { ...filters } }];
     setSavedFilters(list);
     saveSavedFilters(list);
-    message.success(`已保存「${name}」`);
+    message.success(et('search.filterSaved', '已保存「{{name}}」', { name }));
   };
 
   const handleLoadFilter = (name: string) => {
     const found = savedFilters.find(f => f.name === name);
     if (found) {
       setFilters({ ...found.filters });
-      message.success(`已加载「${name}」`);
+      message.success(et('search.filterLoaded', '已加载「{{name}}」', { name }));
     }
   };
 
@@ -171,7 +177,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
     const list = savedFilters.filter(f => f.name !== name);
     setSavedFilters(list);
     saveSavedFilters(list);
-    message.success(`已删除「${name}」`);
+    message.success(et('search.filterDeleted', '已删除「{{name}}」', { name }));
   };
 
   const handleFilterMenuClick: MenuProps['onClick'] = ({ key }) => {
@@ -185,7 +191,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
   };
 
   const saveMenuItems: MenuProps['items'] = [
-    { key: 'save', label: '保存当前筛选...', icon: <SaveOutlined /> },
+    { key: 'save', label: et('search.saveCurrentFilter', '保存当前筛选...'), icon: <SaveOutlined /> },
     ...(savedFilters.length > 0
       ? [{ type: 'divider' as const, key: 'd1' }]
       : []),
@@ -213,7 +219,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
     const items = selectedRowKeys
       .map(key => rowCacheByKey[String(key)])
       .filter((item): item is PokemonSearchItemDto => !!item?.pkmDataBase64);
-    if (items.length === 0) { message.warning('没有可导出的条目'); return; }
+    if (items.length === 0) { message.warning(et('search.noExportableEntries', '没有可导出的条目')); return; }
     setBatchExportLoading(true);
     try {
       const texts: string[] = [];
@@ -226,7 +232,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
       setBatchExportText(texts.join('\n\n'));
       setBatchExportModalOpen(true);
     } catch (err: unknown) {
-      message.error(getErrorMessage(err, '批量导出失败'));
+      message.error(getErrorMessage(err, et('search.batchExportFailed', '批量导出失败')));
     } finally { setBatchExportLoading(false); }
   };
 
@@ -241,7 +247,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
         setDrawerBankId(record.bankId);
         setDrawerOpen(true);
       } catch {
-        message.error('加载银行详情失败');
+        message.error(et('search.loadBankDetailFailed', '加载银行详情失败'));
       }
     }
   };
@@ -255,32 +261,32 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
       ),
     },
     {
-      title: '物种', dataIndex: 'speciesName', key: 'species', width: 120,
+      title: et('search.colSpecies', '物种'), dataIndex: 'speciesName', key: 'species', width: 120,
     },
     {
-      title: '昵称', dataIndex: 'nickname', key: 'nickname', width: 100,
+      title: et('search.colNickname', '昵称'), dataIndex: 'nickname', key: 'nickname', width: 100,
       render: (n: string) => n || <Text type="secondary">—</Text>,
     },
     {
       title: 'Lv', dataIndex: 'level', key: 'level', width: 48,
     },
     {
-      title: '位置', dataIndex: 'locationLabel', key: 'location', width: 130,
+      title: et('search.colLocation', '位置'), dataIndex: 'locationLabel', key: 'location', width: 130,
       render: (_: string, r: PokemonSearchItemDto) => {
-        if (scope === 'bank') return <Tag>银行</Tag>;
+        if (scope === 'bank') return <Tag>{et('search.bank', '银行')}</Tag>;
         if (!r.locationLabel) return <Text type="secondary">—</Text>;
         const color = r.isParty ? 'blue' : undefined;
         return <Tag color={color}>{r.locationLabel}</Tag>;
       },
     },
     {
-      title: '性格', dataIndex: 'natureName', key: 'nature', width: 70,
+      title: et('search.colNature', '性格'), dataIndex: 'natureName', key: 'nature', width: 70,
     },
     {
-      title: '特性', dataIndex: 'abilityName', key: 'ability', width: 90,
+      title: et('search.colAbility', '特性'), dataIndex: 'abilityName', key: 'ability', width: 90,
     },
     {
-      title: '道具', dataIndex: 'heldItemName', key: 'item', width: 90,
+      title: et('search.colItem', '道具'), dataIndex: 'heldItemName', key: 'item', width: 90,
       render: (n: string | undefined) => n ? <Tag style={{ margin: 0 }}>{n}</Tag> : <Text type="secondary">—</Text>,
     },
     {
@@ -305,32 +311,32 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
         <Segmented
           value={scope}
           onChange={(v) => {
-          setScope(v as 'save' | 'bank');
-          setResults([]);
-          setTotal(0);
-          clearSelection();
-        }}
+            setScope(v as 'save' | 'bank');
+            setResults([]);
+            setTotal(0);
+            clearSelection();
+          }}
           options={[
-            { value: 'save', label: '当前存档' },
-            { value: 'bank', label: '银行' },
+            { value: 'save', label: et('search.scopeSave', '当前存档') },
+            { value: 'bank', label: et('search.scopeBank', '银行') },
           ]}
         />
         <Dropdown menu={{ items: saveMenuItems, onClick: handleFilterMenuClick }} trigger={['click']}>
-          <Button icon={<FolderOpenOutlined />}>筛选器</Button>
+          <Button icon={<FolderOpenOutlined />}>{et('search.filters', '筛选器')}</Button>
         </Dropdown>
       </div>
 
       {/* ── 筛选面板 ── */}
       <Collapse size="small" ghost items={[
         {
-          key: 'basic', label: '基础筛选',
+          key: 'basic', label: et('search.basic', '基础筛选'),
           children: (
             <Row gutter={[12, 8]}>
               <Col xs={24} sm={12} md={8}>
-                <Text type="secondary" style={{ fontSize: 12 }}>物种</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.species', '物种')}</Text>
                 <Select
                   allowClear showSearch
-                  placeholder="任意"
+                  placeholder={et('search.any', '任意')}
                   style={{ width: '100%' }}
                   value={filters.speciesId}
                   onChange={(v) => setN('speciesId', v)}
@@ -340,58 +346,58 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
                 />
               </Col>
               <Col xs={12} sm={6} md={4}>
-                <Text type="secondary" style={{ fontSize: 12 }}>最低等级</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.minLevel', '最低等级')}</Text>
                 <InputNumber min={1} max={100} style={{ width: '100%' }}
                   value={filters.minLevel}
                   onChange={(v) => setN('minLevel', v ?? undefined)} />
               </Col>
               <Col xs={12} sm={6} md={4}>
-                <Text type="secondary" style={{ fontSize: 12 }}>最高等级</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.maxLevel', '最高等级')}</Text>
                 <InputNumber min={1} max={100} style={{ width: '100%' }}
                   value={filters.maxLevel}
                   onChange={(v) => setN('maxLevel', v ?? undefined)} />
               </Col>
               <Col xs={12} sm={6} md={4}>
-                <Text type="secondary" style={{ fontSize: 12 }}>闪光</Text>
-                <Select allowClear placeholder="不限" style={{ width: '100%' }}
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.shiny', '闪光')}</Text>
+                <Select allowClear placeholder={et('search.unlimited', '不限')} style={{ width: '100%' }}
                   value={filters.isShiny}
                   onChange={(v) => setB('isShiny', v)}
                   options={[
-                    { value: true, label: '是' },
-                    { value: false, label: '否' },
+                    { value: true, label: ct('yes', '是') },
+                    { value: false, label: ct('no', '否') },
                   ]} />
               </Col>
               <Col xs={12} sm={6} md={4}>
-                <Text type="secondary" style={{ fontSize: 12 }}>蛋</Text>
-                <Select allowClear placeholder="不限" style={{ width: '100%' }}
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.egg', '蛋')}</Text>
+                <Select allowClear placeholder={et('search.unlimited', '不限')} style={{ width: '100%' }}
                   value={filters.isEgg}
                   onChange={(v) => setB('isEgg', v)}
                   options={[
-                    { value: true, label: '是' },
-                    { value: false, label: '否' },
+                    { value: true, label: ct('yes', '是') },
+                    { value: false, label: ct('no', '否') },
                   ]} />
               </Col>
               <Col xs={12} sm={6} md={4}>
-                <Text type="secondary" style={{ fontSize: 12 }}>性别</Text>
-                <Select allowClear placeholder="不限" style={{ width: '100%' }}
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.gender', '性别')}</Text>
+                <Select allowClear placeholder={et('search.unlimited', '不限')} style={{ width: '100%' }}
                   value={filters.gender}
                   onChange={(v) => setN('gender', v)}
                   options={[
                     { value: 0, label: '♂' },
                     { value: 1, label: '♀' },
-                    { value: 2, label: '无性别' },
+                    { value: 2, label: et('search.genderless', '无性别') },
                   ]} />
               </Col>
             </Row>
           ),
         },
         {
-          key: 'nature-ability', label: '性格 & 特性 & 道具',
+          key: 'nature-ability', label: et('search.natureAbilityItem', '性格 & 特性 & 道具'),
           children: (
             <Row gutter={[12, 8]}>
               <Col xs={24} sm={8}>
-                <Text type="secondary" style={{ fontSize: 12 }}>性格</Text>
-                <Select allowClear showSearch placeholder="任意" style={{ width: '100%' }}
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.nature', '性格')}</Text>
+                <Select allowClear showSearch placeholder={et('search.any', '任意')} style={{ width: '100%' }}
                   value={filters.nature}
                   onChange={(v) => setN('nature', v)}
                   options={natureOptions}
@@ -399,8 +405,8 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
                     (option?.label as string)?.toLowerCase().includes(input.toLowerCase())} />
               </Col>
               <Col xs={24} sm={8}>
-                <Text type="secondary" style={{ fontSize: 12 }}>特性</Text>
-                <Select allowClear showSearch placeholder="任意" style={{ width: '100%' }}
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.ability', '特性')}</Text>
+                <Select allowClear showSearch placeholder={et('search.any', '任意')} style={{ width: '100%' }}
                   value={filters.ability}
                   onChange={(v) => setN('ability', v)}
                   options={abilityOptions}
@@ -408,8 +414,8 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
                     (option?.label as string)?.toLowerCase().includes(input.toLowerCase())} />
               </Col>
               <Col xs={24} sm={8}>
-                <Text type="secondary" style={{ fontSize: 12 }}>持有物</Text>
-                <Select allowClear showSearch placeholder="任意" style={{ width: '100%' }}
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.heldItem', '持有物')}</Text>
+                <Select allowClear showSearch placeholder={et('search.any', '任意')} style={{ width: '100%' }}
                   value={filters.heldItem}
                   onChange={(v) => setN('heldItem', v)}
                   options={itemOptions}
@@ -417,8 +423,8 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
                     (option?.label as string)?.toLowerCase().includes(input.toLowerCase())} />
               </Col>
               <Col xs={24} sm={8}>
-                <Text type="secondary" style={{ fontSize: 12 }}>球种</Text>
-                <Select allowClear showSearch placeholder="任意" style={{ width: '100%' }}
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.ball', '球种')}</Text>
+                <Select allowClear showSearch placeholder={et('search.any', '任意')} style={{ width: '100%' }}
                   value={filters.ball}
                   onChange={(v) => setN('ball', v)}
                   options={ballOptions}
@@ -429,23 +435,23 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
           ),
         },
         {
-          key: 'stats', label: '能力值 (IV / EV)',
+          key: 'stats', label: et('search.stats', '能力值 (IV / EV)'),
           children: (
             <Row gutter={[12, 8]}>
               <Col xs={24} sm={12} md={6}>
-                <Text type="secondary" style={{ fontSize: 12 }}>IV 合计(下限)</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.ivTotalMin', 'IV 合计(下限)')}</Text>
                 <InputNumber min={0} max={186} style={{ width: '100%' }}
                   value={filters.minIVTotal}
                   onChange={(v) => setN('minIVTotal', v ?? undefined)} />
               </Col>
               <Col xs={24} sm={12} md={6}>
-                <Text type="secondary" style={{ fontSize: 12 }}>IV 合计(上限)</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.ivTotalMax', 'IV 合计(上限)')}</Text>
                 <InputNumber min={0} max={186} style={{ width: '100%' }}
                   value={filters.maxIVTotal}
                   onChange={(v) => setN('maxIVTotal', v ?? undefined)} />
               </Col>
               <Col xs={12} sm={8} md={4}>
-                <Text type="secondary" style={{ fontSize: 12 }}>IV HP</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.ivHp', 'IV HP')}</Text>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <InputNumber size="small" min={0} max={31} placeholder="0" style={{ flex: 1 }}
                     value={filters.minIV_HP}
@@ -457,7 +463,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
                 </div>
               </Col>
               <Col xs={12} sm={8} md={4}>
-                <Text type="secondary" style={{ fontSize: 12 }}>IV 攻击</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.ivAtk', 'IV 攻击')}</Text>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <InputNumber size="small" min={0} max={31} placeholder="0" style={{ flex: 1 }}
                     value={filters.minIV_ATK}
@@ -469,7 +475,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
                 </div>
               </Col>
               <Col xs={12} sm={8} md={4}>
-                <Text type="secondary" style={{ fontSize: 12 }}>IV 防御</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.ivDef', 'IV 防御')}</Text>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <InputNumber size="small" min={0} max={31} placeholder="0" style={{ flex: 1 }}
                     value={filters.minIV_DEF}
@@ -481,7 +487,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
                 </div>
               </Col>
               <Col xs={12} sm={8} md={4}>
-                <Text type="secondary" style={{ fontSize: 12 }}>IV 特攻</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.ivSpa', 'IV 特攻')}</Text>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <InputNumber size="small" min={0} max={31} placeholder="0" style={{ flex: 1 }}
                     value={filters.minIV_SPA}
@@ -493,7 +499,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
                 </div>
               </Col>
               <Col xs={12} sm={8} md={4}>
-                <Text type="secondary" style={{ fontSize: 12 }}>IV 特防</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.ivSpd', 'IV 特防')}</Text>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <InputNumber size="small" min={0} max={31} placeholder="0" style={{ flex: 1 }}
                     value={filters.minIV_SPD}
@@ -505,7 +511,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
                 </div>
               </Col>
               <Col xs={12} sm={8} md={4}>
-                <Text type="secondary" style={{ fontSize: 12 }}>IV 速度</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.ivSpe', 'IV 速度')}</Text>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <InputNumber size="small" min={0} max={31} placeholder="0" style={{ flex: 1 }}
                     value={filters.minIV_SPE}
@@ -520,12 +526,12 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
           ),
         },
         {
-          key: 'moves', label: '招式',
+          key: 'moves', label: et('search.moves', '招式'),
           children: (
             <Row gutter={[12, 8]}>
               <Col xs={24}>
-                <Text type="secondary" style={{ fontSize: 12 }}>必须拥有 (ALL — 全部招式都必须拥有)</Text>
-                <Select mode="multiple" allowClear showSearch placeholder="任意"
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.requiredMoves', '必须拥有 (ALL — 全部招式都必须拥有)')}</Text>
+                <Select mode="multiple" allowClear showSearch placeholder={et('search.any', '任意')}
                   style={{ width: '100%' }}
                   value={filters.requiredMoves}
                   onChange={(v) => setArr('requiredMoves', v as number[])}
@@ -534,8 +540,8 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
                     (option?.label as string)?.toLowerCase().includes(input.toLowerCase())} />
               </Col>
               <Col xs={24}>
-                <Text type="secondary" style={{ fontSize: 12 }}>拥有任一 (ANY — 拥有其中任意一个即可)</Text>
-                <Select mode="multiple" allowClear showSearch placeholder="任意"
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.anyMoves', '拥有任一 (ANY — 拥有其中任意一个即可)')}</Text>
+                <Select mode="multiple" allowClear showSearch placeholder={et('search.any', '任意')}
                   style={{ width: '100%' }}
                   value={filters.anyMoves}
                   onChange={(v) => setArr('anyMoves', v as number[])}
@@ -547,12 +553,12 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
           ),
         },
         {
-          key: 'trainer', label: '训练家',
+          key: 'trainer', label: et('search.trainer', '训练家'),
           children: (
             <Row gutter={[12, 8]}>
               <Col xs={24} sm={12}>
-                <Text type="secondary" style={{ fontSize: 12 }}>OT 名称</Text>
-                <Input placeholder="训练家名称" allowClear
+                <Text type="secondary" style={{ fontSize: 12 }}>{et('search.otName', 'OT 名称')}</Text>
+                <Input placeholder={et('search.trainerNamePlaceholder', '训练家名称')} allowClear
                   value={filters.ot_Name}
                   onChange={(e) => setS('ot_Name', e.target.value)} />
               </Col>
@@ -566,16 +572,16 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
           ),
         },
         ...(scope === 'bank' ? [{
-          key: 'legality', label: '合法性',
+          key: 'legality', label: et('search.legality', '合法性'),
           children: (
             <Row gutter={[12, 8]}>
               <Col xs={12} sm={6}>
-                <Select allowClear placeholder="不限" style={{ width: '100%' }}
+                <Select allowClear placeholder={et('search.unlimited', '不限')} style={{ width: '100%' }}
                   value={filters.isLegal}
                   onChange={(v) => setB('isLegal', v)}
                   options={[
-                    { value: true, label: '合法' },
-                    { value: false, label: '不合法' },
+                    { value: true, label: et('legality.legal', '合法') },
+                    { value: false, label: et('legality.illegal', '不合法') },
                   ]} />
               </Col>
             </Row>
@@ -586,23 +592,23 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
       {/* ── 搜索 / 重置 ── */}
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} loading={loading}>
-          搜索
+          {et('search.searchButton', '搜索')}
         </Button>
-        <Button icon={<ReloadOutlined />} onClick={resetAll}>重置</Button>
+        <Button icon={<ReloadOutlined />} onClick={resetAll}>{ct('reset', '重置')}</Button>
         {selectedRowKeys.length > 0 && (
           <Button icon={<ExportOutlined />} loading={batchExportLoading}
             onClick={handleBatchExportShowdown}>
-            Showdown 导出 (已选 {selectedRowKeys.length})
+            {et('search.exportSelected', 'Showdown 导出 (已选 {{count}})', { count: selectedRowKeys.length })}
           </Button>
         )}
         <div style={{ flex: 1 }} />
-        {total > 0 && <Text type="secondary">共 {total} 个结果</Text>}
+        {total > 0 && <Text type="secondary">{et('search.totalResults', '共 {{count}} 个结果', { count: total })}</Text>}
       </div>
 
       {/* ── 结果表格 ── */}
       <div style={{ marginTop: 12 }}>
         {total === 0 && !loading ? (
-          <Empty description="暂无搜索结果 — 请设置筛选条件后点击「搜索」" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <Empty description={et('search.noResults', '暂无搜索结果 — 请设置筛选条件后点击「搜索」')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <Table<PokemonSearchItemDto>
             size="small"
@@ -628,7 +634,7 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
               pageSize: filters.pageSize,
               total,
               showSizeChanger: false,
-              showTotal: (t) => `共 ${t} 个`,
+              showTotal: (count) => et('search.totalResults', '共 {{count}} 个结果', { count }),
               onChange: (p) => { void doSearch(p); },
             }}
             onRow={(record) => ({

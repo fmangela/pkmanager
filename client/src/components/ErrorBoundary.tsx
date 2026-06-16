@@ -1,6 +1,7 @@
 import React from 'react';
 import { Result, Button, Space, Typography } from 'antd';
 import { BugOutlined, ReloadOutlined, CopyOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { useDiagnosticStore } from '../stores/diagnosticStore';
 
 const { Text, Paragraph } = Typography;
@@ -21,6 +22,7 @@ const CrashFallback: React.FC<{
   boundaryName?: string;
   onReset: () => void;
 }> = ({ error, errorInfo, boundaryName, onReset }) => {
+  const { t } = useTranslation('common');
   // We can use hooks here because this component is rendered normally
   // (not during the error-throwing render)
 
@@ -63,7 +65,7 @@ const CrashFallback: React.FC<{
     >
       <Result
         status="error"
-        title="页面遇到了一个错误"
+        title={t('errorBoundary.title', '页面遇到了一个错误')}
         subTitle={
           <Paragraph type="secondary" style={{ maxWidth: 480, margin: '0 auto' }}>
             <Text type="danger" strong>
@@ -72,7 +74,7 @@ const CrashFallback: React.FC<{
             {boundaryName && (
               <>
                 <br />
-                位置: <Text code>{boundaryName}</Text>
+                {t('errorBoundary.location', '位置')}: <Text code>{boundaryName}</Text>
               </>
             )}
           </Paragraph>
@@ -84,21 +86,20 @@ const CrashFallback: React.FC<{
               icon={<ReloadOutlined />}
               onClick={onReset}
             >
-              刷新页面
+              {t('refreshPage', '刷新页面')}
             </Button>
             <Button icon={<CopyOutlined />} onClick={handleCopyError}>
-              复制错误
+              {t('copyError', '复制错误')}
             </Button>
             <Button icon={<BugOutlined />} onClick={handleOpenDiagnostic}>
-              诊断面板
+              {t('diagnosticPanel', '诊断面板')}
             </Button>
           </Space>
         }
       >
-        {/* eslint-disable-next-line react/no-unescaped-entities */}
         <details style={{ maxWidth: 600, margin: '16px auto', textAlign: 'left' }}>
           <summary style={{ cursor: 'pointer', color: '#888' }}>
-            技术详情
+            {t('technicalDetails', '技术详情')}
           </summary>
           <pre
             style={{

@@ -457,7 +457,7 @@ public class ResourceController : ControllerBase
             blank.CurrentLevel = 100;
             blank.Version = version;
 
-            var flags = new bool[Math.Max(1001, GameInfo.GetStrings("en").Move.Count + 1)];
+            var flags = new bool[Math.Max(1001, blank.MaxMoveID + 1)];
             var evo = new EvoCriteria
             {
                 Species = species,

@@ -11,6 +11,7 @@ import { GAME_VERSION_COLORS, GENERATION_MAP, getVersionDisplayName } from '../c
 import GameCover from '../components/GameCover';
 import PageContainer from '../components/PageContainer';
 import { launchLocalSave } from '../lib/localLaunch';
+import type { ApiError } from '../api/axios';
 
 const { Text } = Typography;
 
@@ -36,8 +37,9 @@ const SavesPage: React.FC = () => {
 
     try {
       await launchLocalSave(saveFileId, message, record.filename);
-    } catch (err: any) {
-      message.error(err?.message || err?.response?.data?.message || t('launchFailed', { ns: 'messages', defaultValue: '启动失败' }));
+    } catch (err: unknown) {
+      const apiError = err as ApiError & { message?: string };
+      message.error(apiError.message || apiError.response?.data?.message || t('launchFailed', { ns: 'messages', defaultValue: '启动失败' }));
     } finally {
       setLaunchStates(prev => {
         const next = { ...prev };
@@ -69,8 +71,9 @@ const SavesPage: React.FC = () => {
       await saveFileApi.upload(file);
       message.success(t('uploadSaveSuccess', { ns: 'messages', defaultValue: '存档上传并解析成功！' }));
       fetchSaves();
-    } catch (err: any) {
-      message.error(err.response?.data?.message || t('uploadFailedCheckFormat', { ns: 'messages', defaultValue: '上传失败，请检查文件格式' }));
+    } catch (err: unknown) {
+      const apiError = err as ApiError;
+      message.error(apiError.response?.data?.message || t('uploadFailedCheckFormat', { ns: 'messages', defaultValue: '上传失败，请检查文件格式' }));
     } finally {
       setUploading(false);
     }

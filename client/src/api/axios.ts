@@ -1,6 +1,25 @@
 import axios from 'axios';
 import { useDiagnosticStore } from '../stores/diagnosticStore';
 import i18n from '../i18n/i18n';
+import { getI18nText } from '../i18n/i18n';
+
+export interface ApiError {
+  code?: string;
+  message?: string;
+  config?: {
+    url?: string;
+    method?: string;
+  };
+  response?: {
+    status?: number;
+    data?: {
+      code?: number;
+      message?: string;
+      title?: string;
+      errors?: Record<string, string[] | string>;
+    };
+  };
+}
 
 const apiClient = axios.create({
   baseURL: '/api',
@@ -82,7 +101,7 @@ apiClient.interceptors.response.use(
       const firstError = Array.isArray(data.errors[firstKey])
         ? data.errors[firstKey][0]
         : data.errors[firstKey];
-      const msg = firstError || data.title || '请求参数不合法';
+      const msg = firstError || data.title || getI18nText('api.validationInvalid', undefined, 'messages') || '请求参数不合法';
       error.response.data = { message: msg };
       logApiError(url, method, status, msg);
     }
@@ -97,10 +116,10 @@ apiClient.interceptors.response.use(
     if (!data?.message && !data?.errors) {
       const msg =
         error.code === 'ECONNABORTED'
-          ? `请求超时 (${method} ${url})`
+          ? `${getI18nText('api.timeout', undefined, 'messages') || '请求超时'} (${method} ${url})`
           : error.message === 'Network Error'
-            ? `网络连接失败 (${method} ${url})`
-            : error.message || `${method} ${url} 失败`;
+            ? `${getI18nText('api.networkError', undefined, 'messages') || '网络连接失败'} (${method} ${url})`
+            : error.message || `${method} ${url} ${getI18nText('api.requestFailed', undefined, 'messages') || '失败'}`;
       logApiError(url, method, status || 0, msg);
     }
 
@@ -117,7 +136,7 @@ apiClient.interceptors.response.use(
         useDiagnosticStore.getState().log({
           category: 'auth',
           level: 'warn',
-          message: 'Token 已过期，即将跳转登录页',
+          message: getI18nText('api.tokenExpiredRedirect', undefined, 'messages') || 'Token 已过期，即将跳转登录页',
           context: window.location.href,
         });
       } catch { /* ignore */ }

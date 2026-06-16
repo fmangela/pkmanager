@@ -3,36 +3,11 @@ import {
   Tabs, InputNumber, Switch, Button, App, Spin, Select, Space, Typography, Tooltip,
 } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { saveFileApi, type BagDto, type BagItemDto } from '../../api/saveFile';
 import { useResourceStore } from '../../stores/resourceStore';
 
 const { Text } = Typography;
-
-// Pouch 类型 → 中文名称映射
-const POUCH_LABELS: Record<string, string> = {
-  Items: '道具',
-  Medicine: '药品',
-  TMHMs: '技能机',
-  Berries: '树果',
-  Balls: '精灵球',
-  BattleItems: '战斗道具',
-  KeyItems: '重要物品',
-  ZCrystals: 'Z纯晶',
-  Candy: '糖果',
-  Treasure: '宝藏',
-  Ingredients: '食材',
-  PCItems: '电脑道具',
-  MailItems: '邮件',
-  FreeSpace: '自由空间',
-  MegaStones: '超级石',
-};
-
-const SORT_OPTIONS = [
-  { value: 'index', label: '按索引' },
-  { value: 'name', label: '按名称' },
-  { value: 'count', label: '按数量' },
-  { value: 'emptyLast', label: '空格排末尾' },
-];
 
 /** Augmented item with original slot position preserved through sort */
 interface SlotItem extends BagItemDto {
@@ -61,6 +36,34 @@ interface Props {
 }
 
 const BagPanel: React.FC<Props> = ({ saveFileId }) => {
+  const { t } = useTranslation(['editor', 'messages', 'common']);
+  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'editor', defaultValue, ...(options ?? {}) });
+  const ct = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'common', defaultValue, ...(options ?? {}) });
+  const POUCH_LABELS: Record<string, string> = {
+    Items: et('bag.items', '道具'),
+    Medicine: et('bag.medicine', '药品'),
+    TMHMs: et('bag.tms', '技能机'),
+    Berries: et('bag.berries', '树果'),
+    Balls: et('bag.balls', '精灵球'),
+    BattleItems: et('bag.battleItems', '战斗道具'),
+    KeyItems: et('bag.keyItems', '重要物品'),
+    ZCrystals: et('bag.zCrystals', 'Z纯晶'),
+    Candy: et('bag.candy', '糖果'),
+    Treasure: et('bag.treasure', '宝藏'),
+    Ingredients: et('bag.ingredients', '食材'),
+    PCItems: et('bag.pcItems', '电脑道具'),
+    MailItems: et('bag.mail', '邮件'),
+    FreeSpace: et('bag.freeSpace', '自由空间'),
+    MegaStones: et('bag.megaStones', '超级石'),
+  };
+  const SORT_OPTIONS = [
+    { value: 'index', label: et('bag.sortIndex', '按索引') },
+    { value: 'name', label: et('bag.sortName', '按名称') },
+    { value: 'count', label: et('bag.sortCount', '按数量') },
+    { value: 'emptyLast', label: et('bag.sortEmptyLast', '空格排末尾') },
+  ];
   const [bag, setBag] = useState<BagDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -78,11 +81,11 @@ const BagPanel: React.FC<Props> = ({ saveFileId }) => {
       const data: BagDto = res.data;
       setBag(data);
     } catch {
-      message.error('加载背包失败');
+      message.error(et('bag.loadFailed', '加载背包失败'));
     } finally {
       setLoading(false);
     }
-  }, [saveFileId, message]);
+  }, [saveFileId, message, t]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
   useEffect(() => { fetchBag(); }, [fetchBag]);
@@ -159,16 +162,16 @@ const BagPanel: React.FC<Props> = ({ saveFileId }) => {
     setSaving(true);
     try {
       await saveFileApi.saveBag(saveFileId, bag);
-      message.success('背包已保存');
+      message.success(et('bag.saved', '背包已保存'));
     } catch {
-      message.error('保存背包失败');
+      message.error(et('bag.saveFailed', '保存背包失败'));
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) return <div style={{ padding: 48, textAlign: 'center' }}><Spin /></div>;
-  if (!bag) return <div style={{ padding: 48, textAlign: 'center' }}><Text type="secondary">加载背包失败</Text></div>;
+  if (!bag) return <div style={{ padding: 48, textAlign: 'center' }}><Text type="secondary">{et('bag.loadFailed', '加载背包失败')}</Text></div>;
 
   const cap = bag.capability;
 
@@ -193,7 +196,7 @@ const BagPanel: React.FC<Props> = ({ saveFileId }) => {
         {/* 工具栏 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <Text strong>{POUCH_LABELS[activePouch] || activePouch}</Text>
-          <Text type="secondary">({filteredItems.filter(it => it.count > 0).length} 种道具)</Text>
+          <Text type="secondary">({et('bag.itemKinds', '{{count}} 种道具', { count: filteredItems.filter(it => it.count > 0).length })})</Text>
           <div style={{ flex: 1 }} />
           <Space>
             <Select
@@ -207,12 +210,12 @@ const BagPanel: React.FC<Props> = ({ saveFileId }) => {
               size="small"
               checked={showEmpty}
               onChange={setShowEmpty}
-              checkedChildren="空格"
-              unCheckedChildren="空格"
+              checkedChildren={et('bag.showEmpty', '空格')}
+              unCheckedChildren={et('bag.showEmpty', '空格')}
             />
             <Button type="primary" size="small" icon={<SaveOutlined />}
               loading={saving} onClick={handleSave}>
-              保存
+              {ct('save', '保存')}
             </Button>
           </Space>
         </div>
@@ -240,7 +243,7 @@ const BagPanel: React.FC<Props> = ({ saveFileId }) => {
                     <>
                       <ItemIcon index={item.index} name={itemName} />
                       {cap.hasFavorite && (
-                        <Tooltip title={item.isFavorite ? '已收藏' : '未收藏'}>
+                        <Tooltip title={item.isFavorite ? et('bag.favorite', '已收藏') : et('bag.notFavorite', '未收藏')}>
                           <span
                             onClick={() => toggleFavorite(item.slotPos)}
                             style={{
@@ -289,7 +292,7 @@ const BagPanel: React.FC<Props> = ({ saveFileId }) => {
 
         {filteredItems.length === 0 && (
           <div style={{ textAlign: 'center', padding: 48 }}>
-            <Text type="secondary">此分类中无道具</Text>
+            <Text type="secondary">{et('bag.emptyPouch', '此分类中无道具')}</Text>
           </div>
         )}
       </div>

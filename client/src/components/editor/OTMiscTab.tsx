@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Input, InputNumber, Select, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
+import type { ApiError } from '../../api/axios';
 import type { PokemonDto } from '../../api/saveFile';
 import { resourceApi, type ResourceItem } from '../../api/resource';
 import { useDiagnosticStore } from '../../stores/diagnosticStore';
@@ -11,41 +12,42 @@ interface Props {
   onChange?: () => void;
 }
 
-const CONSOLE_OPTIONS = [
-  { value: 0, label: '日本 (JPN)' },
-  { value: 1, label: '美洲 (USA)' },
-  { value: 2, label: '欧洲 (EUR)' },
-  { value: 3, label: '澳洲 (AUS)' },
-  { value: 4, label: '中国 (CHN)' },
-  { value: 5, label: '韩国 (KOR)' },
-  { value: 6, label: '台湾 (TWN)' },
-];
-
 const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation('editor');
+  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { defaultValue, ...(options ?? {}) });
   const g = generation;
   const ch = () => onChange?.();
   const isGen6Plus = g >= 6;
   const isGen7Plus = g >= 7;
   const isGen8Plus = g >= 8;
   const isGen67 = g === 6 || g === 7;
+  const CONSOLE_OPTIONS = [
+    { value: 0, label: et('otmisc.consoleJpn', '日本 (JPN)') },
+    { value: 1, label: et('otmisc.consoleUsa', '美洲 (USA)') },
+    { value: 2, label: et('otmisc.consoleEur', '欧洲 (EUR)') },
+    { value: 3, label: et('otmisc.consoleAus', '澳洲 (AUS)') },
+    { value: 4, label: et('otmisc.consoleChn', '中国 (CHN)') },
+    { value: 5, label: et('otmisc.consoleKor', '韩国 (KOR)') },
+    { value: 6, label: et('otmisc.consoleTwn', '台湾 (TWN)') },
+  ];
 
   // Geo data
   const [countries, setCountries] = useState<ResourceItem[]>([]);
   const [regions, setRegions] = useState<ResourceItem[]>([]);
 
   useEffect(() => {
-    resourceApi.geoCountries(i18n.language).then(r => setCountries(r.data || [])).catch((err: any) => {
-      useDiagnosticStore.getState().log({ category: 'api', level: 'error', message: '加载国家列表失败', stack: err?.message });
+    resourceApi.geoCountries(i18n.language).then(r => setCountries(r.data || [])).catch((err: unknown) => {
+      useDiagnosticStore.getState().log({ category: 'api', level: 'error', message: 'Failed to load country list', stack: (err as ApiError).message });
     });
   }, [i18n.language]);
 
   useEffect(() => {
     const cid = pokemon.country || 0;
     if (cid > 0) {
-      resourceApi.geoRegions(cid, i18n.language).then(r => setRegions(r.data || [])).catch((err: any) => {
+      resourceApi.geoRegions(cid, i18n.language).then(r => setRegions(r.data || [])).catch((err: unknown) => {
         setRegions([]);
-        useDiagnosticStore.getState().log({ category: 'api', level: 'error', message: `加载地区列表失败 (country=${cid})`, stack: err?.message });
+        useDiagnosticStore.getState().log({ category: 'api', level: 'error', message: `Failed to load region list (country=${cid})`, stack: (err as ApiError).message });
       });
     } else {
       setRegions([]);
@@ -56,10 +58,10 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
     <div>
       {/* 训练家 ID */}
       <div style={sectionStyle}>
-        <div style={sectionTitle}>训练家身份</div>
+        <div style={sectionTitle}>{et('otmisc.identity', '训练家身份')}</div>
         <Space wrap size="middle">
           <div>
-            <div style={labelStyle}>表ID (TID)</div>
+            <div style={labelStyle}>{et('otmisc.tid16', '表ID (TID)')}</div>
             <InputNumber
               min={0} max={65535}
               value={pokemon.tid}
@@ -68,7 +70,7 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
             />
           </div>
           <div>
-            <div style={labelStyle}>里ID (SID)</div>
+            <div style={labelStyle}>{et('otmisc.sid16', '里ID (SID)')}</div>
             <InputNumber
               min={0} max={65535}
               value={pokemon.sid}
@@ -78,7 +80,7 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
           </div>
           {isGen7Plus && (
             <div>
-              <div style={labelStyle}>显示TID (6位)</div>
+              <div style={labelStyle}>{et('otmisc.displayTid', '显示TID (6位)')}</div>
               <Input
                 readOnly
                 value={String(pokemon.tid).padStart(6, '0')}
@@ -91,10 +93,10 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
 
       {/* 训练家名称 */}
       <div style={sectionStyle}>
-        <div style={sectionTitle}>训练家名称</div>
+        <div style={sectionTitle}>{et('otmisc.trainerNameSection', '训练家名称')}</div>
         <Space wrap size="middle">
           <div>
-            <div style={labelStyle}>初训家 (OT)</div>
+            <div style={labelStyle}>{et('otmisc.ot', '初训家 (OT)')}</div>
             <Input
               maxLength={12}
               value={pokemon.originalTrainerName || ''}
@@ -103,21 +105,21 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
             />
           </div>
           <div>
-            <div style={labelStyle}>性别</div>
+            <div style={labelStyle}>{et('otmisc.gender', '性别')}</div>
             <Select
               value={pokemon.originalTrainerGender}
               onChange={(v) => { pokemon.originalTrainerGender = v; ch(); }}
               style={{ width: 90 }}
               options={[
-                { value: 0, label: '男 ♂' },
-                { value: 1, label: '女 ♀' },
+                { value: 0, label: et('otmisc.male', '男 ♂') },
+                { value: 1, label: et('otmisc.female', '女 ♀') },
               ]}
             />
           </div>
           {isGen6Plus && (
             <>
               <div>
-                <div style={labelStyle}>现持有人 (HT)</div>
+                <div style={labelStyle}>{et('otmisc.ht', '现持有人 (HT)')}</div>
                 <Input
                   maxLength={12}
                   value={pokemon.handlingTrainerName || ''}
@@ -126,19 +128,19 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
                 />
               </div>
               <div>
-                <div style={labelStyle}>HT性别</div>
+                <div style={labelStyle}>{et('otmisc.htGender', 'HT性别')}</div>
                 <Select
                   value={pokemon.handlingTrainerGender}
                   onChange={(v) => { pokemon.handlingTrainerGender = v; ch(); }}
                   style={{ width: 90 }}
                   options={[
-                    { value: 0, label: '男 ♂' },
-                    { value: 1, label: '女 ♀' },
+                    { value: 0, label: et('otmisc.male', '男 ♂') },
+                    { value: 1, label: et('otmisc.female', '女 ♀') },
                   ]}
                 />
               </div>
               <div>
-                <div style={labelStyle}>HT语言</div>
+                <div style={labelStyle}>{et('otmisc.htLanguage', 'HT语言')}</div>
                 <Select
                   value={pokemon.handlingTrainerLanguage}
                   onChange={(v) => { pokemon.handlingTrainerLanguage = v; ch(); }}
@@ -163,10 +165,10 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
 
       {/* 亲密度 */}
       <div style={sectionStyle}>
-        <div style={sectionTitle}>亲密度</div>
+        <div style={sectionTitle}>{et('otmisc.friendshipSection', '亲密度')}</div>
         <Space wrap size="middle">
           <div>
-            <div style={labelStyle}>初训家亲密度</div>
+            <div style={labelStyle}>{et('otmisc.otFriendship', '初训家亲密度')}</div>
             <InputNumber
               min={0} max={255}
               value={pokemon.originalTrainerFriendship}
@@ -176,7 +178,7 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
           </div>
           {isGen8Plus && (
             <div>
-              <div style={labelStyle}>现持有人亲密度</div>
+              <div style={labelStyle}>{et('otmisc.htFriendship', '现持有人亲密度')}</div>
               <InputNumber
                 min={0} max={255}
                 value={pokemon.handlingTrainerFriendship}
@@ -187,7 +189,7 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
           )}
           {isGen6Plus && pokemon.affection !== null && pokemon.affection !== undefined && (
             <div>
-              <div style={labelStyle}>好感度 (Amie)</div>
+              <div style={labelStyle}>{et('otmisc.affection', '好感度 (Amie)')}</div>
               <InputNumber
                 min={0} max={255}
                 value={pokemon.affection}
@@ -202,10 +204,10 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
       {/* 3DS 区域 (Gen6-7) */}
       {isGen67 && (
         <div style={sectionStyle}>
-          <div style={sectionTitle}>3DS 区域信息 (Gen6-7)</div>
+          <div style={sectionTitle}>{et('otmisc.regionSection', '3DS 区域信息 (Gen6-7)')}</div>
           <Space wrap size="middle">
             <div>
-              <div style={labelStyle}>国家</div>
+              <div style={labelStyle}>{et('otmisc.country', '国家')}</div>
               <Select size="small" showSearch
                 value={pokemon.country || 0}
                 onChange={(v) => { pokemon.country = v; pokemon.subRegion = 0; ch(); }}
@@ -214,7 +216,7 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
               />
             </div>
             <div>
-              <div style={labelStyle}>地区</div>
+              <div style={labelStyle}>{et('otmisc.region', '地区')}</div>
               <Select size="small" showSearch
                 value={pokemon.subRegion || 0}
                 onChange={(v) => { pokemon.subRegion = v; ch(); }}
@@ -223,7 +225,7 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
               />
             </div>
             <div>
-              <div style={labelStyle}>3DS区域</div>
+              <div style={labelStyle}>{et('otmisc.consoleRegion', '3DS区域')}</div>
               <Select size="small"
                 value={pokemon.consoleRegion || 0}
                 onChange={(v) => { pokemon.consoleRegion = v; ch(); }}
@@ -232,14 +234,14 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
               />
             </div>
             <div>
-              <div style={labelStyle}>收藏</div>
+              <div style={labelStyle}>{et('otmisc.favorite', '收藏')}</div>
               <Select
                 value={pokemon.isFavorite ? 1 : 0}
                 onChange={(v) => { pokemon.isFavorite = v === 1; ch(); }}
                 style={{ width: 80 }}
                 options={[
-                  { value: 0, label: '否' },
-                  { value: 1, label: '是 ★' },
+                  { value: 0, label: et('otmisc.favoriteNo', '否') },
+                  { value: 1, label: et('otmisc.favoriteYes', '是 ★') },
                 ]}
               />
             </div>
@@ -249,7 +251,7 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
 
       {/* 加密信息 */}
       <div style={sectionStyle}>
-        <div style={sectionTitle}>加密信息</div>
+        <div style={sectionTitle}>{et('otmisc.encryptionSection', '加密信息')}</div>
         <Space direction="vertical" style={{ width: '100%' }}>
           <code style={{
             display: 'block', background: '#f5f5f5', padding: '6px 10px',
@@ -269,7 +271,7 @@ const OTMiscTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
       {/* HOME追踪ID */}
       {isGen8Plus && pokemon.homeTracker && (
         <div style={sectionStyle}>
-          <div style={sectionTitle}>HOME 追踪 ID</div>
+          <div style={sectionTitle}>{et('otmisc.homeTracker', 'HOME 追踪 ID')}</div>
           <code style={{
             display: 'block', background: '#f0f0f0', padding: '6px 10px',
             borderRadius: 4, fontSize: 13, fontFamily: 'monospace',

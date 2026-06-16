@@ -1,54 +1,62 @@
 import type { PokemonDto } from '../../api/saveFile';
 
+type TranslateFn = (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
+
 /** Validate basic field ranges before save */
-export function validateFields(p: PokemonDto): string[] {
+export function validateFields(
+  p: PokemonDto,
+  translate: TranslateFn = (_key, defaultValue) => defaultValue,
+): string[] {
   const errs: string[] = [];
-  if (p.species < 1 || p.species > 1025) errs.push('物种ID无效');
-  if (p.level < 1 || p.level > 100) errs.push('等级需在1-100之间');
-  if (p.gender < 0 || p.gender > 2) errs.push('性别无效');
-  if (p.nature < 0 || p.nature > 24) errs.push('性格无效');
-  if (p.form < 0 || p.form > 63) errs.push('形态无效');
-  if ((p.nickname || '').length > 12) errs.push('昵称最多12个字符');
-  if ((p.originalTrainerName || '').length > 12) errs.push('初训家名称最多12个字符');
-  if ((p.handlingTrainerName || '').length > 12) errs.push('现持有人名称最多12个字符');
+  if (p.species < 1 || p.species > 1025) errs.push(translate('validation.speciesInvalid', '物种ID无效'));
+  if (p.level < 1 || p.level > 100) errs.push(translate('validation.levelRange', '等级需在1-100之间'));
+  if (p.gender < 0 || p.gender > 2) errs.push(translate('validation.genderInvalid', '性别无效'));
+  if (p.nature < 0 || p.nature > 24) errs.push(translate('validation.natureInvalid', '性格无效'));
+  if (p.form < 0 || p.form > 63) errs.push(translate('validation.formInvalid', '形态无效'));
+  if ((p.nickname || '').length > 12) errs.push(translate('validation.nicknameLength', '昵称最多12个字符'));
+  if ((p.originalTrainerName || '').length > 12) errs.push(translate('validation.otLength', '初训家名称最多12个字符'));
+  if ((p.handlingTrainerName || '').length > 12) errs.push(translate('validation.htLength', '现持有人名称最多12个字符'));
 
   const ivs = p.ivs || [];
   for (let i = 0; i < 6; i++) {
-    if (ivs[i] < 0 || ivs[i] > 31) { errs.push(`个体值[${['HP','攻击','防御','特攻','特防','速度'][i]}]需在0-31范围`); break; }
+    if (ivs[i] < 0 || ivs[i] > 31) {
+      errs.push(translate('validation.ivRange', '个体值[{{stat}}]需在0-31范围', { stat: ['HP','攻击','防御','特攻','特防','速度'][i] }));
+      break;
+    }
   }
 
   const evs = p.evs || [];
   let evSum = 0;
   for (let i = 0; i < 6; i++) {
-    if (evs[i] < 0 || evs[i] > 252) { errs.push('努力值需在0-252范围'); break; }
+    if (evs[i] < 0 || evs[i] > 252) { errs.push(translate('validation.evRange', '努力值需在0-252范围')); break; }
     evSum += evs[i];
   }
-  if (evSum > 510) errs.push('努力值总和不可超过510');
+  if (evSum > 510) errs.push(translate('validation.evTotal', '努力值总和不可超过510'));
 
-  if (p.tid < 0 || p.tid > 65535) errs.push('表ID需在0-65535范围');
-  if (p.sid < 0 || p.sid > 65535) errs.push('里ID需在0-65535范围');
-  if (p.originalTrainerFriendship < 0 || p.originalTrainerFriendship > 255) errs.push('亲密度需在0-255范围');
+  if (p.tid < 0 || p.tid > 65535) errs.push(translate('validation.tidRange', '表ID需在0-65535范围'));
+  if (p.sid < 0 || p.sid > 65535) errs.push(translate('validation.sidRange', '里ID需在0-65535范围'));
+  if (p.originalTrainerFriendship < 0 || p.originalTrainerFriendship > 255) errs.push(translate('validation.friendshipRange', '亲密度需在0-255范围'));
 
   const moveIds = (p.moves || []).map(m => m.moveId).filter(id => id > 0);
-  if (new Set(moveIds).size < moveIds.length) errs.push('招式不能重复');
+  if (new Set(moveIds).size < moveIds.length) errs.push(translate('validation.duplicateMoves', '招式不能重复'));
 
   // Gen-Specific 范围校验
   if (p.purification != null && (p.purification < -10000 || p.purification > 10000))
-    errs.push('净化值范围异常');
+    errs.push(translate('validation.purificationRange', '净化值范围异常'));
   if (p.shinyLeaf != null && (p.shinyLeaf < 0 || p.shinyLeaf > 255))
-    errs.push('闪光叶原始值需在0-255范围');
+    errs.push(translate('validation.shinyLeafRange', '闪光叶原始值需在0-255范围'));
   if (p.pokeStarFame != null && (p.pokeStarFame < 0 || p.pokeStarFame > 255))
-    errs.push('PokeStarFame 需在0-255范围');
+    errs.push(translate('validation.pokeStarFameRange', 'PokeStarFame 需在0-255范围'));
   if (p.fullness != null && (p.fullness < 0 || p.fullness > 255))
-    errs.push('饱腹度需在0-255范围');
+    errs.push(translate('validation.fullnessRange', '饱腹度需在0-255范围'));
   if (p.enjoyment != null && (p.enjoyment < 0 || p.enjoyment > 255))
-    errs.push('愉悦度需在0-255范围');
+    errs.push(translate('validation.enjoymentRange', '愉悦度需在0-255范围'));
   if (p.spirit != null && (p.spirit < 0 || p.spirit > 255))
-    errs.push('精神需在0-255范围');
+    errs.push(translate('validation.spiritRange', '精神需在0-255范围'));
   if (p.mood != null && (p.mood < 0 || p.mood > 255))
-    errs.push('心情需在0-255范围');
+    errs.push(translate('validation.moodRange', '心情需在0-255范围'));
   if (p.combatPower != null && p.combatPower < 0)
-    errs.push('CP不能为负');
+    errs.push(translate('validation.combatPowerRange', 'CP不能为负'));
 
   return errs;
 }

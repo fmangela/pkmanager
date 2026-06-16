@@ -4,13 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { authApi } from '../api/auth';
 import { useResourceStore } from '../stores/resourceStore';
 
-const LANG_OPTIONS = [
+const LANGUAGE_OPTIONS = [
   { value: 'zh-Hans', label: '简体中文' },
   { value: 'en', label: 'English' },
-];
+] as const;
 
 const LanguageSwitcher: React.FC = () => {
-  const { i18n, t } = useTranslation('messages');
+  const { i18n, t } = useTranslation(['messages', 'common']);
   const { message } = App.useApp();
   const loadResources = useResourceStore((s) => s.loadAll);
 
@@ -24,7 +24,7 @@ const LanguageSwitcher: React.FC = () => {
     } catch {
       localStorage.setItem('pkmanager_lang', prev);
       await i18n.changeLanguage(prev);
-      message.error(t('saveFailed', '保存失败'));
+      message.error(t('saveFailed', { defaultValue: '保存失败' }));
     }
   };
 
@@ -33,7 +33,7 @@ const LanguageSwitcher: React.FC = () => {
       size="small"
       style={{ width: 128 }}
       value={i18n.language}
-      options={LANG_OPTIONS}
+      options={LANGUAGE_OPTIONS.map((option) => ({ ...option }))}
       onChange={handleChange}
     />
   );

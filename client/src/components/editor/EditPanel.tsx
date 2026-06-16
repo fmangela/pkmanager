@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import {
   Drawer, Tabs, Button, App, Space, Typography,
 } from 'antd';
+import { useTranslation } from 'react-i18next';
+import type { ApiError } from '../../api/axios';
 import {
   SaveOutlined, BankOutlined, CopyOutlined, ExportOutlined,
   AppstoreOutlined, EnvironmentOutlined, BarChartOutlined,
@@ -46,7 +48,12 @@ const panelTabLabel = (icon: React.ReactNode, label: string) => (
   </Space>
 );
 
+function applyPokemonUpdate(target: PokemonDto, updated: PokemonDto): void {
+  Object.assign(target, updated);
+}
+
 const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, boxIndex, slotIndex, isParty, boxCount, onClose, onSaved }) => {
+  const { t } = useTranslation(['editor', 'messages', 'common']);
   const [loading, setLoading] = useState(false);
   const [legality, setLegality] = useState<{
     status: LegalityStatus;
@@ -64,12 +71,18 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
 
   const { loadAll } = useResourceStore();
   const { message } = App.useApp();
+  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'editor', defaultValue, ...(options ?? {}) });
+  const mt = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'messages', defaultValue, ...(options ?? {}) });
+  const ct = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'common', defaultValue, ...(options ?? {}) });
 
   // editSnapshot 在每次渲染时重新计算（pokemon 是 mutate-in-place 的同一引用）
   const editSnapshot = pokemon ? buildEditRequest(pokemon) : {};
 
   const handleExportShowdown = async () => {
-    if (!pokemon?.pkmDataBase64) { message.warning('缺少宝可梦数据，无法导出'); return; }
+    if (!pokemon?.pkmDataBase64) { message.warning(et('bankEdit.missingPokemonDataExport', '缺少宝可梦数据，无法导出')); return; }
     setExportLoading(true);
     try {
       const res = await saveFileApi.exportShowdown({
@@ -79,7 +92,7 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
       setExportText(res.data);
       setShowExport(true);
     } catch (err: unknown) {
-      message.error(getErrorMessage(err, '导出失败'));
+      message.error(getErrorMessage(err, mt('exportFailed', '导出失败')));
     } finally { setExportLoading(false); }
   };
 
@@ -97,11 +110,11 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
 
   const handleSave = async () => {
     const b64 = pokemon.pkmDataBase64;
-    if (!b64) { message.error('无法识别宝可梦数据'); return; }
-    if (!saveFileId) { message.error('缺少存档ID'); return; }
+    if (!b64) { message.error(et('editPanel.missingPokemonData', '无法识别宝可梦数据')); return; }
+    if (!saveFileId) { message.error(et('editPanel.missingSaveId', '缺少存档ID')); return; }
 
-    const errors = validateFields(pokemon);
-    if (errors.length > 0) { message.error(`字段校验失败: ${errors.join('; ')}`); return; }
+    const errors = validateFields(pokemon, (key, defaultValue, options) => et(key, defaultValue, options));
+    if (errors.length > 0) { message.error(et('bankEdit.validationFailed', '字段校验失败: {{errors}}', { errors: errors.join('; ') })); return; }
 
     const editSnapshot = buildEditRequest(pokemon);
     setLoading(true);
@@ -120,22 +133,18 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
       });
 
       // Update pokemon with backend-verified data immediately
-      if (updated) {
-        for (const key of Object.keys(updated)) {
-          (pokemon as any)[key] = (updated as any)[key];
-        }
-      }
+      if (updated) applyPokemonUpdate(pokemon, updated);
       notifyChange();
       if (result.isValid) {
-        message.success('修改已保存！');
+        message.success(et('editPanel.saved', '修改已保存！'));
       } else {
-        message.warning('已保存（⚠️ 宝可梦不合法）');
+        message.warning(et('editPanel.savedIllegal', '已保存（⚠️ 宝可梦不合法）'));
       }
       // Let parent reload in background (won't affect current display)
       setTimeout(() => onSaved(), 200);
       setSaveKey(k => k + 1);  // force remount Tabs to clean stale internal state
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || '保存失败');
+    } catch (err: unknown) {
+      message.error(getErrorMessage(err, mt('saveFailed', '保存失败')));
     } finally {
       setLoading(false);
     }
@@ -143,7 +152,7 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
 
   const handleFix = async (fixAction: string) => {
     const b64 = pokemon.pkmDataBase64;
-    if (!b64) { message.error('缺少宝可梦数据'); return; }
+    if (!b64) { message.error(et('bankEdit.missingPokemonDataEdit', '该记录缺少原始数据，无法编辑')); return; }
     const editSnapshot = buildEditRequest(pokemon);
     setLoading(true);
     try {
@@ -162,17 +171,17 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
           judgements: result.judgements,
         });
         notifyChange();
-        message.success(`修复完成: ${result.appliedFixes.join(', ')}`);
+        message.success(et('editPanel.fixDone', '修复完成: {{fixes}}', { fixes: result.appliedFixes.join(', ') }));
         if (result.failedFixes.length > 0) {
-          message.warning(`部分修复失败: ${result.failedFixes.join(', ')}`);
+          message.warning(et('editPanel.fixPartialFailed', '部分修复失败: {{fixes}}', { fixes: result.failedFixes.join(', ') }));
         }
       } else {
         message.warning(result.failedFixes.length > 0
-          ? `修复失败: ${result.failedFixes.join(', ')}`
-          : '修复不适用');
+          ? et('editPanel.fixFailed', '修复失败: {{fixes}}', { fixes: result.failedFixes.join(', ') })
+          : et('editPanel.fixNotApplicable', '修复不适用'));
       }
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || '修复失败');
+    } catch (err: unknown) {
+      message.error(getErrorMessage(err, et('editPanel.fixNotApplicable', '修复不适用')));
     } finally {
       setLoading(false);
     }
@@ -190,16 +199,16 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
         report: report.report,
         judgements: report.judgements,
       });
-      message.info('合法性验证完成');
+      message.info(et('editPanel.validateDone', '合法性验证完成'));
     } catch {
-      message.error('验证失败');
+      message.error(et('editPanel.validateFailed', '验证失败'));
     }
   };
 
   const tabItems = [
     {
       key: 'main',
-      label: panelTabLabel(<AppstoreOutlined />, '基本信息'),
+      label: panelTabLabel(<AppstoreOutlined />, et('editPanel.tabMain', '基本信息')),
       children: <MainTab pokemon={pokemon} generation={generation} onChange={notifyChange}
         saveFileId={saveFileId} boxIndex={boxIndex} slotIndex={slotIndex} isParty={isParty}
         editSnapshot={editSnapshot}
@@ -212,44 +221,44 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
           // 触发父层刷新箱子/队伍列表 + 脱壳忍者出现
           onSaved();
           if (result.shedinja) {
-            message.success(`脱壳忍者已生成至 ${result.shedinjaLocation}`);
+            message.success(et('editPanel.shedinjaGenerated', '脱壳忍者已生成至 {{location}}', { location: result.shedinjaLocation }));
           }
         }}
       />,
     },
     {
       key: 'met',
-      label: panelTabLabel(<EnvironmentOutlined />, '相遇信息'),
+      label: panelTabLabel(<EnvironmentOutlined />, et('editPanel.tabMet', '相遇信息')),
       children: <MetTab pokemon={pokemon} generation={generation} onChange={notifyChange} saveFileId={saveFileId} boxCount={boxCount} onGenerated={onSaved} />,
     },
     {
       key: 'stats',
-      label: panelTabLabel(<BarChartOutlined />, '能力值'),
+      label: panelTabLabel(<BarChartOutlined />, et('editPanel.tabStats', '能力值')),
       children: <StatsTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
     },
     {
       key: 'moves',
-      label: panelTabLabel(<ThunderboltOutlined />, '招式'),
+      label: panelTabLabel(<ThunderboltOutlined />, et('editPanel.tabMoves', '招式')),
       children: <MovesTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
     },
     {
       key: 'otmisc',
-      label: panelTabLabel(<IdcardOutlined />, '训练家/杂项'),
+      label: panelTabLabel(<IdcardOutlined />, et('editPanel.tabOtMisc', '训练家/杂项')),
       children: <OTMiscTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
     },
     {
       key: 'cosmetic',
-      label: panelTabLabel(<SkinOutlined />, '外观/装饰'),
+      label: panelTabLabel(<SkinOutlined />, et('editPanel.tabCosmetic', '外观/装饰')),
       children: <CosmeticTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
     },
     {
       key: 'genspecific',
-      label: panelTabLabel(<ClusterOutlined />, '世代专属'),
+      label: panelTabLabel(<ClusterOutlined />, et('editPanel.tabGenSpecific', '世代专属')),
       children: <GenSpecificTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
     },
     {
       key: 'legality',
-      label: panelTabLabel(<SafetyCertificateOutlined />, '合法性'),
+      label: panelTabLabel(<SafetyCertificateOutlined />, et('editPanel.tabLegality', '合法性')),
       children: (
         <LegalityTab
           status={legality?.status || 'Legal'}
@@ -265,15 +274,15 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
   ];
 
   const positionLabel = isParty
-    ? `随行位置 ${slotIndex != null ? slotIndex + 1 : '—'}`
+    ? et('editPanel.positionParty', '随行位置 {{index}}', { index: slotIndex != null ? slotIndex + 1 : '—' })
     : boxIndex != null && boxIndex >= 0 && slotIndex != null
-      ? `Box ${boxIndex + 1} · 槽位 ${slotIndex + 1}`
-      : '存档宝可梦';
+      ? et('editPanel.positionBox', 'Box {{box}} · 槽位 {{slot}}', { box: boxIndex + 1, slot: slotIndex + 1 })
+      : et('editPanel.positionSave', '存档宝可梦');
   const subtitleParts = [
     positionLabel,
     pokemon.languageName,
     pokemon.natureName,
-    pokemon.heldItemName || '无持有物',
+    pokemon.heldItemName || et('editPanel.noHeldItem', '无持有物'),
   ].filter(Boolean);
   const legalityTone = legality?.status === 'Illegal'
     ? 'danger'
@@ -283,15 +292,15 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
         ? 'success'
         : 'neutral';
   const legalityLabel = legality?.status === 'Illegal'
-    ? '不合法'
+    ? et('bankEdit.illegal', '不合法')
     : legality?.status === 'Fishy'
-      ? '可疑'
+      ? et('bankEdit.fishy', '可疑')
       : legality?.status === 'Legal'
-        ? '合法'
-        : '待验证';
+        ? et('bankEdit.legal', '合法')
+        : et('editPanel.legalityPending', '待验证');
   const legalityHint = legality?.report
-    ? '已同步最近一次验证结果'
-    : '建议保存前执行验证';
+    ? et('editPanel.legalityHintSynced', '已同步最近一次验证结果')
+    : et('editPanel.legalityHintSuggest', '建议保存前执行验证');
 
   return (
     <Drawer
@@ -303,17 +312,17 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
               <PokemonSprite speciesId={pokemon.species} width={56} height={56} />
             </div>
             <div className="pokemon-editor-drawer__titles">
-              <Text className="pokemon-editor-drawer__eyebrow">宝可梦控制台</Text>
+              <Text className="pokemon-editor-drawer__eyebrow">{et('editPanel.consoleTitle', '宝可梦控制台')}</Text>
               <div className="pokemon-editor-drawer__title-row">
                 <span className="pokemon-editor-drawer__title">{pokemon.nickname || pokemon.speciesName} Lv.{pokemon.level}</span>
-                {pokemon.isShiny && <span className="app-status-chip is-warning">闪光</span>}
-                {pokemon.isEgg && <span className="app-status-chip">蛋</span>}
+                {pokemon.isShiny && <span className="app-status-chip is-warning">{et('editPanel.shiny', '闪光')}</span>}
+                {pokemon.isEgg && <span className="app-status-chip">{et('bankEdit.egg', '蛋')}</span>}
               </div>
               <Text className="pokemon-editor-drawer__subtitle">{subtitleParts.join(' · ')}</Text>
             </div>
           </div>
           <div className={`pokemon-editor-drawer__status-card is-${legalityTone}`}>
-            <span className="pokemon-editor-drawer__status-label">合法性</span>
+            <span className="pokemon-editor-drawer__status-label">{et('editPanel.legalityTitle', '合法性')}</span>
             <strong className="pokemon-editor-drawer__status-value">{legalityLabel}</strong>
             <span className="pokemon-editor-drawer__status-hint">{legalityHint}</span>
           </div>
@@ -325,8 +334,8 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
       footer={
         <div className="pokemon-editor-drawer__footer">
           <div className="pokemon-editor-drawer__footer-secondary">
-            <Button icon={<CopyOutlined />} size="small" disabled>复制</Button>
-            <Button icon={<BankOutlined />} size="small" disabled>存入银行</Button>
+            <Button icon={<CopyOutlined />} size="small" disabled>{et('editPanel.copy', '复制')}</Button>
+            <Button icon={<BankOutlined />} size="small" disabled>{et('editPanel.storeBank', '存入银行')}</Button>
           </div>
           <div className="pokemon-editor-drawer__footer-primary">
             <Button
@@ -336,11 +345,11 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
               disabled={!pokemon?.pkmDataBase64}
               onClick={handleExportShowdown}
             >
-              Showdown 导出
+              {et('bankEdit.showdownExport', 'Showdown 导出')}
             </Button>
-            <Button onClick={onClose}>取消</Button>
+            <Button onClick={onClose}>{ct('cancel', '取消')}</Button>
             <Button type="primary" icon={<SaveOutlined />} loading={loading} onClick={handleSave}>
-              保存修改
+              {et('bankEdit.saveChanges', '保存修改')}
             </Button>
           </div>
         </div>
@@ -367,9 +376,5 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
 export default EditPanel;
 
 function getErrorMessage(err: unknown, fallback: string): string {
-  if (typeof err === 'object' && err && 'response' in err) {
-    const response = (err as { response?: { data?: { message?: string } } }).response;
-    return response?.data?.message || fallback;
-  }
-  return fallback;
+  return (err as ApiError | undefined)?.response?.data?.message || fallback;
 }

@@ -5,6 +5,8 @@ import {
 import {
   RocketOutlined, ArrowRightOutlined, WarningOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
+import type { ApiError } from '../../api/axios';
 import type { PokemonDto } from '../../api/saveFile';
 import { evolutionApi, type EvolutionPathDto, type EvolveResultDto } from '../../api/evolution';
 import PokemonSprite from '../PokemonSprite';
@@ -25,6 +27,11 @@ const EvolutionModal: React.FC<Props> = ({
   open, pokemon, saveFileId, boxIndex, slotIndex, isParty,
   editSnapshot, onClose, onEvolved,
 }) => {
+  const { t } = useTranslation(['editor', 'common']);
+  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'editor', defaultValue, ...(options ?? {}) });
+  const ct = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'common', defaultValue, ...(options ?? {}) });
   const [loading, setLoading] = useState(false);
   const [evolving, setEvolving] = useState(false);
   const [pathData, setPathData] = useState<EvolutionPathDto | null>(null);
@@ -49,11 +56,11 @@ const EvolutionModal: React.FC<Props> = ({
       // Select the first available option by default
       const firstAvailable = res.data.options.findIndex(o => o.isAvailable);
       if (firstAvailable >= 0) setSelectedIdx(firstAvailable);
-    }).catch(err => {
-      message.error(err?.response?.data?.message || '获取进化路径失败');
+    }).catch((err: unknown) => {
+      message.error((err as ApiError).response?.data?.message || et('evolution.loadPathsFailed', '获取进化路径失败'));
       onClose();
     }).finally(() => setLoading(false));
-  }, [open, pokemon.pkmDataBase64, saveFileId]);
+  }, [editSnapshot, et, message, onClose, open, pokemon.pkmDataBase64, saveFileId]);
 
   const handleEvolve = async () => {
     const option = pathData?.options[selectedIdx];
@@ -76,12 +83,15 @@ const EvolutionModal: React.FC<Props> = ({
       const result: EvolveResultDto = res.data;
       if (result.success) {
         onEvolved(result);
-        message.success(`${fromSpeciesName} 已进化为 ${option.speciesName}！`);
+        message.success(et('evolution.success', '{{from}} 已进化为 {{to}}！', {
+          from: fromSpeciesName,
+          to: option.speciesName,
+        }));
       } else {
-        message.error(result.error || '进化失败');
+        message.error(result.error || et('evolution.failed', '进化失败'));
       }
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || '进化失败');
+    } catch (err: unknown) {
+      message.error((err as ApiError).response?.data?.message || et('evolution.failed', '进化失败'));
     } finally {
       setEvolving(false);
     }
@@ -94,9 +104,9 @@ const EvolutionModal: React.FC<Props> = ({
 
   if (loading) {
     return (
-      <Modal title="一键进化" open={open} onCancel={onClose} footer={null}>
+      <Modal title={et('evolution.title', '一键进化')} open={open} onCancel={onClose} footer={null}>
         <div style={{ textAlign: 'center', padding: 32 }}>
-          <Spin tip="分析进化路径..." />
+          <Spin tip={et('evolution.loading', '分析进化路径...')} />
         </div>
       </Modal>
     );
@@ -104,13 +114,13 @@ const EvolutionModal: React.FC<Props> = ({
 
   if (!pathData || pathData.options.length === 0) {
     return (
-      <Modal title="一键进化" open={open} onCancel={onClose} footer={null}>
+      <Modal title={et('evolution.title', '一键进化')} open={open} onCancel={onClose} footer={null}>
         <div style={{ textAlign: 'center', padding: 24 }}>
           <WarningOutlined style={{ fontSize: 32, color: '#faad14' }} />
           <p style={{ marginTop: 12, fontSize: 15, color: '#666' }}>
-            此宝可梦无法继续进化
+            {et('evolution.noFurtherEvolution', '此宝可梦无法继续进化')}
           </p>
-          <Button onClick={onClose} style={{ marginTop: 16 }}>关闭</Button>
+          <Button onClick={onClose} style={{ marginTop: 16 }}>{ct('close', '关闭')}</Button>
         </div>
       </Modal>
     );
@@ -120,18 +130,18 @@ const EvolutionModal: React.FC<Props> = ({
   if (!pathData.hasBranchingPaths && selectedOption) {
     return (
       <Modal
-        title="一键进化"
+        title={et('evolution.title', '一键进化')}
         open={open}
         onCancel={onClose}
         footer={[
-          <Button key="cancel" onClick={onClose}>取消</Button>,
+          <Button key="cancel" onClick={onClose}>{ct('cancel', '取消')}</Button>,
           <Button
             key="evolve" type="primary" danger
             icon={<RocketOutlined />}
             loading={evolving}
             onClick={handleEvolve}
           >
-            确认进化 · 无法回退
+            {et('evolution.confirmNoRollback', '确认进化 · 无法回退')}
           </Button>,
         ]}
       >
@@ -157,8 +167,8 @@ const EvolutionModal: React.FC<Props> = ({
             showIcon
             icon={<WarningOutlined />}
             message={selectedOption.isAvailable
-              ? '进化后无法回退'
-              : '当前条件不足，进化时会自动补足可写回条件'}
+              ? et('evolution.noRollback', '进化后无法回退')
+              : et('evolution.autoFixConditions', '当前条件不足，进化时会自动补足可写回条件')}
             style={{ marginTop: 16, textAlign: 'left' }}
           />
 
@@ -168,7 +178,7 @@ const EvolutionModal: React.FC<Props> = ({
               onChange={e => setCreateShedinja(e.target.checked)}
               style={{ marginTop: 12 }}
             >
-              同时生成脱壳忍者（需要空位）
+              {et('evolution.createShedinja', '同时生成脱壳忍者（需要空位）')}
             </Checkbox>
           )}
         </div>
@@ -182,19 +192,19 @@ const EvolutionModal: React.FC<Props> = ({
 
   return (
     <Modal
-      title="一键进化 — 选择进化路径"
+      title={et('evolution.branchingTitle', '一键进化 — 选择进化路径')}
       open={open}
       onCancel={onClose}
       width={520}
       footer={[
-        <Button key="cancel" onClick={onClose}>取消</Button>,
+        <Button key="cancel" onClick={onClose}>{ct('cancel', '取消')}</Button>,
         <Button
           key="evolve" type="primary" danger
           icon={<RocketOutlined />}
           loading={evolving}
           onClick={handleEvolve}
         >
-          确认进化 · 无法回退
+          {et('evolution.confirmNoRollback', '确认进化 · 无法回退')}
         </Button>,
       ]}
     >
@@ -202,7 +212,7 @@ const EvolutionModal: React.FC<Props> = ({
         <Alert
           type="info"
           showIcon
-          message="部分目标当前条件不足，但进化时会自动补足可写回条件"
+          message={et('evolution.partialUnavailable', '部分目标当前条件不足，但进化时会自动补足可写回条件')}
           style={{ marginBottom: 16 }}
         />
       )}
@@ -211,7 +221,7 @@ const EvolutionModal: React.FC<Props> = ({
         type="warning"
         showIcon
         icon={<WarningOutlined />}
-        message="进化后无法回退，请选择目标"
+        message={et('evolution.chooseTargetWarning', '进化后无法回退，请选择目标')}
         style={{ marginBottom: 16 }}
       />
 
@@ -223,7 +233,7 @@ const EvolutionModal: React.FC<Props> = ({
         {availableOptions.map((o, i) => (
           <Tooltip
             key={i}
-            title={o.isAvailable ? o.methodLabel : (o.blockReason || '将自动补足条件')}
+            title={o.isAvailable ? o.methodLabel : (o.blockReason || et('evolution.autoFulfill', '将自动补足条件'))}
           >
             <div
               onClick={() => { setSelectedIdx(i); setCreateShedinja(false); }}
@@ -254,7 +264,7 @@ const EvolutionModal: React.FC<Props> = ({
               </Tag>
               {!o.isAvailable && (
                 <div style={{ marginTop: 4, fontSize: 10, color: '#ad6800' }}>
-                  将自动补足
+                  {et('evolution.autoFulfill', '将自动补足')}
                 </div>
               )}
             </div>
@@ -268,7 +278,7 @@ const EvolutionModal: React.FC<Props> = ({
           onChange={e => setCreateShedinja(e.target.checked)}
           style={{ marginTop: 16 }}
         >
-          同时生成脱壳忍者（需要空位）
+          {et('evolution.createShedinja', '同时生成脱壳忍者（需要空位）')}
         </Checkbox>
       )}
     </Modal>

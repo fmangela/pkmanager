@@ -9,6 +9,7 @@ import {
   UnorderedListOutlined, ExportOutlined,
   SwapOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { PokemonDto } from '../api/saveFile';
 import { saveFileApi, type SaveFileInfo, type SaveFileDetail } from '../api/saveFile';
 import { bankApi, type BankListItem } from '../api/bank';
@@ -17,6 +18,7 @@ import BankEditDrawer from '../components/bank/BankEditDrawer';
 import PokemonSprite from '../components/PokemonSprite';
 import { getStoredSpriteStyle, type SpriteStyle } from '../lib/spriteUrl';
 import PageContainer from '../components/PageContainer';
+import type { ApiError } from '../api/axios';
 
 const { Text } = Typography;
 
@@ -37,6 +39,7 @@ const SORT_OPTIONS = [
 ];
 
 const BankPage: React.FC = () => {
+  const { t } = useTranslation(['pages', 'messages', 'common']);
   const [pokemon, setPokemon] = useState<BankListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -94,11 +97,11 @@ const BankPage: React.FC = () => {
       setPokemon(res.data.items);
       setTotal(res.data.total);
     } catch {
-      message.error('加载银行数据失败');
+      message.error(t('loadBankFailed', { ns: 'messages', defaultValue: '加载银行数据失败' }));
     } finally {
       setLoading(false);
     }
-  }, [generation, isShiny, nature, ability, search, sortBy, page, pageSize, message]);
+  }, [generation, isShiny, nature, ability, search, sortBy, page, pageSize, message, t]);
 
   // Load resources once on mount
   useEffect(() => { loadAll(); }, [loadAll]);
@@ -114,11 +117,11 @@ const BankPage: React.FC = () => {
   const handleDelete = async (id: string) => {
     try {
       await bankApi.delete(id);
-      message.success('已从银行移除');
+      message.success(t('removedFromBank', { ns: 'messages', defaultValue: '已从银行移除' }));
       setSelectedRowKeys(prev => prev.filter(k => k !== id));
       fetchBank();
     } catch {
-      message.error('删除失败');
+      message.error(t('deleteFailed', { ns: 'messages', defaultValue: '删除失败' }));
     }
   };
 
@@ -127,11 +130,15 @@ const BankPage: React.FC = () => {
   const handleBatchDelete = async () => {
     try {
       await bankApi.batchDelete(selectedRowKeys);
-      message.success(`已删除 ${selectedRowKeys.length} 只宝可梦`);
+      message.success(t('batchDeleteSuccess', {
+        ns: 'messages',
+        defaultValue: '已删除 {{count}} 只宝可梦',
+        count: selectedRowKeys.length,
+      }));
       setSelectedRowKeys([]);
       fetchBank();
     } catch {
-      message.error('批量删除失败');
+      message.error(t('batchDeleteFailed', { ns: 'messages', defaultValue: '批量删除失败' }));
     }
   };
 
@@ -147,9 +154,9 @@ const BankPage: React.FC = () => {
       a.download = 'pokemon_export.zip';
       a.click();
       URL.revokeObjectURL(url);
-      message.success(`已导出`);
+      message.success(t('export', { ns: 'common', defaultValue: '导出' }));
     } catch {
-      message.error('导出失败');
+      message.error(t('exportFailed', { ns: 'messages', defaultValue: '导出失败' }));
     }
   };
 
@@ -164,7 +171,7 @@ const BankPage: React.FC = () => {
       const res = await saveFileApi.list();
       setMoveSaves(res.data || []);
     } catch {
-      message.error('加载存档列表失败');
+      message.error(t('loadSaveListFailed', { ns: 'messages', defaultValue: '加载存档列表失败' }));
     }
   };
 
@@ -175,7 +182,7 @@ const BankPage: React.FC = () => {
       const res = await saveFileApi.getDetail(saveFileId);
       setMoveSaveDetail(res.data);
     } catch {
-      message.error('加载存档详情失败');
+      message.error(t('loadSaveDetailFailed', { ns: 'messages', defaultValue: '加载存档详情失败' }));
     }
   };
 
@@ -190,15 +197,25 @@ const BankPage: React.FC = () => {
       });
       const { movedCount, failedCount } = res.data;
       if (failedCount > 0) {
-        message.warning(`已移动 ${movedCount} 只，${failedCount} 只未移动`);
+        message.warning(t('moveToSaveBatchPartial', {
+          ns: 'messages',
+          defaultValue: '已移动 {{moved}} 只，{{failed}} 只未移动',
+          moved: movedCount,
+          failed: failedCount,
+        }));
       } else {
-        message.success(`已移动 ${movedCount} 只宝可梦到存档`);
+        message.success(t('moveToSaveBatchSuccess', {
+          ns: 'messages',
+          defaultValue: '已移动 {{count}} 只宝可梦到存档',
+          count: movedCount,
+        }));
       }
       setSelectedRowKeys([]);
       setMoveModalOpen(false);
       fetchBank();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || '移动失败';
+    } catch (err: unknown) {
+      const apiError = err as ApiError;
+      const msg = apiError.response?.data?.message || t('moveFailed', { ns: 'messages', defaultValue: '移动失败' });
       message.error(msg);
     } finally {
       setMoveLoading(false);
@@ -214,7 +231,7 @@ const BankPage: React.FC = () => {
       setEditingBankId(p.id);
       setEditDrawerOpen(true);
     } catch {
-      message.error('加载详情失败');
+      message.error(t('loadDetailFailed', { ns: 'messages', defaultValue: '加载详情失败' }));
     }
   };
 
@@ -283,7 +300,7 @@ const BankPage: React.FC = () => {
             <StarFilled style={{
               position: 'absolute', top: -4, right: -4,
               fontSize: 12, color: '#faad14', filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.3))',
-            }} title="闪光" />
+            }} title={t('bank.shinyTag', { ns: 'pages', defaultValue: '闪光' })} />
           )}
           {/* Gmax badge — bottom-right */}
           {p.canGigantamax && (
@@ -307,10 +324,10 @@ const BankPage: React.FC = () => {
         )}
         <div>
           <Tag color="blue">Lv.{p.level}</Tag>
-          {p.heldItemName && <Tag color="purple">{p.heldItemName}</Tag>}
+            {p.heldItemName && <Tag color="purple">{p.heldItemName}</Tag>}
         </div>
         <div style={{ marginTop: 2 }}>
-          {p.isShiny && <Tag color="gold">闪光</Tag>}
+          {p.isShiny && <Tag color="gold">{t('bank.shinyTag', { ns: 'pages', defaultValue: '闪光' })}</Tag>}
           <Tag>{GENERATION_OPTIONS.find(g => g.value === p.generation)?.label || `Gen${p.generation}`}</Tag>
         </div>
       </Card>
@@ -379,18 +396,18 @@ const BankPage: React.FC = () => {
                 <Tag color="blue">Lv.{p.level}</Tag>
                 {p.natureName && <Tag>{p.natureName}</Tag>}
                 {p.heldItemName && <Tag color="purple">{p.heldItemName}</Tag>}
-                {p.isShiny && <Tag color="gold">✨ 闪光</Tag>}
+                {p.isShiny && <Tag color="gold">✨ {t('bank.shinyTag', { ns: 'pages', defaultValue: '闪光' })}</Tag>}
                 <Tag>{GENERATION_OPTIONS.find(g => g.value === p.generation)?.label || `Gen${p.generation}`}</Tag>
               </div>
             </Col>
             {/* Delete */}
             <Col>
               <Popconfirm
-                title="确定从银行移除此宝可梦？"
+                title={t('bank.deleteConfirm', { ns: 'pages', defaultValue: '确定从银行移除此宝可梦？' })}
                 onConfirm={(e) => { e?.stopPropagation(); handleDelete(p.id); }}
                 onCancel={(e) => e?.stopPropagation()}
-                okText="确定"
-                cancelText="取消"
+                okText={t('confirm', { ns: 'common', defaultValue: '确定' })}
+                cancelText={t('cancel', { ns: 'common', defaultValue: '取消' })}
               >
                 <Button
                   type="text"
@@ -411,7 +428,7 @@ const BankPage: React.FC = () => {
 
   return (
     <PageContainer
-      title="我的宝可梦银行"
+      title={t('bank.title', { ns: 'pages', defaultValue: '我的宝可梦银行' })}
       backTo="/dashboard"
       maxWidth={1200}
       extra={
@@ -448,7 +465,7 @@ const BankPage: React.FC = () => {
         <Row gutter={[16, 12]} align="middle">
           <Col>
             <Select
-              placeholder="世代筛选"
+              placeholder={t('bank.generationFilter', { ns: 'pages', defaultValue: '世代筛选' })}
               allowClear
               style={{ width: 140 }}
               value={generation}
@@ -458,7 +475,7 @@ const BankPage: React.FC = () => {
           </Col>
           <Col>
             <Space>
-              <Text>闪光</Text>
+              <Text>{t('bank.shinyTag', { ns: 'pages', defaultValue: '闪光' })}</Text>
               <Switch
                 checked={isShiny}
                 onChange={(val) => { setIsShiny(val || undefined); setPage(1); }}
@@ -467,7 +484,7 @@ const BankPage: React.FC = () => {
           </Col>
           <Col>
             <Select
-              placeholder="性格"
+              placeholder={t('bank.natureFilter', { ns: 'pages', defaultValue: '性格' })}
               allowClear
               showSearch
               style={{ width: 120 }}
@@ -481,7 +498,7 @@ const BankPage: React.FC = () => {
           </Col>
           <Col>
             <Select
-              placeholder="特性"
+              placeholder={t('bank.abilityFilter', { ns: 'pages', defaultValue: '特性' })}
               allowClear
               showSearch
               style={{ width: 140 }}
@@ -495,7 +512,7 @@ const BankPage: React.FC = () => {
           </Col>
           <Col flex="auto">
             <Input
-              placeholder="搜索名称或昵称..."
+              placeholder={t('bank.searchPlaceholder', { ns: 'pages', defaultValue: '搜索名称或昵称...' })}
               prefix={<SearchOutlined />}
               allowClear
               value={search}
@@ -512,7 +529,7 @@ const BankPage: React.FC = () => {
             />
           </Col>
           <Col>
-            <Text type="secondary">共 {total} 只</Text>
+            <Text type="secondary">{t('bank.totalCount', { ns: 'pages', defaultValue: '共 {{count}} 只', count: total })}</Text>
           </Col>
         </Row>
       </Card>
@@ -522,20 +539,20 @@ const BankPage: React.FC = () => {
         <Card size="small" style={{ marginBottom: 16, background: '#e6f4ff', border: '1px solid #91caff' }}>
           <Row align="middle" justify="space-between">
             <Col>
-              <Text strong>已选 {selectedRowKeys.length} 只</Text>
+              <Text strong>{t('bank.selectedCount', { ns: 'pages', defaultValue: '已选 {{count}} 只', count: selectedRowKeys.length })}</Text>
             </Col>
             <Col>
               <Space>
                 <Popconfirm
-                  title={`确定删除选中的 ${selectedRowKeys.length} 只宝可梦？`}
+                  title={t('bank.deleteSelectedConfirm', { ns: 'pages', defaultValue: '确定删除选中的 {{count}} 只宝可梦？', count: selectedRowKeys.length })}
                   onConfirm={handleBatchDelete}
-                  okText="确定"
-                  cancelText="取消"
+                  okText={t('confirm', { ns: 'common', defaultValue: '确定' })}
+                  cancelText={t('cancel', { ns: 'common', defaultValue: '取消' })}
                 >
-                  <Button danger icon={<DeleteOutlined />}>删除选中</Button>
+                  <Button danger icon={<DeleteOutlined />}>{t('bank.deleteSelected', { ns: 'pages', defaultValue: '删除选中' })}</Button>
                 </Popconfirm>
-                <Button icon={<ExportOutlined />} onClick={handleBatchExport}>导出 .zip</Button>
-                <Button icon={<SwapOutlined />} onClick={openMoveModal}>移动到存档</Button>
+                <Button icon={<ExportOutlined />} onClick={handleBatchExport}>{t('bank.exportZip', { ns: 'pages', defaultValue: '导出 .zip' })}</Button>
+                <Button icon={<SwapOutlined />} onClick={openMoveModal}>{t('bank.moveToSave', { ns: 'pages', defaultValue: '移动到存档' })}</Button>
               </Space>
             </Col>
           </Row>
@@ -544,10 +561,10 @@ const BankPage: React.FC = () => {
 
       {/* Content */}
       {loading ? (
-        <Card style={{ textAlign: 'center', padding: 48 }}>加载中...</Card>
+        <Card style={{ textAlign: 'center', padding: 48 }}>{t('bank.loading', { ns: 'pages', defaultValue: '加载中...' })}</Card>
       ) : pokemon.length === 0 ? (
         <Card>
-          <Empty description="银行中还没有宝可梦" />
+          <Empty description={t('bank.emptyState', { ns: 'pages', defaultValue: '银行中还没有宝可梦' })} />
         </Card>
       ) : viewMode === 'grid' ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
@@ -568,7 +585,7 @@ const BankPage: React.FC = () => {
             total={total}
             onChange={setPage}
             showSizeChanger={false}
-            showTotal={(t) => `共 ${t} 只`}
+            showTotal={(count) => t('bank.totalCount', { ns: 'pages', defaultValue: '共 {{count}} 只', count })}
           />
         </div>
       )}
@@ -584,19 +601,19 @@ const BankPage: React.FC = () => {
 
       {/* Batch Move-to-save Modal */}
       <Modal
-        title="移动到存档"
+        title={t('bank.moveToSave', { ns: 'pages', defaultValue: '移动到存档' })}
         open={moveModalOpen}
         onOk={handleBatchMoveToSave}
         onCancel={() => setMoveModalOpen(false)}
-        okText="移动"
-        cancelText="取消"
+        okText={t('bank.moveToSave', { ns: 'pages', defaultValue: '移动到存档' })}
+        cancelText={t('cancel', { ns: 'common', defaultValue: '取消' })}
         confirmLoading={moveLoading}
         okButtonProps={{ disabled: !moveTargetSaveId }}
       >
         <div style={{ marginBottom: 16 }}>
-          <Text strong>1. 选择目标存档</Text>
+          <Text strong>{t('bank.targetSaveStep', { ns: 'pages', defaultValue: '1. 选择目标存档' })}</Text>
           <Select
-            placeholder="选择存档..."
+            placeholder={t('bank.selectSavePlaceholder', { ns: 'pages', defaultValue: '选择存档...' })}
             style={{ width: '100%', marginTop: 8 }}
             value={moveTargetSaveId}
             onChange={(val) => handleMoveSaveSelected(val)}
@@ -609,7 +626,7 @@ const BankPage: React.FC = () => {
 
         {moveSaveDetail && (
           <div style={{ marginBottom: 16 }}>
-            <Text strong>2. 选择目标箱子</Text>
+            <Text strong>{t('bank.targetBoxStep', { ns: 'pages', defaultValue: '2. 选择目标箱子' })}</Text>
             <Radio.Group
               style={{ width: '100%', marginTop: 8 }}
               value={moveTargetBox}
@@ -623,12 +640,12 @@ const BankPage: React.FC = () => {
                   return (
                     <Col span={12} key={i}>
                       <Radio value={i}>
-                        {box.boxName || `箱子 ${i + 1}`}
+                        {box.boxName || t('bank.boxLabel', { ns: 'pages', defaultValue: '箱子 {{index}}', index: i + 1 })}
                         <Text type="secondary" style={{ marginLeft: 8 }}>
                           ({used}/{capacity})
                         </Text>
                         {available < selectedRowKeys.length && (
-                          <Tag color="red" style={{ marginLeft: 4 }}>不足</Tag>
+                          <Tag color="red" style={{ marginLeft: 4 }}>{t('bank.capacityShortfall', { ns: 'pages', defaultValue: '不足' })}</Tag>
                         )}
                       </Radio>
                     </Col>
@@ -641,7 +658,7 @@ const BankPage: React.FC = () => {
 
         <div>
           <Text type="secondary">
-            将移动 {selectedRowKeys.length} 只宝可梦到目标箱子（自动填充空位）
+            {t('bank.moveHint', { ns: 'pages', defaultValue: '将移动 {{count}} 只宝可梦到目标箱子（自动填充空位）', count: selectedRowKeys.length })}
           </Text>
         </div>
       </Modal>

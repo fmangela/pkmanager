@@ -3,6 +3,7 @@ import { Select, Input, InputNumber, Switch, Space, Tag, Button } from 'antd';
 import { RocketOutlined } from '@ant-design/icons';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
+import type { ApiError } from '../../api/axios';
 import type { PokemonDto } from '../../api/saveFile';
 import type { EvolveResultDto } from '../../api/evolution';
 import { useResourceStore } from '../../stores/resourceStore';
@@ -40,6 +41,10 @@ const getLevelFromExp = (exp: number, table: number[]) => {
   return level;
 };
 
+function setPokemonField<K extends keyof PokemonDto>(pokemon: PokemonDto, key: K, val: PokemonDto[K]): void {
+  pokemon[key] = val;
+}
+
 const MainTab: React.FC<Props> = ({ pokemon, generation, onChange, saveFileId, boxIndex, slotIndex, isParty, editSnapshot, onEvolved }) => {
   const { t, i18n } = useTranslation('editor');
   const { species, abilities, natures, items, balls } = useResourceStore();
@@ -54,23 +59,23 @@ const MainTab: React.FC<Props> = ({ pokemon, generation, onChange, saveFileId, b
     if (pokemon.species > 0) {
       resourceApi.speciesAbilities(pokemon.species, generation, pokemon.form, i18n.language).then(res => {
         setSpeciesAbilities(res.data || []);
-      }).catch((err: any) => {
+      }).catch((err: unknown) => {
         setSpeciesAbilities([]);
         useDiagnosticStore.getState().log({
           category: 'api', level: 'error',
           message: `加载物种特性失败 (species=${pokemon.species})`,
-          stack: err?.message,
+          stack: (err as ApiError).message,
         });
       });
 
       resourceApi.speciesExperience(pokemon.species, generation, pokemon.form, i18n.language).then(res => {
         setExpTable(res.data?.expTable || []);
-      }).catch((err: any) => {
+      }).catch((err: unknown) => {
         setExpTable([]);
         useDiagnosticStore.getState().log({
           category: 'api', level: 'error',
           message: `加载经验成长表失败 (species=${pokemon.species})`,
-          stack: err?.message,
+          stack: (err as ApiError).message,
         });
       });
     } else {
@@ -94,7 +99,7 @@ const MainTab: React.FC<Props> = ({ pokemon, generation, onChange, saveFileId, b
 
   const natureMod = getNatureModifier(pokemon.nature, t);
 
-  const set = (key: keyof PokemonDto, val: any) => { (pokemon as any)[key] = val; ch(); };
+  const set = <K extends keyof PokemonDto>(key: K, val: PokemonDto[K]) => { setPokemonField(pokemon, key, val); ch(); };
 
   return (
     <div>
@@ -342,15 +347,17 @@ function getNatureModifier(
   const down = nature % 5;
   if (up === down) return null;
 
-  const labels = [
+  // Nature IDs use the game-mechanics order: ATK, DEF, SPE, SPA, SPD.
+  // Keep display labels translated, but map them in mechanic order.
+  const labelsByNatureOrder = [
     t('stats.atkShort', 'ATK'),
     t('stats.defShort', 'DEF'),
+    t('stats.speShort', 'SPE'),
     t('stats.spaShort', 'SPA'),
     t('stats.spdShort', 'SPD'),
-    t('stats.speShort', 'SPE'),
   ];
 
-  return { up: labels[up], down: labels[down] };
+  return { up: labelsByNatureOrder[up], down: labelsByNatureOrder[down] };
 }
 
 export default MainTab;

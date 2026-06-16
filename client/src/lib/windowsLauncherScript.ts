@@ -14,7 +14,7 @@ export const buildWindowsScript = (pkg: LaunchLocalResult, backendBase: string, 
   const baseName = (pkg.fileName || fallbackName || 'save').replace(/\.[^.]+$/, '');
   const gameVersion = pkg.gameVersion;
 
-  const scriptContent = `# pkmanager — 本地启动 Azahar/DeSmuME 脚本
+  const scriptContent = `# pkmanager - Local Azahar/DeSmuME launcher script
 $ErrorActionPreference = "Stop"
 $Host.UI.RawUI.WindowTitle = "pkmanager Launcher"
 trap {
@@ -55,7 +55,7 @@ function Quote-ProcessArgument([string]$value) {
     if (-not $value) {
         return $value
     }
-    return '"' + $value.Replace('"', '\"') + '"'
+    return '"' + $value.Replace('"', '""') + '"'
 }
 
 function Get-BytesSha256Hex([byte[]]$bytes) {
@@ -69,15 +69,15 @@ function Get-BytesSha256Hex([byte[]]$bytes) {
 
 function Get-DesmumeRomSearchTerms([int]$gameVersion) {
     switch ($gameVersion) {
-        10 { return @("钻石", "diamond") }
-        11 { return @("珍珠", "pearl") }
-        12 { return @("白金", "platinum") }
-        7  { return @("心金", "heartgold") }
-        8  { return @("魂银", "soulsilver") }
-        20 { return @("白", "white") }
-        21 { return @("黑", "black") }
-        22 { return @("白2", "white2") }
-        23 { return @("黑2", "black2") }
+        10 { return @("diamond", "钻石") }
+        11 { return @("pearl", "珍珠") }
+        12 { return @("platinum", "白金") }
+        7  { return @("heartgold", "心金") }
+        8  { return @("soulsilver", "魂银") }
+        20 { return @("white", "白") }
+        21 { return @("black", "黑") }
+        22 { return @("white2", "白2") }
+        23 { return @("black2", "黑2") }
         default { return @() }
     }
 }
@@ -110,7 +110,7 @@ function Resolve-DesmumeRomPath([string]$fallbackPath, [string]$saveDir, [string
                     $_.BaseName.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
                 } | Sort-Object FullName | Select-Object -First 1
                 if ($match) {
-                    Write-Host "[pkmanager] Resolved local DeSmuME ROM by search term '$term': $($match.FullName)" -ForegroundColor Green
+                    Write-Host "[pkmanager] Resolved local DeSmuME ROM: $($match.FullName)" -ForegroundColor Green
                     return $match.FullName
                 }
             }
@@ -260,7 +260,7 @@ if ($saveFileId) {
 }
 
 $exeDrive = Split-Path $exePath -Qualifier
-if ($exeDrive -and -not (Test-Path "$exeDrive\" -ErrorAction SilentlyContinue)) {
+if ($exeDrive -and -not (Test-Path ($exeDrive + "\\") -ErrorAction SilentlyContinue)) {
     Write-Host "[ERROR] Drive is not accessible: $exeDrive" -ForegroundColor Red
     Read-Host "Press Enter to exit"
     exit 1
@@ -315,7 +315,7 @@ if ($hadExistingSave) {
 }
 
 try {
-    $saveBytes = [Convert]::FromBase64String(($saveDataBase64 -replace "\s", ""))
+    $saveBytes = [Convert]::FromBase64String(($saveDataBase64 -replace "\\s", ""))
     $expectedHash = Get-BytesSha256Hex $saveBytes
     Write-Host "[pkmanager] Save bytes: $($saveBytes.Length)"
     [IO.File]::WriteAllBytes($emuSavePath, $saveBytes)

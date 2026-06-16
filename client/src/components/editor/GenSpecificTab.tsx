@@ -1,5 +1,6 @@
 import React from 'react';
 import { Checkbox, InputNumber, Switch, Tag, Space, Button, Divider } from 'antd';
+import { useTranslation } from 'react-i18next';
 import type { PokemonDto } from '../../api/saveFile';
 
 interface Props {
@@ -57,6 +58,9 @@ const DIST_LABELS: string[] = ['Dist1', 'Dist2', 'Dist3', 'Dist4', 'Dist5', 'Dis
 const HT_STAT_LABELS: string[] = ['HP', '攻击', '防御', '特攻', '特防', '速度'];
 
 const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
+  const { t } = useTranslation('editor');
+  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { defaultValue, ...(options ?? {}) });
   const ch = () => onChange?.();
 
   // ── ShinyLeaf bitfield helpers ──
@@ -127,7 +131,7 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
   if (!hasAnySection) {
     return (
       <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-secondary, #8c8c8c)' }}>
-        此宝可梦没有世代专属字段可编辑
+        {et('genspecific.empty', '此宝可梦没有世代专属字段可编辑')}
       </div>
     );
   }
@@ -138,25 +142,25 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
       {showShadow && (
         <div style={sectionStyle}>
           <div style={sectionTitle}>
-            🔴 暗黑宝可梦 <Tag color="purple">Colosseum / XD</Tag>
+            🔴 {et('genspecific.shadowTitle', '暗黑宝可梦')} <Tag color="purple">Colosseum / XD</Tag>
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>Shadow ID</span>
+            <span style={labelStyle}>{et('genspecific.shadowId', 'Shadow ID')}</span>
             <Tag>{pokemon.shadowId != null ? `0x${pokemon.shadowId.toString(16).toUpperCase().padStart(4, '0')}` : '—'}</Tag>
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>净化心槽</span>
+            <span style={labelStyle}>{et('genspecific.purification', '净化心槽')}</span>
             <InputNumber
               value={pokemon.purification ?? 0}
               onChange={(v) => { pokemon.purification = v ?? 0; ch(); }}
               style={{ width: 120 }}
             />
             <span style={{ fontSize: 11, color: '#8c8c8c', marginLeft: 8 }}>
-              心槽计数器（CK3: -100 = 已净化）
+              {et('genspecific.purificationHint', '心槽计数器（CK3: -100 = 已净化）')}
             </span>
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>暗黑状态</span>
+            <span style={labelStyle}>{et('genspecific.shadowState', '暗黑状态')}</span>
             <Tag color={pokemon.isShadow ? 'red' : 'green'}>{pokemon.isShadow ? '是' : '否'}</Tag>
           </div>
         </div>
@@ -166,10 +170,10 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
       {showShinyLeaf && (
         <div style={sectionStyle}>
           <div style={sectionTitle}>
-            🍃 闪光叶 <Tag color="gold">HGSS</Tag>
+            🍃 {et('genspecific.leafTitle', '闪光叶')} <Tag color="gold">HGSS</Tag>
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>叶片</span>
+            <span style={labelStyle}>{et('genspecific.leaves', '叶片')}</span>
             <Space size="small">
               {leafBits.map((on, i) => (
                 <Checkbox key={i} checked={on} onChange={() => toggleLeaf(i)}>
@@ -179,17 +183,17 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
             </Space>
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>皇冠</span>
+            <span style={labelStyle}>{et('genspecific.crown', '皇冠')}</span>
             <Checkbox checked={crownBit} onChange={toggleCrown}>
               Shiny Crown
             </Checkbox>
             {crownBit && <Tag color="gold" style={{ marginLeft: 8 }}>👑 皇冠</Tag>}
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>原始值</span>
+            <span style={labelStyle}>{et('genspecific.rawValue', '原始值')}</span>
             <Tag>{`0x${shinyVal.toString(16).toUpperCase().padStart(2, '0')} (${shinyVal})`}</Tag>
             <span style={{ fontSize: 11, color: '#8c8c8c', marginLeft: 8 }}>
-              bit0-4=叶片 bit5=皇冠 bit6-7=保留位(写入时保留)
+              {et('genspecific.rawHint', 'bit0-4=叶片 bit5=皇冠 bit6-7=保留位(写入时保留)')}
             </span>
           </div>
         </div>
@@ -199,20 +203,20 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
       {showGen5 && (
         <div style={sectionStyle}>
           <div style={sectionTitle}>
-            ⭐ N的宝可梦 / 电影明星 <Tag color="geekblue">Gen5 BW/B2W2</Tag>
+            ⭐ {et('genspecific.nTitle', 'N的宝可梦 / 电影明星')} <Tag color="geekblue">Gen5 BW/B2W2</Tag>
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>N的宝可梦</span>
+            <span style={labelStyle}>{et('genspecific.nSparkle', 'N的宝可梦')}</span>
             <Switch
               checked={pokemon.nSparkle ?? false}
               onChange={(v) => { pokemon.nSparkle = v; ch(); }}
             />
             <span style={{ fontSize: 11, color: '#8c8c8c', marginLeft: 8 }}>
-              仅 N 的宝可梦可启用此标志
+              {et('genspecific.nSparkleHint', '仅 N 的宝可梦可启用此标志')}
             </span>
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>PokeStar Fame</span>
+            <span style={labelStyle}>{et('genspecific.pokeStarFame', 'PokeStar Fame')}</span>
             <InputNumber
               min={0}
               max={255}
@@ -221,10 +225,10 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
               style={{ width: 80 }}
             />
             {pokemon.isPokeStar && (
-              <Tag color="orange" style={{ marginLeft: 8 }}>🎬 电影明星</Tag>
+              <Tag color="orange" style={{ marginLeft: 8 }}>🎬 {et('genspecific.pokeStar', '电影明星')}</Tag>
             )}
             <span style={{ fontSize: 11, color: '#8c8c8c', marginLeft: 8 }}>
-              {'> 250 表示 PokeStar 参与者'}
+              {et('genspecific.pokeStarHint', '> 250 表示 PokeStar 参与者')}
             </span>
           </div>
         </div>
@@ -234,10 +238,10 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
       {showAmie && (
         <div style={sectionStyle}>
           <div style={sectionTitle}>
-            🍓 Poké Amie <Tag color="pink">Gen6-7</Tag>
+            🍓 {et('genspecific.amieTitle', 'Poké Amie')} <Tag color="pink">Gen6-7</Tag>
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>饱腹度</span>
+            <span style={labelStyle}>{et('genspecific.fullness', '饱腹度')}</span>
             <InputNumber
               min={0}
               max={255}
@@ -247,7 +251,7 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
             />
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>愉悦度</span>
+            <span style={labelStyle}>{et('genspecific.enjoyment', '愉悦度')}</span>
             <InputNumber
               min={0}
               max={255}
@@ -263,17 +267,17 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
       {showSuperTrain && (
         <div style={sectionStyle}>
           <div style={sectionTitle}>
-            🏋️ 超级训练 <Tag color="cyan">Gen6-7</Tag>
+            🏋️ {et('genspecific.superTrainTitle', '超级训练')} <Tag color="cyan">Gen6-7</Tag>
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>秘密特训解锁</span>
+            <span style={labelStyle}>{et('genspecific.secretUnlock', '秘密特训解锁')}</span>
             <Switch
               checked={pokemon.secretSuperTrainingUnlocked ?? false}
               onChange={(v) => { pokemon.secretSuperTrainingUnlocked = v; ch(); }}
             />
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>完成全部特训</span>
+            <span style={labelStyle}>{et('genspecific.completeAll', '完成全部特训')}</span>
             <Tag color={pokemon.superTrainSupremelyTrained ? 'green' : 'default'}>
               {pokemon.superTrainSupremelyTrained ? '是' : '否'}
             </Tag>
@@ -281,7 +285,7 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
 
           <Divider style={{ margin: '8px 0' }} />
 
-          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>训练项目 (Regimen 1-8)</div>
+          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>{et('genspecific.regimenTitle', '训练项目 (Regimen 1-8)')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
             {REGIMEN_LABELS.map((label, i) => (
               <Checkbox
@@ -296,7 +300,7 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
           </div>
 
           <Divider style={{ margin: '8px 0' }} />
-          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>Distribution 训练</div>
+          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>{et('genspecific.distTitle', 'Distribution 训练')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
             {DIST_LABELS.map((label, i) => (
               <Checkbox
@@ -316,12 +320,12 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
       {showHyperTrain && (
         <div style={sectionStyle}>
           <div style={sectionTitle}>
-            💪 极限特训 <Tag color="orange">Gen7+</Tag>
+            💪 {et('genspecific.hyperTrainTitle', '极限特训')} <Tag color="orange">Gen7+</Tag>
           </div>
           <div style={{ marginBottom: 8 }}>
             <Space size="small">
-              <Button size="small" onClick={() => setAllHT(true)}>全部开启</Button>
-              <Button size="small" onClick={() => setAllHT(false)}>全部清除</Button>
+              <Button size="small" onClick={() => setAllHT(true)}>{et('genspecific.enableAll', '全部开启')}</Button>
+              <Button size="small" onClick={() => setAllHT(false)}>{et('genspecific.clearAll', '全部清除')}</Button>
             </Space>
           </div>
           <Space size="middle">
@@ -336,7 +340,7 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
             ))}
           </Space>
           <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 6 }}>
-            Gen7 需 Lv.100 方可进行极限特训
+            {et('genspecific.hyperTrainHint', 'Gen7 需 Lv.100 方可进行极限特训')}
           </div>
         </div>
       )}
@@ -345,10 +349,10 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
       {showLGPE && (
         <div style={sectionStyle}>
           <div style={sectionTitle}>
-            ⚡ LGPE 专属 <Tag color="lime">Let's Go Pikachu/Eevee</Tag>
+            ⚡ {et('genspecific.lgpeTitle', 'LGPE 专属')} <Tag color="lime">Let's Go Pikachu/Eevee</Tag>
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>Combat Power</span>
+            <span style={labelStyle}>{et('genspecific.combatPower', 'Combat Power')}</span>
             <InputNumber
               min={0}
               value={pokemon.combatPower ?? 0}
@@ -357,7 +361,7 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
             />
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>精神 (Spirit)</span>
+            <span style={labelStyle}>{et('genspecific.spirit', '精神 (Spirit)')}</span>
             <InputNumber
               min={0}
               max={255}
@@ -365,10 +369,10 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
               onChange={(v) => { pokemon.spirit = v ?? 100; ch(); }}
               style={{ width: 80 }}
             />
-            <span style={{ fontSize: 11, color: '#8c8c8c', marginLeft: 8 }}>默认值 100</span>
+            <span style={{ fontSize: 11, color: '#8c8c8c', marginLeft: 8 }}>{et('genspecific.default100', '默认值 100')}</span>
           </div>
           <div style={rowStyle}>
-            <span style={labelStyle}>心情 (Mood)</span>
+            <span style={labelStyle}>{et('genspecific.mood', '心情 (Mood)')}</span>
             <InputNumber
               min={0}
               max={255}
@@ -376,7 +380,7 @@ const GenSpecificTab: React.FC<Props> = ({ pokemon, onChange }) => {
               onChange={(v) => { pokemon.mood = v ?? 100; ch(); }}
               style={{ width: 80 }}
             />
-            <span style={{ fontSize: 11, color: '#8c8c8c', marginLeft: 8 }}>默认值 100</span>
+            <span style={{ fontSize: 11, color: '#8c8c8c', marginLeft: 8 }}>{et('genspecific.default100', '默认值 100')}</span>
           </div>
         </div>
       )}

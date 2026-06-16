@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, Form, Input, Button, App, Typography, Space, Divider } from 'antd';
 import { SaveOutlined, DesktopOutlined, ThunderboltOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useSettingsStore } from '../stores/settingsStore';
 import PageContainer from '../components/PageContainer';
 
@@ -20,6 +21,7 @@ const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const { t } = useTranslation(['pages', 'messages']);
 
   useEffect(() => {
     fetch().then((settings) => {
@@ -30,7 +32,7 @@ const SettingsPage: React.FC = () => {
         [AZAHAR_DATA]: settings[AZAHAR_DATA] || '',
       });
     });
-  }, []);
+  }, [fetch, form]);
 
   const handleSave = async () => {
     const values = await form.validateFields();
@@ -42,16 +44,16 @@ const SettingsPage: React.FC = () => {
         [AZAHAR_EXE]: values[AZAHAR_EXE] || '',
         [AZAHAR_DATA]: values[AZAHAR_DATA] || '',
       });
-      message.success('设置已保存');
+      message.success(t('settingsSaved', { ns: 'messages', defaultValue: '设置已保存' }));
     } catch {
-      message.error('保存失败');
+      message.error(t('saveFailed', { ns: 'messages', defaultValue: '保存失败' }));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <PageContainer title="设置" backTo="/dashboard" maxWidth={800}>
+    <PageContainer title={t('settings.title', { ns: 'pages', defaultValue: '设置' })} backTo="/dashboard" maxWidth={800}>
 
       <Form form={form} layout="vertical">
         {/* ── DeSmuME (NDS) ── */}
@@ -60,21 +62,21 @@ const SettingsPage: React.FC = () => {
           title={
             <Space>
               <DesktopOutlined />
-              <span>DeSmuME — NDS 模拟器</span>
+              <span>{t('settings.desmumeTitle', { ns: 'pages', defaultValue: 'DeSmuME — NDS 模拟器' })}</span>
             </Space>
           }
           style={{ marginBottom: 16 }}
         >
           <Form.Item
             name={DESMUME_EXE}
-            label="可执行文件路径"
+            label={t('settings.executablePath', { ns: 'pages', defaultValue: '可执行文件路径' })}
             extra="Linux: /usr/bin/desmume | Windows: C:\Program Files\DeSmuME\DeSmuME.exe"
           >
             <Input placeholder={navigator.platform.includes('Win') ? 'C:\\Program Files\\DeSmuME\\DeSmuME.exe' : '/usr/bin/desmume'} />
           </Form.Item>
           <Form.Item
             name={DESMUME_SAVE}
-            label="存档目录"
+            label={t('settings.saveDirectory', { ns: 'pages', defaultValue: '存档目录' })}
             extra="Linux: ~/.config/desmume/ | Windows: %APPDATA%\DeSmuME"
           >
             <Input placeholder={navigator.platform.includes('Win') ? 'C:\\Users\\...\\AppData\\Roaming\\DeSmuME' : '~/.config/desmume'} />
@@ -87,21 +89,21 @@ const SettingsPage: React.FC = () => {
           title={
             <Space>
               <ThunderboltOutlined />
-              <span>Azahar — 3DS 模拟器</span>
+              <span>{t('settings.azaharTitle', { ns: 'pages', defaultValue: 'Azahar — 3DS 模拟器' })}</span>
             </Space>
           }
           style={{ marginBottom: 24 }}
         >
           <Form.Item
             name={AZAHAR_EXE}
-            label="可执行文件路径"
+            label={t('settings.executablePath', { ns: 'pages', defaultValue: '可执行文件路径' })}
             extra="Linux: /usr/bin/azahar | Windows: C:\Program Files\Azahar\azahar.exe"
           >
             <Input placeholder={navigator.platform.includes('Win') ? 'C:\\Program Files\\Azahar\\azahar.exe' : '/usr/bin/azahar'} />
           </Form.Item>
           <Form.Item
             name={AZAHAR_DATA}
-            label="用户数据目录"
+            label={t('settings.userDataDirectory', { ns: 'pages', defaultValue: '用户数据目录' })}
             extra="包含 sdmc/ 的目录（Linux: ~/.local/share/azahar-emu/ | Windows: %APPDATA%\azahar-emu）"
           >
             <Input placeholder={navigator.platform.includes('Win') ? 'C:\\Users\\...\\AppData\\Roaming\\azahar-emu' : '~/.local/share/azahar-emu'} />
@@ -114,14 +116,13 @@ const SettingsPage: React.FC = () => {
           title={
             <Space>
               <ThunderboltOutlined />
-              <span>一键启动协议（可选）</span>
+              <span>{t('settings.protocolTitle', { ns: 'pages', defaultValue: '一键启动协议（可选）' })}</span>
             </Space>
           }
           style={{ marginBottom: 16 }}
         >
           <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-            安装后，在存档管理页点击「本机」即可直接启动本地模拟器，无需手动下载脚本。
-            只需安装一次。
+            {t('settings.protocolDescription', { ns: 'pages', defaultValue: '安装后，在存档管理页点击「本机」即可直接启动本地模拟器，无需手动下载脚本。只需安装一次。' })}
           </Text>
           <Button
             type="primary"
@@ -130,10 +131,10 @@ const SettingsPage: React.FC = () => {
             href="/scripts/install-pkmanager-protocol.bat"
             download
           >
-            下载安装工具 (.bat)
+            {t('settings.protocolInstallButton', { ns: 'pages', defaultValue: '下载安装工具 (.bat)' })}
           </Button>
           <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
-            下载后双击运行（会自动提权），安装完成后回到存档管理页点「本机」即可。
+            {t('settings.protocolInstallHint', { ns: 'pages', defaultValue: '下载后双击运行（会自动提权），安装完成后回到存档管理页点「本机」即可。' })}
           </Text>
         </Card>
 
@@ -144,15 +145,15 @@ const SettingsPage: React.FC = () => {
             onClick={handleSave}
             loading={saving}
           >
-            保存设置
+            {t('settings.saveSettings', { ns: 'pages', defaultValue: '保存设置' })}
           </Button>
-          <Button onClick={() => navigate('/dashboard')}>返回工作台</Button>
+          <Button onClick={() => navigate('/dashboard')}>{t('settings.backToDashboard', { ns: 'pages', defaultValue: '返回工作台' })}</Button>
         </Space>
       </Form>
 
       <Divider />
       <Text type="secondary" style={{ fontSize: 12 }}>
-        这些设置按设备独立存储。换电脑后需要重新配置。
+        {t('settings.deviceScopedHint', { ns: 'pages', defaultValue: '这些设置按设备独立存储。换电脑后需要重新配置。' })}
       </Text>
     </PageContainer>
   );

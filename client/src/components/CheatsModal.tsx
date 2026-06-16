@@ -22,6 +22,7 @@ import {
   PlusOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadProps } from 'antd';
 import type { MGBAEmulator } from '../lib/mgba';
@@ -165,7 +166,7 @@ function sanitizeDownloadName(name: string): string {
 }
 
 function formatError(err: unknown): string {
-  return err instanceof Error ? err.message : '未知错误';
+  return err instanceof Error ? err.message : 'Unknown error';
 }
 
 function readCheatsFile(emu: MGBAEmulator, filePath: string): string | null {
@@ -194,6 +195,7 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
   romFileName = DEFAULT_ROM_FILE_NAME,
 }) => {
   const { message } = App.useApp();
+  const { t } = useTranslation(['emulator', 'common', 'messages']);
   const [entries, setEntries] = useState<CheatEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -214,7 +216,7 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
       const content = readCheatsFile(emu, filePath);
       setEntries(content ? parseCheatsText(content) : []);
     } catch (err) {
-      message.error(`读取金手指失败: ${formatError(err)}`);
+      message.error(t('readCheatsFailed', { ns: 'messages', defaultValue: '读取金手指失败: {{error}}', error: formatError(err) }));
       setEntries([]);
     } finally {
       setLoading(false);
@@ -288,12 +290,12 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    message.success(`已导出 ${fileName}`);
+    message.success(t('cheatsExported', { ns: 'messages', defaultValue: '已导出 {{fileName}}', fileName }));
   };
 
   const handleApply = async () => {
     if (!emu) {
-      message.warning('模拟器尚未就绪');
+      message.warning(t('status.ready', { ns: 'emulator', defaultValue: '就绪' }));
       return;
     }
 
@@ -304,13 +306,15 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
       emu.FS.writeFile(filePath, encoder.encode(serialized));
       const loaded = emu.autoLoadCheats();
       if (loaded) {
-        message.success(entries.length > 0 ? '金手指已应用' : '已清空金手指');
+        message.success(entries.length > 0
+          ? t('cheatsApplied', { ns: 'messages', defaultValue: '金手指已应用' })
+          : t('cheatsCleared', { ns: 'messages', defaultValue: '已清空金手指' }));
       } else {
-        message.warning('金手指文件已写入，但模拟器未成功加载');
+        message.warning(t('cheatsLoadWarning', { ns: 'messages', defaultValue: '金手指文件已写入，但模拟器未成功加载' }));
       }
       await loadEntries();
     } catch (err) {
-      message.error(`应用金手指失败: ${formatError(err)}`);
+      message.error(t('applyCheatsFailed', { ns: 'messages', defaultValue: '应用金手指失败: {{error}}', error: formatError(err) }));
     } finally {
       setApplying(false);
     }
@@ -318,11 +322,11 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
 
   const handleImport: UploadProps['beforeUpload'] = async (file) => {
     if (!emu) {
-      message.warning('模拟器尚未就绪');
+      message.warning(t('status.ready', { ns: 'emulator', defaultValue: '就绪' }));
       return Upload.LIST_IGNORE;
     }
     if (!file.name.toLowerCase().endsWith('.cheats')) {
-      message.error('仅支持导入 .cheats 文件');
+      message.error(t('onlyCheatsFileSupported', { ns: 'messages', defaultValue: '仅支持导入 .cheats 文件' }));
       return Upload.LIST_IGNORE;
     }
 
@@ -331,9 +335,9 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
       await emu.uploadCheats(file as File);
       const text = await file.text();
       setEntries(parseCheatsText(text));
-      message.success(`已导入 ${file.name}`);
+      message.success(t('cheatsImported', { ns: 'messages', defaultValue: '已导入 {{fileName}}', fileName: file.name }));
     } catch (err) {
-      message.error(`导入失败: ${formatError(err)}`);
+      message.error(t('importFailed', { ns: 'messages', defaultValue: '导入失败: {{error}}', error: formatError(err) }));
     } finally {
       setImporting(false);
     }
@@ -343,7 +347,7 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
 
   const columns: ColumnsType<CheatEntry> = [
     {
-      title: '启用',
+      title: t('cheats.enable', { ns: 'emulator', defaultValue: '启用' }),
       dataIndex: 'enable',
       width: 72,
       render: (_, record) => (
@@ -359,40 +363,40 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
       ),
     },
     {
-      title: '名称',
+      title: t('cheats.name', { ns: 'emulator', defaultValue: '名称' }),
       dataIndex: 'desc',
       width: 180,
       render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
     },
     {
-      title: '代码',
+      title: t('cheats.code', { ns: 'emulator', defaultValue: '代码' }),
       dataIndex: 'code',
       render: (value: string) => <span style={codeStyle}>{value}</span>,
     },
     {
-      title: '类型',
+      title: t('cheats.type', { ns: 'emulator', defaultValue: '类型' }),
       dataIndex: 'type',
       width: 128,
       render: (value: number) => <Tag color={getCheatTypeColor(value)}>{getCheatTypeLabel(value)}</Tag>,
     },
     {
-      title: '操作',
+      title: t('cheats.actions', { ns: 'emulator', defaultValue: '操作' }),
       key: 'actions',
       width: 110,
       render: (_, record) => (
         <Space size={4}>
           <Button size="small" icon={<EditOutlined />} onClick={() => openEditEditor(record)}>
-            编辑
+            {t('edit', { ns: 'common', defaultValue: '编辑' })}
           </Button>
           <Popconfirm
-            title="删除这条金手指？"
+            title={t('cheats.deleteConfirm', { ns: 'emulator', defaultValue: '删除这条金手指？' })}
             description={record.desc}
-            okText="删除"
-            cancelText="取消"
+            okText={t('delete', { ns: 'common', defaultValue: '删除' })}
+            cancelText={t('cancel', { ns: 'common', defaultValue: '取消' })}
             onConfirm={() => setEntries((current) => current.filter((entry) => entry.id !== record.id))}
           >
             <Button size="small" danger icon={<DeleteOutlined />}>
-              删除
+              {t('delete', { ns: 'common', defaultValue: '删除' })}
             </Button>
           </Popconfirm>
         </Space>
@@ -403,7 +407,7 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
   return (
     <>
       <Modal
-        title="金手指 (CodeBreaker / GameShark / Action Replay)"
+        title={t('cheats.title', { ns: 'emulator', defaultValue: '金手指 (CodeBreaker / GameShark / Action Replay)' })}
         open={open}
         onCancel={() => {
           closeEditor();
@@ -414,21 +418,21 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
       >
         <Space wrap style={{ marginBottom: 12 }}>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreateEditor}>
-            添加
+            {t('cheats.add', { ns: 'emulator', defaultValue: '添加' })}
           </Button>
           <Upload accept=".cheats" showUploadList={false} beforeUpload={handleImport}>
             <Button icon={<UploadOutlined />} loading={importing} disabled={!emu}>
-              导入文件
+              {t('cheats.importFile', { ns: 'emulator', defaultValue: '导入文件' })}
             </Button>
           </Upload>
           <Button icon={<DownloadOutlined />} onClick={handleExport} disabled={entries.length === 0}>
-            导出
+            {t('cheats.export', { ns: 'emulator', defaultValue: '导出' })}
           </Button>
           <Button onClick={() => handleToggleAll(true)} disabled={entries.length === 0}>
-            全部启用
+            {t('cheats.enableAll', { ns: 'emulator', defaultValue: '全部启用' })}
           </Button>
           <Button onClick={() => handleToggleAll(false)} disabled={entries.length === 0}>
-            全部禁用
+            {t('cheats.disableAll', { ns: 'emulator', defaultValue: '全部禁用' })}
           </Button>
         </Space>
 
@@ -443,7 +447,7 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
           locale={{
             emptyText: (
               <Empty
-                description="暂无金手指，点击「添加」或「导入」"
+                description={t('cheats.empty', { ns: 'emulator', defaultValue: '暂无金手指，点击「添加」或「导入」' })}
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
               />
             ),
@@ -452,56 +456,62 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
 
         <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <Typography.Text type="secondary">
-            当前会写入 {buildCheatsFilePath(emu?.getCheatsPath?.() || '/data/cheats', romFileName)}，应用后立即生效。
+            {t('cheats.writePathHint', {
+              ns: 'emulator',
+              defaultValue: '当前会写入 {{path}}，应用后立即生效。',
+              path: buildCheatsFilePath(emu?.getCheatsPath?.() || '/data/cheats', romFileName),
+            })}
           </Typography.Text>
           <Space>
             <Button onClick={() => {
               closeEditor();
               onClose();
-            }}>关闭</Button>
+            }}>{t('close', { ns: 'common', defaultValue: '关闭' })}</Button>
             <Button type="primary" onClick={handleApply} loading={applying} disabled={!emu}>
-              应用金手指
+              {t('cheats.apply', { ns: 'emulator', defaultValue: '应用金手指' })}
             </Button>
           </Space>
         </div>
       </Modal>
 
       <Modal
-        title={editingEntry ? '编辑金手指' : '添加金手指'}
+        title={editingEntry
+          ? t('cheats.editTitle', { ns: 'emulator', defaultValue: '编辑金手指' })
+          : t('cheats.addTitle', { ns: 'emulator', defaultValue: '添加金手指' })}
         open={editorOpen}
         onCancel={closeEditor}
         onOk={() => { void handleSaveEntry(); }}
-        okText={editingEntry ? '保存' : '添加'}
+        okText={editingEntry ? t('save', { ns: 'common', defaultValue: '保存' }) : t('add', { ns: 'common', defaultValue: '添加' })}
         destroyOnHidden
       >
         <Form<CheatFormValues> form={form} layout="vertical" initialValues={{ enable: true, type: DEFAULT_CHEAT_TYPE }}>
           <Form.Item
-            label="名称"
+            label={t('cheats.name', { ns: 'emulator', defaultValue: '名称' })}
             name="desc"
             rules={[
-              { required: true, message: '请输入名称' },
+              { required: true, message: t('cheats.nameRequired', { ns: 'emulator', defaultValue: '请输入名称' }) },
               { validator: async (_, value) => {
                 if (typeof value === 'string' && value.trim()) return;
-                throw new Error('请输入名称');
+                throw new Error(t('cheats.nameRequired', { ns: 'emulator', defaultValue: '请输入名称' }));
               } },
             ]}
           >
-            <Input maxLength={80} placeholder="例如：大师球 / 无限金钱" />
+            <Input maxLength={80} placeholder={t('cheats.namePlaceholder', { ns: 'emulator', defaultValue: '例如：大师球 / 无限金钱' })} />
           </Form.Item>
 
-          <Form.Item label="类型" name="type" rules={[{ required: true, message: '请选择类型' }]}>
+          <Form.Item label={t('cheats.type', { ns: 'emulator', defaultValue: '类型' })} name="type" rules={[{ required: true, message: t('cheats.typeRequired', { ns: 'emulator', defaultValue: '请选择类型' }) }]}>
             <Select options={CHEAT_TYPE_OPTIONS.map((option) => ({ label: option.label, value: option.value }))} />
           </Form.Item>
 
           <Form.Item
-            label="代码"
+            label={t('cheats.code', { ns: 'emulator', defaultValue: '代码' })}
             name="code"
-            extra="一行一条代码，支持粘贴多行。"
+            extra={t('cheats.codeExtra', { ns: 'emulator', defaultValue: '一行一条代码，支持粘贴多行。' })}
             rules={[
-              { required: true, message: '请输入代码' },
+              { required: true, message: t('cheats.codeRequired', { ns: 'emulator', defaultValue: '请输入代码' }) },
               { validator: async (_, value) => {
                 if (typeof value === 'string' && normalizeCode(value)) return;
-                throw new Error('请输入至少一条有效代码');
+                throw new Error(t('cheats.codeInvalid', { ns: 'emulator', defaultValue: '请输入至少一条有效代码' }));
               } },
             ]}
           >
@@ -512,7 +522,7 @@ const CheatsModal: React.FC<CheatsModalProps> = ({
             />
           </Form.Item>
 
-          <Form.Item label="默认启用" name="enable" valuePropName="checked">
+          <Form.Item label={t('cheats.defaultEnable', { ns: 'emulator', defaultValue: '默认启用' })} name="enable" valuePropName="checked">
             <Switch />
           </Form.Item>
         </Form>

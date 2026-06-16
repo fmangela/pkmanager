@@ -697,6 +697,12 @@ export interface CheckLocalRequest {
   gameId?: string;
 }
 
+export interface CheckLocalResponse {
+  azaharReady?: boolean;
+  desmumeReady?: boolean;
+  error?: string;
+}
+
 export interface LaunchLocalResult {
   type: 'azahar' | 'desmume';
   generation: number;
@@ -716,7 +722,7 @@ export interface LaunchLocalResult {
 
 export const emulatorApi = {
   checkLocal: (data: CheckLocalRequest) =>
-    apiClient.post<Record<string, unknown>>('/Emulator/check-local', data),
+    apiClient.post<CheckLocalResponse>('/Emulator/check-local', data),
 
   launchLocal: (saveFileId: string) =>
     apiClient.post<LaunchLocalResult>(`/Emulator/launch-local/${saveFileId}`),

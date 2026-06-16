@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { resourceApi, type ResourceItem } from '../api/resource';
 import { useDiagnosticStore } from './diagnosticStore';
 import i18n from '../i18n/i18n';
+import { getI18nText } from '../i18n/i18n';
+import type { ApiError } from '../api/axios';
 
 interface ResourceState {
   species: ResourceItem[];
@@ -21,6 +23,10 @@ interface ResourceState {
   getAbilityName: (id: number) => string;
   getNatureName: (id: number) => string;
   getItemName: (id: number) => string;
+}
+
+function fallbackResourceName(key: string, id: number): string {
+  return `${getI18nText(key, undefined, 'common')} ${id}`;
 }
 
 export const useResourceStore = create<ResourceState>((set, get) => ({
@@ -62,7 +68,7 @@ export const useResourceStore = create<ResourceState>((set, get) => ({
           useDiagnosticStore.getState().log({
             category: 'api',
             level: 'error',
-            message: `资源加载失败: ${names[i]}`,
+            message: `${getI18nText('resource.loadFailedPrefix', undefined, 'messages') || '资源加载失败'}: ${names[i]}`,
             stack: r.reason?.message,
           });
           return [];
@@ -79,23 +85,24 @@ export const useResourceStore = create<ResourceState>((set, get) => ({
         loaded: true,
         language: currentLang,
         loading: false,
-        error: failed.length > 0 ? `部分资源加载失败: ${failed.join(', ')}` : null,
+        error: failed.length > 0 ? `${getI18nText('resource.partialLoadFailed', undefined, 'messages') || '部分资源加载失败'}: ${failed.join(', ')}` : null,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiError = err as ApiError & { message?: string };
       // This should not happen with Promise.allSettled, but just in case
-      set({ loading: false, error: '资源加载失败，请刷新页面重试' });
+      set({ loading: false, error: getI18nText('resource.loadRetry', undefined, 'messages') || '资源加载失败，请刷新页面重试' });
       useDiagnosticStore.getState().log({
         category: 'api',
         level: 'error',
-        message: '资源批量加载异常',
-        stack: err?.message,
+        message: getI18nText('resource.loadException', undefined, 'messages') || '资源批量加载异常',
+        stack: apiError.message,
       });
     }
   },
 
   getSpeciesName: (id: number) => get().species.find((s) => s.id === id)?.name ?? `#${id}`,
-  getMoveName: (id: number) => get().moves.find((m) => m.id === id)?.name ?? `招式${id}`,
-  getAbilityName: (id: number) => get().abilities.find((a) => a.id === id)?.name ?? `特性${id}`,
-  getNatureName: (id: number) => get().natures.find((n) => n.id === id)?.name ?? `性格${id}`,
-  getItemName: (id: number) => get().items.find((i) => i.id === id)?.name ?? '',
+  getMoveName: (id: number) => get().moves.find((m) => m.id === id)?.name ?? fallbackResourceName('resource.move', id),
+  getAbilityName: (id: number) => get().abilities.find((a) => a.id === id)?.name ?? fallbackResourceName('resource.ability', id),
+  getNatureName: (id: number) => get().natures.find((n) => n.id === id)?.name ?? fallbackResourceName('resource.nature', id),
+  getItemName: (id: number) => get().items.find((i) => i.id === id)?.name ?? fallbackResourceName('resource.item', id),
 }));

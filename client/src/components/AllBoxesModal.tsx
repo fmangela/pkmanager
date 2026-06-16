@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, Button, Typography, App, Tag, Tooltip, Space } from 'antd';
 import { SwapOutlined, StarFilled } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { type BoxDto, type LegalityStatus, saveFileApi } from '../api/saveFile';
 import PokemonSprite from './PokemonSprite';
 import type { SpriteStyle } from '../lib/spriteUrl';
@@ -100,6 +101,7 @@ const AllBoxesModal: React.FC<Props> = ({
 }) => {
   const { message } = App.useApp();
   const [swappingBox, setSwappingBox] = useState<number | null>(null);
+  const { t } = useTranslation(['common', 'messages', 'pages']);
 
   const handleSwap = async (boxA: number) => {
     const boxB = boxA + 1;
@@ -108,10 +110,10 @@ const AllBoxesModal: React.FC<Props> = ({
     setSwappingBox(boxA);
     try {
       await saveFileApi.swapBoxes(saveFileId, boxA, boxB);
-      message.success(`Box ${boxA + 1} ⇄ Box ${boxB + 1} 已交换`);
+      message.success(`Box ${boxA + 1} ⇄ Box ${boxB + 1} swapped`);
       onSwapped();
     } catch {
-      message.error('交换失败');
+      message.error(t('swapFailed', { ns: 'messages', defaultValue: '交换失败' }));
     } finally {
       setSwappingBox(null);
     }
@@ -119,7 +121,7 @@ const AllBoxesModal: React.FC<Props> = ({
 
   return (
     <Modal
-      title="全部箱子"
+      title={t('saveEditor.allBoxes', { ns: 'pages', defaultValue: '全部箱子' })}
       open={open}
       onCancel={onClose}
       width="90%"
@@ -171,10 +173,10 @@ const AllBoxesModal: React.FC<Props> = ({
                 <Space size={4}>
                   {count > 0 && (
                     <Tag color={isActive ? 'blue' : 'default'} style={{ margin: 0 }}>
-                      {isActive ? '当前' : `${count}只`}
+                      {isActive ? t('current', { ns: 'common', defaultValue: '当前' }) : `${count}`}
                     </Tag>
                   )}
-                  <Tooltip title={`与 Box ${box.boxIndex + 2} 交换`}>
+                  <Tooltip title={`Swap with Box ${box.boxIndex + 2}`}>
                     <Button
                       size="small"
                       icon={<SwapOutlined />}
