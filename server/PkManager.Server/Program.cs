@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using PkManager.Server.Data;
 using PkManager.Server.Helpers;
+using PkManager.Server.Localization;
 using PkManager.Server.Middleware;
 using PkManager.Server.Services;
 
@@ -124,6 +125,9 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<UserContext>();
 builder.Services.AddScoped<ILanguageResolver, LanguageResolver>();
 builder.Services.AddScoped<IPkhexStringProvider, PkhexStringProvider>();
+builder.Services.AddScoped<IGeoDataProvider, GeoDataProvider>();
+builder.Services.AddScoped<IBackendMessageLocalizer, JsonMessageLocalizer>();
+builder.Services.AddScoped<BusinessExceptionFilter>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ParseService>();
 builder.Services.AddScoped<SaveFileService>();
@@ -135,7 +139,10 @@ builder.Services.AddScoped<LegalizationService>();
 builder.Services.AddSingleton<LegalityCacheService>();
 
 // ── 控制器 & Swagger ────────────────────────────────────
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        options.Filters.AddService<BusinessExceptionFilter>();
+    })
     .AddJsonOptions(options =>
     {
         // 自定义命名策略：强制全小写首字母（IVs→ivs, EVs→evs 而非默认的 iVs, eVs）

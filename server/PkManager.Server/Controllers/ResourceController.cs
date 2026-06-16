@@ -14,6 +14,7 @@ public class ResourceController : ControllerBase
 {
     private readonly UserContext _userContext;
     private readonly NpgsqlConnection _db;
+    private readonly IGeoDataProvider _geoDataProvider;
     private readonly ILanguageResolver _langResolver;
     private readonly IPkhexStringProvider _pkhexStrings;
 
@@ -34,11 +35,13 @@ public class ResourceController : ControllerBase
     public ResourceController(
         UserContext userContext,
         NpgsqlConnection db,
+        IGeoDataProvider geoDataProvider,
         ILanguageResolver langResolver,
         IPkhexStringProvider pkhexStrings)
     {
         _userContext = userContext;
         _db = db;
+        _geoDataProvider = geoDataProvider;
         _langResolver = langResolver;
         _pkhexStrings = pkhexStrings;
     }
@@ -286,7 +289,7 @@ public class ResourceController : ControllerBase
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
-        return Ok(ApiResponse<List<ResourceItem>>.Ok(GeoData.Countries));
+        return Ok(ApiResponse<List<ResourceItem>>.Ok(_geoDataProvider.GetCountries(lang)));
     }
 
     /// <summary>
@@ -297,9 +300,7 @@ public class ResourceController : ControllerBase
     {
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
-        if (GeoData.Regions.TryGetValue(countryId, out var regions))
-            return Ok(ApiResponse<List<ResourceItem>>.Ok(regions));
-        return Ok(ApiResponse<List<ResourceItem>>.Ok(new List<ResourceItem>()));
+        return Ok(ApiResponse<List<ResourceItem>>.Ok(_geoDataProvider.GetRegions(countryId, lang)));
     }
 
     /// <summary>

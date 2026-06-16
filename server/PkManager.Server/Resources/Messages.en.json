@@ -1,0 +1,23 @@
+{
+  "common.success": "Success",
+  "common.ok": "ok",
+  "common.unauthorized": "Unauthorized",
+  "common.invalidRequest": "Invalid request payload",
+  "auth.registerSuccess": "Registration successful",
+  "auth.loginSuccess": "Login successful",
+  "auth.languageUpdated": "Language preference updated",
+  "auth.usernameTaken": "Username is already registered",
+  "auth.emailTaken": "Email is already registered",
+  "auth.invalidCredentials": "Invalid username or password",
+  "auth.userDisabledOrMissing": "User does not exist or has been disabled",
+  "auth.invalidRefreshToken": "Invalid refresh token",
+  "auth.userNotFound": "User not found",
+  "auth.unsupportedLanguage": "Unsupported language",
+  "geo.consoleRegion.0": "Japan (JPN)",
+  "geo.consoleRegion.1": "Americas (USA)",
+  "geo.consoleRegion.2": "Europe (EUR)",
+  "geo.consoleRegion.3": "Oceania (AUS)",
+  "geo.consoleRegion.4": "China (CHN)",
+  "geo.consoleRegion.5": "Korea (KOR)",
+  "geo.consoleRegion.6": "Taiwan (TWN)"
+}

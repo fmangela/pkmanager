@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using PkManager.Server.Helpers;
+using PkManager.Server.Localization;
 using PkManager.Server.Middleware;
 using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
@@ -14,13 +15,19 @@ public class AuthController : ControllerBase
 {
     private readonly AuthService _authService;
     private readonly IMemoryCache _cache;
+    private readonly IBackendMessageLocalizer _messages;
     private readonly UserContext _userContext;
 
-    public AuthController(AuthService authService, UserContext userContext, IMemoryCache cache)
+    public AuthController(
+        AuthService authService,
+        UserContext userContext,
+        IMemoryCache cache,
+        IBackendMessageLocalizer messages)
     {
         _authService = authService;
         _userContext = userContext;
         _cache = cache;
+        _messages = messages;
     }
 
     /// <summary>
@@ -30,18 +37,17 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<ApiResponse<AuthResponse>>> Register([FromBody] RegisterRequest request)
     {
         if (!ModelState.IsValid)
-            return BadRequest(ApiResponse<AuthResponse>.Error(400, "请求参数不合法"));
+            return BadRequest(ApiResponse<AuthResponse>.Error(
+                400,
+                _messages.Get("common.invalidRequest"),
+                "common.invalidRequest"));
 
-        try
-        {
-            var acceptLanguage = Request.Headers["Accept-Language"].FirstOrDefault();
-            var result = await _authService.Register(request, acceptLanguage);
-            return Ok(ApiResponse<AuthResponse>.Ok(result, "注册成功"));
-        }
-        catch (BusinessException ex)
-        {
-            return BadRequest(ApiResponse<AuthResponse>.Error(ex.ErrorCode, ex.Message));
-        }
+        var acceptLanguage = Request.Headers["Accept-Language"].FirstOrDefault();
+        var result = await _authService.Register(request, acceptLanguage);
+        return Ok(ApiResponse<AuthResponse>.Ok(
+            result,
+            _messages.Get("auth.registerSuccess"),
+            "auth.registerSuccess"));
     }
 
     /// <summary>
@@ -51,17 +57,16 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<ApiResponse<AuthResponse>>> Login([FromBody] LoginRequest request)
     {
         if (!ModelState.IsValid)
-            return BadRequest(ApiResponse<AuthResponse>.Error(400, "请求参数不合法"));
+            return BadRequest(ApiResponse<AuthResponse>.Error(
+                400,
+                _messages.Get("common.invalidRequest"),
+                "common.invalidRequest"));
 
-        try
-        {
-            var result = await _authService.Login(request);
-            return Ok(ApiResponse<AuthResponse>.Ok(result, "登录成功"));
-        }
-        catch (BusinessException ex)
-        {
-            return Unauthorized(ApiResponse<AuthResponse>.Error(401, ex.Message));
-        }
+        var result = await _authService.Login(request);
+        return Ok(ApiResponse<AuthResponse>.Ok(
+            result,
+            _messages.Get("auth.loginSuccess"),
+            "auth.loginSuccess"));
     }
 
     /// <summary>
@@ -70,15 +75,11 @@ public class AuthController : ControllerBase
     [HttpPost("refresh")]
     public async Task<ActionResult<ApiResponse<AuthResponse>>> Refresh([FromBody] RefreshRequest request)
     {
-        try
-        {
-            var result = await _authService.RefreshToken(request.RefreshToken);
-            return Ok(ApiResponse<AuthResponse>.Ok(result));
-        }
-        catch (BusinessException ex)
-        {
-            return Unauthorized(ApiResponse<AuthResponse>.Error(401, ex.Message));
-        }
+        var result = await _authService.RefreshToken(request.RefreshToken);
+        return Ok(ApiResponse<AuthResponse>.Ok(
+            result,
+            _messages.Get("common.success"),
+            "common.success"));
     }
 
     /// <summary>
@@ -89,17 +90,16 @@ public class AuthController : ControllerBase
     {
         var userId = _userContext.UserId;
         if (userId == null)
-            return Unauthorized(ApiResponse<UserDto>.Error(401, "未登录"));
+            return Unauthorized(ApiResponse<UserDto>.Error(
+                401,
+                _messages.Get("common.unauthorized"),
+                "common.unauthorized"));
 
-        try
-        {
-            var user = await _authService.GetCurrentUser(userId.Value);
-            return Ok(ApiResponse<UserDto>.Ok(user));
-        }
-        catch (BusinessException ex)
-        {
-            return NotFound(ApiResponse<UserDto>.Error(404, ex.Message));
-        }
+        var user = await _authService.GetCurrentUser(userId.Value);
+        return Ok(ApiResponse<UserDto>.Ok(
+            user,
+            _messages.Get("common.success"),
+            "common.success"));
     }
 
     /// <summary>
@@ -110,19 +110,18 @@ public class AuthController : ControllerBase
     {
         var userId = _userContext.UserId;
         if (userId == null)
-            return Unauthorized(ApiResponse<bool>.Error(401, "未登录"));
+            return Unauthorized(ApiResponse<bool>.Error(
+                401,
+                _messages.Get("common.unauthorized"),
+                "common.unauthorized"));
 
-        try
-        {
-            await _authService.SetPreferredLang(userId.Value, request.Lang);
-            _cache.Remove(LanguageMiddleware.GetCacheKey(userId.Value));
-            HttpContext.Items["resolved_lang"] = AuthService.NormalizeForClient(request.Lang);
-            return Ok(ApiResponse<bool>.Ok(true, "ok"));
-        }
-        catch (BusinessException ex)
-        {
-            return BadRequest(ApiResponse<bool>.Error(ex.ErrorCode, ex.Message));
-        }
+        await _authService.SetPreferredLang(userId.Value, request.Lang);
+        _cache.Remove(LanguageMiddleware.GetCacheKey(userId.Value));
+        HttpContext.Items["resolved_lang"] = AuthService.NormalizeForClient(request.Lang);
+        return Ok(ApiResponse<bool>.Ok(
+            true,
+            _messages.Get("auth.languageUpdated"),
+            "auth.languageUpdated"));
     }
 }
 

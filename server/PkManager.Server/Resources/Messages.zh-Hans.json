@@ -1,0 +1,23 @@
+{
+  "common.success": "成功",
+  "common.ok": "ok",
+  "common.unauthorized": "未登录",
+  "common.invalidRequest": "请求参数不合法",
+  "auth.registerSuccess": "注册成功",
+  "auth.loginSuccess": "登录成功",
+  "auth.languageUpdated": "语言偏好已更新",
+  "auth.usernameTaken": "用户名已被注册",
+  "auth.emailTaken": "邮箱已被注册",
+  "auth.invalidCredentials": "用户名或密码错误",
+  "auth.userDisabledOrMissing": "用户不存在或已禁用",
+  "auth.invalidRefreshToken": "无效的刷新令牌",
+  "auth.userNotFound": "用户不存在",
+  "auth.unsupportedLanguage": "不支持的语言",
+  "geo.consoleRegion.0": "日本 (JPN)",
+  "geo.consoleRegion.1": "美洲 (USA)",
+  "geo.consoleRegion.2": "欧洲 (EUR)",
+  "geo.consoleRegion.3": "澳洲 (AUS)",
+  "geo.consoleRegion.4": "中国 (CHN)",
+  "geo.consoleRegion.5": "韩国 (KOR)",
+  "geo.consoleRegion.6": "台湾 (TWN)"
+}

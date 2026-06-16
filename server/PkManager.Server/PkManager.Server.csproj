@@ -20,4 +20,8 @@
     <PackageReference Include="PKHeX.Core" Version="$(PKHeXCoreVersion)" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="Resources\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

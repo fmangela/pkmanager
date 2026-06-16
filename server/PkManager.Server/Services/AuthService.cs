@@ -41,9 +41,9 @@ public class AuthService
         if (existing != null)
         {
             if (existing.Username == request.Username)
-                throw new BusinessException("用户名已被注册");
+                throw BusinessException.FromKey("auth.usernameTaken", 400);
             else
-                throw new BusinessException("邮箱已被注册");
+                throw BusinessException.FromKey("auth.emailTaken", 400);
         }
 
         var passwordHash = BCrypt.Net.BCrypt.EnhancedHashPassword(request.Password, 12);
@@ -68,10 +68,10 @@ public class AuthService
             new { request.Username });
 
         if (user == null || !user.IsActive)
-            throw new BusinessException("用户名或密码错误");
+            throw BusinessException.FromKey("auth.invalidCredentials", 401);
 
         if (!BCrypt.Net.BCrypt.EnhancedVerify(request.Password, user.PasswordHash))
-            throw new BusinessException("用户名或密码错误");
+            throw BusinessException.FromKey("auth.invalidCredentials", 401);
 
         return GenerateTokens(user.Id, user.Username, user.Email, user.PreferredLang);
     }
@@ -106,13 +106,13 @@ public class AuthService
                 new { Id = userId });
 
             if (user == null)
-                throw new BusinessException("用户不存在或已禁用");
+                throw BusinessException.FromKey("auth.userDisabledOrMissing", 401);
 
             return GenerateTokens(user.Id, user.Username, user.Email, user.PreferredLang);
         }
         catch (SecurityTokenException)
         {
-            throw new BusinessException("无效的刷新令牌");
+            throw BusinessException.FromKey("auth.invalidRefreshToken", 401);
         }
     }
 
@@ -126,7 +126,7 @@ public class AuthService
             new { Id = userId });
 
         if (user == null)
-            throw new BusinessException("用户不存在");
+            throw BusinessException.FromKey("auth.userNotFound", 404);
 
         return new UserDto
         {
@@ -141,7 +141,7 @@ public class AuthService
     {
         var normalized = NormalizeLang(lang);
         if (!IsSupportedLang(normalized))
-            throw new BusinessException("不支持的语言", 400);
+            throw BusinessException.FromKey("auth.unsupportedLanguage", 400);
 
         await _db.ExecuteAsync(
             "UPDATE users SET preferred_lang = @Lang, updated_at = NOW() WHERE id = @UserId",
@@ -226,18 +226,5 @@ public class AuthService
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
-    }
-}
-
-/// <summary>
-/// 业务异常，用于返回可展示给用户的错误信息
-/// </summary>
-public class BusinessException : Exception
-{
-    public int ErrorCode { get; }
-
-    public BusinessException(string message, int errorCode = 400) : base(message)
-    {
-        ErrorCode = errorCode;
     }
 }

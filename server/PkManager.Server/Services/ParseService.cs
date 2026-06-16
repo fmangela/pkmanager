@@ -14,11 +14,13 @@ public class ParseService
     private const int DeSmuMEFooterSize = 0x7A;
     private const int NdsRawSaveSize = SaveUtil.SIZE_G4RAW;
     private static readonly byte[] DeSmuMEMarker = Encoding.ASCII.GetBytes("|-DESMUME SAVE-|");
+    private readonly IGeoDataProvider _geoDataProvider;
     private readonly IPkhexStringProvider _pkhexStrings;
 
-    public ParseService(IPkhexStringProvider pkhexStrings)
+    public ParseService(IPkhexStringProvider pkhexStrings, IGeoDataProvider geoDataProvider)
     {
         _pkhexStrings = pkhexStrings;
+        _geoDataProvider = geoDataProvider;
     }
 
     private static bool IsDeSmuMESave(byte[] saveData)
@@ -408,11 +410,11 @@ public class ParseService
             GeoCountry = geoCountry,
             GeoRegion = geoRegion,
             Country = (pkm as IRegionOrigin)?.Country,
-            CountryName = GetCountryName((pkm as IRegionOrigin)?.Country),
+            CountryName = _geoDataProvider.GetCountryName((pkm as IRegionOrigin)?.Country),
             SubRegion = (pkm as IRegionOrigin)?.Region,
-            SubRegionName = GetSubRegionName((pkm as IRegionOrigin)?.Country, (pkm as IRegionOrigin)?.Region),
+            SubRegionName = _geoDataProvider.GetRegionName((pkm as IRegionOrigin)?.Country, (pkm as IRegionOrigin)?.Region),
             ConsoleRegion = (pkm as IRegionOrigin)?.ConsoleRegion,
-            ConsoleRegionName = GetConsoleRegionName((pkm as IRegionOrigin)?.ConsoleRegion),
+            ConsoleRegionName = _geoDataProvider.GetConsoleRegionName((pkm as IRegionOrigin)?.ConsoleRegion),
             AffixedRibbon = (int?)(pkm as IRibbonSetAffixed)?.AffixedRibbon,
 
             // ── Cosmetic Tab ─────────────────────────
@@ -480,156 +482,6 @@ public class ParseService
         9 => "简体中文", 10 => "繁體中文",
         _ => $"Language {langId}"
     };
-
-    // ── 国家/地区名称映射 ──────────────────────────
-    private static string? GetCountryName(byte? countryCode)
-    {
-        if (countryCode == null) return null;
-        return countryCode.Value switch
-        {
-            1 => "日本",
-            8 => "安圭拉",
-            9 => "安提瓜和巴布达",
-            10 => "阿根廷",
-            11 => "阿鲁巴",
-            12 => "巴哈马",
-            13 => "巴巴多斯",
-            14 => "伯利兹",
-            15 => "玻利维亚",
-            16 => "巴西",
-            17 => "英属维尔京群岛",
-            18 => "加拿大",
-            20 => "开曼群岛",
-            21 => "智利",
-            22 => "哥伦比亚",
-            23 => "哥斯达黎加",
-            24 => "多米尼克",
-            25 => "多米尼加",
-            26 => "厄瓜多尔",
-            27 => "萨尔瓦多",
-            28 => "法属圭亚那",
-            29 => "格林纳达",
-            30 => "瓜德罗普",
-            31 => "危地马拉",
-            32 => "圭亚那",
-            33 => "海地",
-            34 => "洪都拉斯",
-            35 => "牙买加",
-            36 => "马提尼克",
-            37 => "墨西哥",
-            38 => "蒙特塞拉特",
-            39 => "荷属安的列斯",
-            40 => "尼加拉瓜",
-            41 => "巴拿马",
-            42 => "巴拉圭",
-            43 => "秘鲁",
-            44 => "圣基茨和尼维斯",
-            45 => "圣卢西亚",
-            46 => "圣文森特和格林纳丁斯",
-            47 => "苏里南",
-            48 => "特立尼达和多巴哥",
-            49 => "特克斯和凯科斯群岛",
-            50 => "美国",
-            51 => "乌拉圭",
-            52 => "美属维尔京群岛",
-            53 => "委内瑞拉",
-            64 => "阿尔巴尼亚",
-            65 => "澳大利亚",
-            66 => "奥地利",
-            67 => "比利时",
-            68 => "波黑",
-            69 => "博茨瓦纳",
-            70 => "保加利亚",
-            71 => "克罗地亚",
-            72 => "塞浦路斯",
-            73 => "捷克",
-            74 => "丹麦",
-            75 => "爱沙尼亚",
-            76 => "芬兰",
-            77 => "法国",
-            78 => "德国",
-            79 => "希腊",
-            80 => "匈牙利",
-            81 => "冰岛",
-            82 => "爱尔兰",
-            83 => "意大利",
-            84 => "拉脱维亚",
-            85 => "列支敦士登",
-            86 => "立陶宛",
-            87 => "卢森堡",
-            88 => "马其顿",
-            89 => "马耳他",
-            90 => "黑山",
-            91 => "莫桑比克",
-            92 => "纳米比亚",
-            93 => "荷兰",
-            94 => "新西兰",
-            95 => "挪威",
-            96 => "波兰",
-            97 => "葡萄牙",
-            98 => "罗马尼亚",
-            99 => "俄罗斯",
-            100 => "塞尔维亚",
-            101 => "斯洛伐克",
-            102 => "斯洛文尼亚",
-            103 => "南非",
-            104 => "西班牙",
-            105 => "瑞典",
-            106 => "瑞士",
-            107 => "土耳其",
-            108 => "英国",
-            109 => "赞比亚",
-            110 => "津巴布韦",
-            128 => "台湾",
-            136 => "韩国",
-            144 => "中国",
-            160 => "香港",
-            168 => "澳门",
-            _ => $"[{countryCode}]"
-        };
-    }
-
-    private static string? GetSubRegionName(byte? countryCode, byte? regionCode)
-    {
-        if (regionCode == null) return null;
-        if (regionCode == 0) return "—";
-
-        // 日本 (country=1) 的都道府县
-        if (countryCode == 1)
-        {
-            return regionCode.Value switch
-            {
-                1 => "北海道",
-                2 => "青森/東北",
-                3 => "関東",
-                4 => "中部",
-                5 => "近畿",
-                6 => "中国",
-                7 => "四国",
-                8 => "九州",
-                9 => "沖縄",
-                _ => $"日本[{regionCode}]"
-            };
-        }
-
-        return $"[{regionCode}]";
-    }
-
-    private static string? GetConsoleRegionName(byte? consoleRegion)
-    {
-        if (consoleRegion == null) return null;
-        return consoleRegion.Value switch
-        {
-            0 => "日本 (JPN)",
-            1 => "美洲 (USA)",
-            2 => "欧洲 (EUR)",
-            3 => "澳洲 (AUS)",
-            4 => "中国 (CHN)",
-            5 => "韩国 (KOR)",
-            6 => "台湾 (TWN)",
-            _ => $"[{consoleRegion}]"
-        };
-    }
 
     // ── 来源标记 ──────────────────────────────────
     private static int? GetOriginMark(PKM pkm)
