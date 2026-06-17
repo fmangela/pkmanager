@@ -6,6 +6,7 @@ import {
 import { SaveOutlined, CopyOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { saveFileApi, type TrainerInfoDto } from '../../api/saveFile';
+import { formatLocaleNumber } from '../../i18n/locale';
 
 const { Text } = Typography;
 
@@ -14,13 +15,13 @@ interface Props {
 }
 
 const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
-  const { t } = useTranslation(['editor', 'messages', 'common']);
-  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
-    t(key, { ns: 'editor', defaultValue, ...(options ?? {}) });
-  const mt = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
-    t(key, { ns: 'messages', defaultValue, ...(options ?? {}) });
-  const ct = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
-    t(key, { ns: 'common', defaultValue, ...(options ?? {}) });
+  const { t, i18n } = useTranslation(['editor', 'messages', 'common']);
+  const et = React.useCallback((key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'editor', defaultValue, ...(options ?? {}) }), [t]);
+  const mt = React.useCallback((key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'messages', defaultValue, ...(options ?? {}) }), [t]);
+  const ct = React.useCallback((key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'common', defaultValue, ...(options ?? {}) }), [t]);
   const LANGUAGE_OPTIONS = [
     { value: 1, label: '日本語 (JPN)' },
     { value: 2, label: 'English (ENG)' },
@@ -51,7 +52,7 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
     } finally {
       setLoading(false);
     }
-  }, [saveFileId, t]);
+  }, [saveFileId, et, message]);
 
   useEffect(() => { fetchInfo(); }, [fetchInfo]);
 
@@ -210,7 +211,7 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
             {info.money != null && (
               <Col span={8}>
                 <div style={{ marginBottom: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.money', '金钱 (Max: {{max}})', { max: cap.maxMoney.toLocaleString() })}</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.money', '金钱 (Max: {{max}})', { max: formatLocaleNumber(cap.maxMoney, i18n.language) })}</Text>
                   <InputNumber
                     value={info.money} min={0} max={cap.maxMoney}
                     onChange={v => updateField('money', v ?? 0)}
@@ -222,7 +223,7 @@ const TrainerPanel: React.FC<Props> = ({ saveFileId }) => {
             {cap.hasCoins && info.coins != null && (
               <Col span={8}>
                 <div style={{ marginBottom: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.coins', '代币 (Max: {{max}})', { max: cap.maxCoins?.toLocaleString() ?? '' })}</Text>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>{et('trainer.coins', '代币 (Max: {{max}})', { max: formatLocaleNumber(cap.maxCoins, i18n.language) })}</Text>
                   <InputNumber
                     value={info.coins} min={0} max={cap.maxCoins ?? 99999}
                     onChange={v => updateField('coins', v ?? 0)}

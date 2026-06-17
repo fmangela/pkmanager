@@ -6,6 +6,7 @@ import { SaveOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { saveFileApi, type BagDto, type BagItemDto } from '../../api/saveFile';
 import { useResourceStore } from '../../stores/resourceStore';
+import { getIntlLocale } from '../../i18n/locale';
 
 const { Text } = Typography;
 
@@ -36,11 +37,11 @@ interface Props {
 }
 
 const BagPanel: React.FC<Props> = ({ saveFileId }) => {
-  const { t } = useTranslation(['editor', 'messages', 'common']);
-  const et = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
-    t(key, { ns: 'editor', defaultValue, ...(options ?? {}) });
-  const ct = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
-    t(key, { ns: 'common', defaultValue, ...(options ?? {}) });
+  const { t, i18n } = useTranslation(['editor', 'messages', 'common']);
+  const et = useCallback((key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'editor', defaultValue, ...(options ?? {}) }), [t]);
+  const ct = useCallback((key: string, defaultValue: string, options?: Record<string, unknown>) =>
+    t(key, { ns: 'common', defaultValue, ...(options ?? {}) }), [t]);
   const POUCH_LABELS: Record<string, string> = {
     Items: et('bag.items', '道具'),
     Medicine: et('bag.medicine', '药品'),
@@ -85,7 +86,7 @@ const BagPanel: React.FC<Props> = ({ saveFileId }) => {
     } finally {
       setLoading(false);
     }
-  }, [saveFileId, message, t]);
+  }, [saveFileId, message, et]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
   useEffect(() => { fetchBag(); }, [fetchBag]);
@@ -100,6 +101,8 @@ const BagPanel: React.FC<Props> = ({ saveFileId }) => {
   const currentPouch = bag?.pouches.find(p => p.type === activePouch);
 
   // 构建带槽位位置的 item 列表，排序时保留 slotPos
+  const locale = getIntlLocale(i18n.language);
+
   const slotItems: SlotItem[] = React.useMemo(() => {
     if (!currentPouch) return [];
     const items: SlotItem[] = currentPouch.items.map((it, i) => ({ ...it, slotPos: i }));
@@ -108,7 +111,7 @@ const BagPanel: React.FC<Props> = ({ saveFileId }) => {
         items.sort((a, b) => {
           const na = a.index > 0 ? getItemName(a.index) : '';
           const nb = b.index > 0 ? getItemName(b.index) : '';
-          return na.localeCompare(nb, 'zh-CN');
+          return na.localeCompare(nb, locale);
         });
         break;
       case 'count':
@@ -126,7 +129,7 @@ const BagPanel: React.FC<Props> = ({ saveFileId }) => {
         break;
     }
     return items;
-  }, [currentPouch, sortBy, getItemName]);
+  }, [currentPouch, sortBy, getItemName, locale]);
 
   const filteredItems = showEmpty ? slotItems : slotItems.filter(it => it.count > 0);
 

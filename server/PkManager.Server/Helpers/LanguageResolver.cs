@@ -31,6 +31,13 @@ public class LanguageResolver : ILanguageResolver
 
     public string ResolveOrDefault(string? lang)
     {
+        if (string.Equals(lang, "zh-Hans", StringComparison.OrdinalIgnoreCase))
+            return "zh-Hans";
+        if (string.Equals(lang, "zh-Hant", StringComparison.OrdinalIgnoreCase))
+            return "zh-Hant";
+        if (string.Equals(lang, "es-419", StringComparison.OrdinalIgnoreCase))
+            return "es-419";
+
         var normalized = lang switch
         {
             "zh" or "zh-CN" or "zh-cn" => "zh-Hans",

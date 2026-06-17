@@ -451,9 +451,9 @@ step "种子静态数据 (res_* 表)"
 
 # seed-static-data.sh 默认连接本地 PG Unix socket
 # 改为通过 TCP 连接（与 DB_HOST/DB_PORT 一致）
-info "导入宝可梦名称、招式、特性等静态数据 (zh-Hans)..."
+info "导入宝可梦名称、招式、特性等静态数据 (all languages)..."
 PGHOST="$DB_HOST" PGPORT="$DB_PORT" PGUSER="$DB_USER" PGDATABASE="$DB_NAME" \
-    bash "$SCRIPTS_DIR/seed-static-data.sh" zh-Hans 2>&1 | grep -E "INFO|导入|完成|跳过|已有" || true
+    bash "$SCRIPTS_DIR/seed-static-data.sh" all 2>&1 | grep -E "INFO|导入|完成|跳过|已有" || true
 ok "静态数据种子完成"
 
 # ================================================================

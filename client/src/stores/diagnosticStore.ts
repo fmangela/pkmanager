@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { formatLocaleTime } from '../i18n/locale';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -180,7 +181,7 @@ export const useDiagnosticStore = create<DiagnosticState>((set, get) => ({
     ];
 
     for (const e of entries) {
-      const time = new Date(e.timestamp).toLocaleTimeString('zh-CN', { hour12: false });
+      const time = formatLocaleTime(e.timestamp, localStorage.getItem('pkmanager_lang') || 'zh-Hans');
       const repeat = e.count && e.count > 1 ? ` (×${e.count})` : '';
       lines.push(`[${time}] [${e.category}/${e.level}] ${e.message}${repeat}`);
       if (e.context) lines.push(`  context: ${e.context}`);

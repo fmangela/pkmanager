@@ -33,6 +33,7 @@ import { useAuthStore } from '../stores/authStore';
 import GameCover from '../components/GameCover';
 import PokemonSprite from '../components/PokemonSprite';
 import { getStoredSpriteStyle, type SpriteStyle } from '../lib/spriteUrl';
+import { formatLocaleDateTime } from '../i18n/locale';
 
 const { Title, Text } = Typography;
 
@@ -959,7 +960,7 @@ const BackupSection: React.FC<{ saveFileId: string }> = ({ saveFileId }) => {
               {i === 0 && <Tag color="green">{t('latest', { ns: 'common', defaultValue: '最新' })}</Tag>}
             </div>
             <div className="save-editor-backup-card__meta">
-              <div>🕐 {new Date(b.createdAt).toLocaleString(i18n.language === 'en' ? 'en-US' : 'zh-CN')}</div>
+              <div>🕐 {formatLocaleDateTime(b.createdAt, i18n.language)}</div>
               <div>🎮 {b.gameVersion || '—'}</div>
               <div>👤 {b.trainerName || '—'}</div>
               <div>📦 {b.pokemonCount} Pokémon · {b.boxCount} Boxes</div>

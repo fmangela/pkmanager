@@ -62,5 +62,13 @@
   "resource.nature": "性格",
   "resource.item": "道具",
   "errorBoundary.title": "页面遇到了一个错误",
-  "errorBoundary.location": "位置"
+  "errorBoundary.location": "位置",
+  "language.zhHant": "繁體中文",
+  "language.ja": "日本語",
+  "language.fr": "Français",
+  "language.it": "Italiano",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.es419": "Español (LatAm)",
+  "language.ko": "한국어"
 }

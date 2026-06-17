@@ -251,32 +251,21 @@ public class ResourceController : ControllerBase
         if (_userContext.UserId == null)
             return Unauthorized(ApiResponse<List<ResourceItem>>.Error(401, "未登录"));
 
-        var games = new List<ResourceItem>
+        var strings = _pkhexStrings.GetStrings(ResolveLang(lang));
+        var gameVersions = new[]
         {
-            new() { Id = 0, Name = "未知" },
-            new() { Id = 1, Name = "蓝宝石" },
-            new() { Id = 2, Name = "红宝石" },
-            new() { Id = 3, Name = "绿宝石" },
-            new() { Id = 4, Name = "火红" },
-            new() { Id = 5, Name = "叶绿" },
-            new() { Id = 10, Name = "钻石" },
-            new() { Id = 11, Name = "珍珠" },
-            new() { Id = 12, Name = "白金" },
-            new() { Id = 7, Name = "心金" },
-            new() { Id = 8, Name = "魂银" },
-            new() { Id = 20, Name = "黑" },
-            new() { Id = 21, Name = "白" },
-            new() { Id = 22, Name = "黑2" },
-            new() { Id = 23, Name = "白2" },
-            new() { Id = 24, Name = "X" },
-            new() { Id = 25, Name = "Y" },
-            new() { Id = 26, Name = "欧米伽红宝石" },
-            new() { Id = 27, Name = "阿尔法蓝宝石" },
-            new() { Id = 30, Name = "太阳" },
-            new() { Id = 31, Name = "月亮" },
-            new() { Id = 32, Name = "究极之日" },
-            new() { Id = 33, Name = "究极之月" },
+            0, 1, 2, 3, 4, 5, 7, 8, 10, 11, 12,
+            20, 21, 22, 23, 24, 25, 26, 27, 30, 31, 32, 33,
         };
+        var games = gameVersions
+            .Select(id => new ResourceItem
+            {
+                Id = id,
+                Name = id >= 0 && id < strings.gamelist.Length && !string.IsNullOrWhiteSpace(strings.gamelist[id])
+                    ? strings.gamelist[id]
+                    : id == 0 ? "Unknown" : $"Version {id}",
+            })
+            .ToList();
 
         return Ok(ApiResponse<List<ResourceItem>>.Ok(games));
     }

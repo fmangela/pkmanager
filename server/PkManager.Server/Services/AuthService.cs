@@ -188,6 +188,9 @@ public class AuthService
 
     private static string NormalizeLang(string? lang) => lang switch
     {
+        "zh-Hans" or "zh-hans" => "zh-Hans",
+        "zh-Hant" or "zh-hant" => "zh-Hant",
+        "es-419" => "es-419",
         "zh" or "zh-CN" or "zh-cn" => "zh-Hans",
         "zh-TW" or "zh-tw" => "zh-Hant",
         "en-US" or "en-us" or "en-GB" or "en-gb" => "en",

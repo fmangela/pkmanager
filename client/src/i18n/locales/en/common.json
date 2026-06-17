@@ -62,5 +62,13 @@
   "resource.nature": "Nature",
   "resource.item": "Item",
   "errorBoundary.title": "This page encountered an error",
-  "errorBoundary.location": "Location"
+  "errorBoundary.location": "Location",
+  "language.zhHant": "Traditional Chinese",
+  "language.ja": "Japanese",
+  "language.fr": "French",
+  "language.it": "Italian",
+  "language.de": "German",
+  "language.es": "Spanish",
+  "language.es419": "Spanish (LatAm)",
+  "language.ko": "Korean"
 }

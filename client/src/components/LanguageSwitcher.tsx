@@ -3,11 +3,20 @@ import { App, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { authApi } from '../api/auth';
 import { useResourceStore } from '../stores/resourceStore';
+import { SUPPORTED_LANGS } from '../i18n/i18n';
 
-const LANGUAGE_OPTIONS = [
-  { value: 'zh-Hans', label: '简体中文' },
-  { value: 'en', label: 'English' },
-] as const;
+const LANGUAGE_LABELS: Record<string, string> = {
+  'zh-Hans': '简体中文',
+  'zh-Hant': '繁體中文',
+  en: 'English',
+  ja: '日本語',
+  fr: 'Français',
+  it: 'Italiano',
+  de: 'Deutsch',
+  es: 'Español',
+  'es-419': 'Español (LatAm)',
+  ko: '한국어',
+};
 
 const LanguageSwitcher: React.FC = () => {
   const { i18n, t } = useTranslation(['messages', 'common']);
@@ -31,9 +40,12 @@ const LanguageSwitcher: React.FC = () => {
   return (
     <Select
       size="small"
-      style={{ width: 128 }}
+      style={{ width: 180 }}
       value={i18n.language}
-      options={LANGUAGE_OPTIONS.map((option) => ({ ...option }))}
+      options={SUPPORTED_LANGS.map((value) => ({
+        value,
+        label: LANGUAGE_LABELS[value] ?? value,
+      }))}
       onChange={handleChange}
     />
   );

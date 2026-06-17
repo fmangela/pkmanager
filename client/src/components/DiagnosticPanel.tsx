@@ -26,6 +26,7 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useDiagnosticStore, type DiagCategory, type DiagLevel } from '../stores/diagnosticStore';
+import { formatLocaleTime } from '../i18n/locale';
 
 const { Text } = Typography;
 
@@ -80,7 +81,7 @@ const DiagnosticPanel: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [levelFilter, setLevelFilter] = useState<FilterLevel>('all');
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>('all');
-  const { t } = useTranslation(['common', 'messages']);
+  const { t, i18n } = useTranslation(['common', 'messages']);
 
   const entries = useDiagnosticStore((s) => s.entries);
   const healthStatus = useDiagnosticStore((s) => s.healthStatus);
@@ -282,9 +283,7 @@ const DiagnosticPanel: React.FC = () => {
                   <div key={entry.id} style={{ marginBottom: 4 }}>
                     <Space size={4} wrap>
                       <Text type="secondary" style={{ fontSize: 11, fontFamily: 'monospace' }}>
-                        {new Date(entry.timestamp).toLocaleTimeString('zh-CN', {
-                          hour12: false,
-                        })}
+                        {formatLocaleTime(entry.timestamp, i18n.language)}
                       </Text>
                       <Tag
                         color={CATEGORY_META[entry.category]?.color}

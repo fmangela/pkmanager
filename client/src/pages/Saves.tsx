@@ -12,6 +12,7 @@ import GameCover from '../components/GameCover';
 import PageContainer from '../components/PageContainer';
 import { launchLocalSave } from '../lib/localLaunch';
 import type { ApiError } from '../api/axios';
+import { formatLocaleDateTime } from '../i18n/locale';
 
 const { Text } = Typography;
 
@@ -157,7 +158,7 @@ const SavesPage: React.FC = () => {
       dataIndex: 'updatedAt',
       key: 'updatedAt',
       width: 160,
-      render: (date: string) => new Date(date).toLocaleString(i18n.language === 'en' ? 'en-US' : 'zh-CN'),
+      render: (date: string) => formatLocaleDateTime(date, i18n.language),
     },
     {
       title: t('saves.column.actions', { ns: 'pages', defaultValue: '操作' }),
