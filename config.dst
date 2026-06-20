@@ -6,11 +6,6 @@
 # ║    cp config.dst config        # copy template / 复制模板     ║
 # ║    edit config                 # fill real values / 填入真实值 ║
 # ╠══════════════════════════════════════════════════════════════╣
-# ║  config     = development (real secrets, GITIGNORED)         ║
-# ║              开发环境 — 含真实机密，Git 忽略                    ║
-# ║  config.dst = public template (placeholders, COMMITTED)      ║
-# ║              对外发布模板 — 占位符，Git 提交                    ║
-# ╠══════════════════════════════════════════════════════════════╣
 # ║  Format / 格式: KEY=VALUE                                   ║
 # ║  Comments / 注释: lines starting with # / # 开头为注释          ║
 # ╚══════════════════════════════════════════════════════════════╝
