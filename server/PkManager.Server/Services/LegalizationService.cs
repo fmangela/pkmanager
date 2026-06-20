@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using PKHeX.Core;
 using PkManager.Server.Helpers;
 using PkManager.Server.Localization;
@@ -32,6 +33,8 @@ public class LegalizationService
     }
 
     private string Text(string key, params object?[] args) => _messages.Get(key, args);
+    private string TextForLanguage(string? lang, string key, params object?[] args) =>
+        _messages.GetForLanguage(lang, key, args);
 
     // ── URL 获取辅助 ──────────────────────────────────────
 
@@ -306,7 +309,7 @@ public class LegalizationService
         {
             result.FailedFixes.Add("FindEncounter");
             result.Status = LegalityStatus.Illegal;
-            result.Report = "无法匹配合法遭遇模板";
+            result.Report = Text("legalize.noEncounterTemplateAdjust");
             return result;
         }
 
@@ -502,15 +505,7 @@ public class LegalizationService
         result.Fixed = result.AppliedFixes.Count > 0;
         result.UpdatedPokemon = _parseService.MapToPokemonDto(pkm);
         result.PkmDataBase64 = GetPkmBase64(pkm);
-        result.Judgements = postLa.Results.Select(r => new JudgementDto
-        {
-            Identifier = r.Identifier.ToString(),
-            Judgement = r.Judgement.ToString(),
-            Comment = "",
-            Issue = GetHumanReadableIssue(r),
-            CanFix = CanAutoFix(r),
-            FixAction = GetFixAction(r)
-        }).ToList();
+        result.Judgements = _editService.BuildJudgements(postLa);
 
         if (result.Status != LegalityStatus.Legal)
             result.Report = postLa.Report();
@@ -528,7 +523,7 @@ public class LegalizationService
         // 支持 PokePaste/Showdown URL
         var (resolvedText, urlError) = ResolveUrl(text);
         if (urlError != null)
-            throw new BusinessException(urlError);
+            throw BusinessException.FromKeyWithFallback("legalize.urlFetchFailed", urlError, 400);
         if (resolvedText == null)
             throw BusinessException.FromKey("legalize.urlFetchFailed", 400);
 
@@ -684,9 +679,9 @@ public class LegalizationService
                 return GetHumanReadableIssue(r);
         }
         if (!MoveResult.AllValid(la.Info.Moves))
-            return "存在不合法招式";
+            return "__LEGALIZE_INVALID_MOVES_PRESENT__";
         if (!MoveResult.AllValid(la.Info.Relearn))
-            return "存在不合法回忆招式";
+            return "__LEGALIZE_INVALID_RELEARN_MOVES_PRESENT__";
         foreach (var r in la.Results)
         {
             if (r.Judgement == Severity.Fishy)
@@ -697,8 +692,8 @@ public class LegalizationService
 
     public static string GetHumanReadableIssue(CheckResult r)
     {
-        var id = GetChineseCheckName(r.Identifier);
-        var comment = $"{id}校验失败";
+        var id = GetCheckIdentifierToken(r.Identifier);
+        var comment = $"__LEGALIZE_CHECK_FAILED__:{id}";
         return r.Judgement switch
         {
             Severity.Valid => string.Empty,
@@ -708,35 +703,91 @@ public class LegalizationService
         };
     }
 
-    public static string GetChineseCheckName(CheckIdentifier id) => id switch
+    public static string GetCheckIdentifierToken(CheckIdentifier id) => id switch
     {
-        CheckIdentifier.Encounter => "遭遇",
-        CheckIdentifier.CurrentMove => "当前招式",
-        CheckIdentifier.RelearnMove => "回忆招式",
-        CheckIdentifier.Shiny => "闪光",
-        CheckIdentifier.Gender => "性别",
-        CheckIdentifier.Language => "语言",
-        CheckIdentifier.Nickname => "昵称",
-        CheckIdentifier.Trainer => "训练家",
-        CheckIdentifier.Level => "等级",
-        CheckIdentifier.Ball => "球种",
-        CheckIdentifier.Memory => "记忆",
-        CheckIdentifier.Geography => "地理",
-        CheckIdentifier.Form => "形态",
-        CheckIdentifier.Egg => "蛋",
-        CheckIdentifier.Misc => "杂项",
-        CheckIdentifier.Fateful => "命运邂逅",
-        CheckIdentifier.Ribbon => "缎带",
-        CheckIdentifier.Training => "训练",
-        CheckIdentifier.Ability => "特性",
-        CheckIdentifier.Evolution => "进化",
-        CheckIdentifier.Nature => "性格",
-        CheckIdentifier.GameOrigin => "来源版本",
-        CheckIdentifier.HeldItem => "持有道具",
-        CheckIdentifier.RibbonMark => "证章",
-        CheckIdentifier.Marking => "标记",
+        CheckIdentifier.Encounter => "__LEGALIZE_CHECK_NAME_ENCOUNTER__",
+        CheckIdentifier.CurrentMove => "__LEGALIZE_CHECK_NAME_CURRENT_MOVE__",
+        CheckIdentifier.RelearnMove => "__LEGALIZE_CHECK_NAME_RELEARN_MOVE__",
+        CheckIdentifier.Shiny => "__LEGALIZE_CHECK_NAME_SHINY__",
+        CheckIdentifier.Gender => "__LEGALIZE_CHECK_NAME_GENDER__",
+        CheckIdentifier.Language => "__LEGALIZE_CHECK_NAME_LANGUAGE__",
+        CheckIdentifier.Nickname => "__LEGALIZE_CHECK_NAME_NICKNAME__",
+        CheckIdentifier.Trainer => "__LEGALIZE_CHECK_NAME_TRAINER__",
+        CheckIdentifier.Level => "__LEGALIZE_CHECK_NAME_LEVEL__",
+        CheckIdentifier.Ball => "__LEGALIZE_CHECK_NAME_BALL__",
+        CheckIdentifier.Memory => "__LEGALIZE_CHECK_NAME_MEMORY__",
+        CheckIdentifier.Geography => "__LEGALIZE_CHECK_NAME_GEOGRAPHY__",
+        CheckIdentifier.Form => "__LEGALIZE_CHECK_NAME_FORM__",
+        CheckIdentifier.Egg => "__LEGALIZE_CHECK_NAME_EGG__",
+        CheckIdentifier.Misc => "__LEGALIZE_CHECK_NAME_MISC__",
+        CheckIdentifier.Fateful => "__LEGALIZE_CHECK_NAME_FATEFUL__",
+        CheckIdentifier.Ribbon => "__LEGALIZE_CHECK_NAME_RIBBON__",
+        CheckIdentifier.Training => "__LEGALIZE_CHECK_NAME_TRAINING__",
+        CheckIdentifier.Ability => "__LEGALIZE_CHECK_NAME_ABILITY__",
+        CheckIdentifier.Evolution => "__LEGALIZE_CHECK_NAME_EVOLUTION__",
+        CheckIdentifier.Nature => "__LEGALIZE_CHECK_NAME_NATURE__",
+        CheckIdentifier.GameOrigin => "__LEGALIZE_CHECK_NAME_GAME_ORIGIN__",
+        CheckIdentifier.HeldItem => "__LEGALIZE_CHECK_NAME_HELD_ITEM__",
+        CheckIdentifier.RibbonMark => "__LEGALIZE_CHECK_NAME_RIBBON_MARK__",
+        CheckIdentifier.Marking => "__LEGALIZE_CHECK_NAME_MARKING__",
         _ => id.ToString()
     };
+
+    public string LocalizeIssue(string issue, string? lang = null)
+    {
+        if (string.IsNullOrWhiteSpace(issue))
+            return issue;
+
+        if (issue == "__LEGALIZE_INVALID_MOVES_PRESENT__")
+            return TextForLanguage(lang, "legalize.invalidMovesPresent");
+        if (issue == "__LEGALIZE_INVALID_RELEARN_MOVES_PRESENT__")
+            return TextForLanguage(lang, "legalize.invalidRelearnMovesPresent");
+
+        var match = Regex.Match(issue, @"^(?<icon>⚠️|❌)\s(?<name>.+?):\s(?<comment>.+)$");
+        if (!match.Success)
+            return issue;
+
+        var icon = match.Groups["icon"].Value;
+        var token = match.Groups["name"].Value;
+        var name = LocalizeCheckName(token, lang);
+        var comment = TextForLanguage(lang, "legalize.checkFailed", name);
+        return $"{icon} {name}: {comment}";
+    }
+
+    private string LocalizeCheckName(string token, string? lang)
+    {
+        var key = token switch
+        {
+            "__LEGALIZE_CHECK_NAME_ENCOUNTER__" => "legalize.checkName.encounter",
+            "__LEGALIZE_CHECK_NAME_CURRENT_MOVE__" => "legalize.checkName.currentMove",
+            "__LEGALIZE_CHECK_NAME_RELEARN_MOVE__" => "legalize.checkName.relearnMove",
+            "__LEGALIZE_CHECK_NAME_SHINY__" => "legalize.checkName.shiny",
+            "__LEGALIZE_CHECK_NAME_GENDER__" => "legalize.checkName.gender",
+            "__LEGALIZE_CHECK_NAME_LANGUAGE__" => "legalize.checkName.language",
+            "__LEGALIZE_CHECK_NAME_NICKNAME__" => "legalize.checkName.nickname",
+            "__LEGALIZE_CHECK_NAME_TRAINER__" => "legalize.checkName.trainer",
+            "__LEGALIZE_CHECK_NAME_LEVEL__" => "legalize.checkName.level",
+            "__LEGALIZE_CHECK_NAME_BALL__" => "legalize.checkName.ball",
+            "__LEGALIZE_CHECK_NAME_MEMORY__" => "legalize.checkName.memory",
+            "__LEGALIZE_CHECK_NAME_GEOGRAPHY__" => "legalize.checkName.geography",
+            "__LEGALIZE_CHECK_NAME_FORM__" => "legalize.checkName.form",
+            "__LEGALIZE_CHECK_NAME_EGG__" => "legalize.checkName.egg",
+            "__LEGALIZE_CHECK_NAME_MISC__" => "legalize.checkName.misc",
+            "__LEGALIZE_CHECK_NAME_FATEFUL__" => "legalize.checkName.fateful",
+            "__LEGALIZE_CHECK_NAME_RIBBON__" => "legalize.checkName.ribbon",
+            "__LEGALIZE_CHECK_NAME_TRAINING__" => "legalize.checkName.training",
+            "__LEGALIZE_CHECK_NAME_ABILITY__" => "legalize.checkName.ability",
+            "__LEGALIZE_CHECK_NAME_EVOLUTION__" => "legalize.checkName.evolution",
+            "__LEGALIZE_CHECK_NAME_NATURE__" => "legalize.checkName.nature",
+            "__LEGALIZE_CHECK_NAME_GAME_ORIGIN__" => "legalize.checkName.gameOrigin",
+            "__LEGALIZE_CHECK_NAME_HELD_ITEM__" => "legalize.checkName.heldItem",
+            "__LEGALIZE_CHECK_NAME_RIBBON_MARK__" => "legalize.checkName.ribbonMark",
+            "__LEGALIZE_CHECK_NAME_MARKING__" => "legalize.checkName.marking",
+            _ => null
+        };
+
+        return key == null ? token : TextForLanguage(lang, key);
+    }
 
     public static bool CanAutoFix(CheckResult r)
     {

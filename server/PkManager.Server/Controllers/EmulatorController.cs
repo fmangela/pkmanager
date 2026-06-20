@@ -18,27 +18,27 @@ namespace PkManager.Server.Controllers;
 public class EmulatorController : LocalizedControllerBase
 {
     private static readonly TimeSpan SyncTokenLifetime = TimeSpan.FromHours(12);
-    private const string NewGameSaveSkippedMessage = "未检测到游戏内有效存档，已跳过同步";
     private static readonly RomConfigEntry[] SupportedLocalRoms =
     [
-        new("pkm_ruby", "宝可梦 红宝石", 3, "ROM_PKM_RUBY"),
-        new("pkm_sapphire", "宝可梦 蓝宝石", 3, "ROM_PKM_SAPPHIRE"),
-        new("pkm_emerald", "宝可梦 绿宝石", 3, "ROM_PKM_EMERALD"),
-        new("pkm_firered", "宝可梦 火红", 3, "ROM_PKM_FIRERED"),
-        new("pkm_leafgreen", "宝可梦 叶绿", 3, "ROM_PKM_LEAFGREEN"),
-        new("pkm_diamond", "宝可梦 钻石", 4, "ROM_PKM_DIAMOND"),
-        new("pkm_pearl", "宝可梦 珍珠", 4, "ROM_PKM_PEARL"),
-        new("pkm_platinum", "宝可梦 白金", 4, "ROM_PKM_PLATINUM"),
-        new("pkm_heartgold", "宝可梦 心金", 4, "ROM_PKM_HEARTGOLD"),
-        new("pkm_soulsilver", "宝可梦 魂银", 4, "ROM_PKM_SOULSILVER"),
-        new("pkm_black", "宝可梦 黑", 5, "ROM_PKM_BLACK"),
-        new("pkm_white", "宝可梦 白", 5, "ROM_PKM_WHITE"),
-        new("pkm_black2", "宝可梦 黑2", 5, "ROM_PKM_BLACK2"),
-        new("pkm_white2", "宝可梦 白2", 5, "ROM_PKM_WHITE2"),
+        new("pkm_ruby", 2, 3, "ROM_PKM_RUBY"),
+        new("pkm_sapphire", 1, 3, "ROM_PKM_SAPPHIRE"),
+        new("pkm_emerald", 3, 3, "ROM_PKM_EMERALD"),
+        new("pkm_firered", 4, 3, "ROM_PKM_FIRERED"),
+        new("pkm_leafgreen", 5, 3, "ROM_PKM_LEAFGREEN"),
+        new("pkm_diamond", 10, 4, "ROM_PKM_DIAMOND"),
+        new("pkm_pearl", 11, 4, "ROM_PKM_PEARL"),
+        new("pkm_platinum", 12, 4, "ROM_PKM_PLATINUM"),
+        new("pkm_heartgold", 7, 4, "ROM_PKM_HEARTGOLD"),
+        new("pkm_soulsilver", 8, 4, "ROM_PKM_SOULSILVER"),
+        new("pkm_black", 21, 5, "ROM_PKM_BLACK"),
+        new("pkm_white", 20, 5, "ROM_PKM_WHITE"),
+        new("pkm_black2", 23, 5, "ROM_PKM_BLACK2"),
+        new("pkm_white2", 22, 5, "ROM_PKM_WHITE2"),
     ];
     private readonly NpgsqlConnection _db;
     private readonly SaveFileService _saveFileService;
     private readonly ParseService _parseService;
+    private readonly IPkhexStringProvider _pkhexStrings;
     private readonly UserContext _userContext;
     private readonly LegalityCacheService _legalityCache;
     private readonly string _romDir;
@@ -46,14 +46,31 @@ public class EmulatorController : LocalizedControllerBase
 
     private readonly SettingsService _settingsService;
 
-    public EmulatorController(NpgsqlConnection db, SaveFileService saveFileService, ParseService parseService, UserContext userContext, IWebHostEnvironment env, IConfiguration config, SettingsService settingsService, LegalityCacheService legalityCache)
+    public EmulatorController(NpgsqlConnection db, SaveFileService saveFileService, ParseService parseService, IPkhexStringProvider pkhexStrings, UserContext userContext, IWebHostEnvironment env, IConfiguration config, SettingsService settingsService, LegalityCacheService legalityCache)
     {
-        _db = db; _saveFileService = saveFileService; _parseService = parseService; _userContext = userContext;
+        _db = db; _saveFileService = saveFileService; _parseService = parseService; _pkhexStrings = pkhexStrings; _userContext = userContext;
         _config = config;
         var romDirConfig = config["ROM_IMPORT_DIRECTORY"] ?? config["RomImport:Directory"] ?? Path.Combine("..", "..", "roms");
         _romDir = Path.GetFullPath(Path.Combine(env.ContentRootPath, romDirConfig));
         _settingsService = settingsService;
         _legalityCache = legalityCache;
+    }
+
+    private string GetLocalizedRomDisplayName(string gameId, string? fallback = null)
+    {
+        var version = GetRomGameVersion(gameId);
+        if (version.HasValue)
+        {
+            var strings = _pkhexStrings.GetStrings();
+            if (version.Value >= 0 && version.Value < strings.gamelist.Length)
+            {
+                var localized = strings.gamelist[version.Value];
+                if (!string.IsNullOrWhiteSpace(localized))
+                    return localized;
+            }
+        }
+
+        return !string.IsNullOrWhiteSpace(fallback) ? fallback : gameId;
     }
 
     /// <summary>列出可用 ROM</summary>
@@ -64,7 +81,7 @@ public class EmulatorController : LocalizedControllerBase
         var roms = await _db.QueryAsync<RomFileEntity>("SELECT id, game_id, display_name, generation, file_size FROM rom_files ORDER BY display_name");
         return Ok(ApiResponse<List<RomDto>>.Ok(roms.Select(r => new RomDto
         {
-            Id = r.Id, GameId = r.GameId, DisplayName = r.DisplayName, Generation = r.Generation, FileSize = r.FileSize
+            Id = r.Id, GameId = r.GameId, DisplayName = GetLocalizedRomDisplayName(r.GameId, r.DisplayName), Generation = r.Generation, FileSize = r.FileSize
         }).ToList()));
     }
 
@@ -73,7 +90,7 @@ public class EmulatorController : LocalizedControllerBase
     public async Task<IActionResult> DownloadRom(string gameId)
     {
         var rom = await _db.QueryFirstOrDefaultAsync<RomFileEntity>("SELECT * FROM rom_files WHERE game_id = @Id", new { Id = gameId });
-        if (rom == null) return NotFound();
+        if (rom == null) return NotFound(ErrorMessage<object>(404, "emulator.romNotFound"));
 
         if (!string.IsNullOrEmpty(rom.LocalPath) && System.IO.File.Exists(rom.LocalPath))
         {
@@ -82,7 +99,7 @@ public class EmulatorController : LocalizedControllerBase
             return File(stream, "application/octet-stream", $"{gameId}{ext}");
         }
 
-        return NotFound("ROM file missing");
+        return NotFound(ErrorMessage<object>(404, "emulator.romNotFound"));
     }
 
     /// <summary>批量导入 ROM（从服务器本地文件）</summary>
@@ -90,7 +107,7 @@ public class EmulatorController : LocalizedControllerBase
     public async Task<ActionResult<ApiResponse<object>>> ImportLocal()
     {
         if (_userContext.UserId == null) return UnauthorizedMessage<object>();
-        if (!Directory.Exists(_romDir)) return BadRequest(ApiResponse<object>.Error(400, $"ROM目录不存在: {_romDir}"));
+        if (!Directory.Exists(_romDir)) return BadRequest(ErrorMessage<object>(400, "emulator.romDirectoryMissing", _romDir));
 
         var imported = new List<string>();
         var missingConfig = new List<string>();
@@ -98,17 +115,18 @@ public class EmulatorController : LocalizedControllerBase
 
         foreach (var rom in SupportedLocalRoms)
         {
+            var displayName = GetLocalizedRomDisplayName(rom.GameId);
             var configuredPath = _config[rom.ConfigKey];
             if (string.IsNullOrWhiteSpace(configuredPath))
             {
-                missingConfig.Add($"{rom.DisplayName} ({rom.ConfigKey})");
+                missingConfig.Add(Messages.Get("emulator.importLocalMissingConfigItem", displayName, rom.ConfigKey));
                 continue;
             }
 
             var resolvedPath = ResolveRomPath(configuredPath);
             if (!System.IO.File.Exists(resolvedPath))
             {
-                missingFile.Add($"{rom.DisplayName} ({configuredPath})");
+                missingFile.Add(Messages.Get("emulator.importLocalMissingFileItem", displayName, configuredPath));
                 continue;
             }
 
@@ -118,23 +136,27 @@ public class EmulatorController : LocalizedControllerBase
                 await _db.ExecuteAsync("UPDATE rom_files SET file_size=@S, local_path=@P WHERE game_id=@I", new { I = rom.GameId, S = fileSize, P = resolvedPath });
             else
                 await _db.ExecuteAsync("INSERT INTO rom_files (game_id,display_name,generation,file_size,local_path,rom_data) VALUES (@I,@N,@G,@S,@P,@D)",
-                    new { I = rom.GameId, N = rom.DisplayName, G = rom.Generation, S = fileSize, P = resolvedPath, D = Array.Empty<byte>() });
-            imported.Add($"{rom.DisplayName} ({fileSize} bytes)");
+                    new { I = rom.GameId, N = displayName, G = rom.Generation, S = fileSize, P = resolvedPath, D = Array.Empty<byte>() });
+            imported.Add(Messages.Get("emulator.importLocalItem", displayName, fileSize));
         }
 
         if (imported.Count == 0)
-            return BadRequest(ApiResponse<object>.Error(400, $"没有可导入的已配置 ROM。missingConfig={missingConfig.Count}, missingFile={missingFile.Count}"));
+            return BadRequest(ErrorMessage<object>(400, "emulator.importLocalNoConfiguredRoms", missingConfig.Count, missingFile.Count));
 
-        var summary = $"已导入 {imported.Count} 个 ROM";
-        if (missingConfig.Count > 0 || missingFile.Count > 0)
-            summary += $"，缺少配置 {missingConfig.Count} 个，缺少文件 {missingFile.Count} 个";
+        var hasMissing = missingConfig.Count > 0 || missingFile.Count > 0;
+        var summaryKey = hasMissing
+            ? "emulator.importLocalSummaryWithMissing"
+            : "emulator.importLocalSummary";
+        var summary = hasMissing
+            ? Messages.Get(summaryKey, imported.Count, missingConfig.Count, missingFile.Count)
+            : Messages.Get(summaryKey, imported.Count);
 
         return Ok(ApiResponse<object>.Ok(new
         {
             imported,
             missingConfig,
             missingFile
-        }, summary));
+        }, summary, summaryKey));
     }
 
     private string ResolveRomPath(string configuredPath)
@@ -143,7 +165,7 @@ public class EmulatorController : LocalizedControllerBase
         return Path.GetFullPath(Path.Combine(_romDir, configuredPath));
     }
 
-    private sealed record RomConfigEntry(string GameId, string DisplayName, int Generation, string ConfigKey);
+    private sealed record RomConfigEntry(string GameId, int GameVersion, int Generation, string ConfigKey);
 
     /// <summary>上传 ROM（管理员用）</summary>
     [HttpPost("roms/upload")]
@@ -186,7 +208,7 @@ public class EmulatorController : LocalizedControllerBase
         {
             parsedNewGameSave = TryParseNewGameSave(data, $"{request.GameId}.sav");
             if (parsedNewGameSave == null)
-                return Ok(ApiResponse<object>.Ok(new { skipped = true, created = false }, NewGameSaveSkippedMessage));
+                return Ok(OkMessage(new { skipped = true, created = false }, "emulator.newGameSyncSkipped"));
 
             var result = await _saveFileService.CreateNewGame(userId.Value, request.GameId);
             saveFileId = result.SaveFileId;
@@ -203,13 +225,13 @@ public class EmulatorController : LocalizedControllerBase
         var saveFile = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
             "SELECT * FROM save_files WHERE id=@Id AND user_id=@Uid",
             new { Id = saveFileId, Uid = userId.Value });
-        if (saveFile == null) return NotFound();
+        if (saveFile == null) return NotFound(ErrorMessage<object>(404, "save.notFound"));
 
         // 写入前自动备份（当前存档有数据时才备份）
         var currentData = _saveFileService.ReadSaveBytes(saveFile, userId.Value);
         if (currentData is { Length: > 0 })
         {
-            await _saveFileService.CreateBackup(saveFileId, userId.Value, "同步前自动备份");
+            await _saveFileService.CreateBackup(saveFileId, userId.Value, Messages.Get("emulator.backupLabel.preSync"));
         }
 
         // 写入文件系统（规范路径，自动修复 DB save_path）
@@ -266,7 +288,7 @@ public class EmulatorController : LocalizedControllerBase
         var saveFile = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
             "SELECT * FROM save_files WHERE id=@Id AND user_id=@Uid",
             new { Id = saveFileId, Uid = userId.Value });
-        if (saveFile == null) return NotFound();
+        if (saveFile == null) return NotFound(ErrorMessage<object>(404, "save.notFound"));
 
         // 读取二进制 body
         byte[] data;
@@ -281,7 +303,7 @@ public class EmulatorController : LocalizedControllerBase
         var currentData = _saveFileService.ReadSaveBytes(saveFile, userId.Value);
         if (currentData is { Length: > 0 })
         {
-            await _saveFileService.CreateBackup(saveFileId, userId.Value, "同步前自动备份");
+            await _saveFileService.CreateBackup(saveFileId, userId.Value, Messages.Get("emulator.backupLabel.preSync"));
         }
 
         // 写入文件系统（规范路径，自动修复 DB save_path）
@@ -356,7 +378,7 @@ public class EmulatorController : LocalizedControllerBase
 
         var parsedNewGameSave = TryParseNewGameSave(data, $"{gameId}.sav");
         if (parsedNewGameSave == null)
-            return Ok(ApiResponse<object>.Ok(new { skipped = true, created = false }, NewGameSaveSkippedMessage));
+            return Ok(OkMessage(new { skipped = true, created = false }, "emulator.newGameSyncSkipped"));
 
         var created = await _saveFileService.CreateNewGame(userId.Value, gameId);
         var saveFileId = created.SaveFileId;
@@ -364,7 +386,7 @@ public class EmulatorController : LocalizedControllerBase
         var saveFile = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
             "SELECT * FROM save_files WHERE id=@Id AND user_id=@Uid",
             new { Id = saveFileId, Uid = userId.Value });
-        if (saveFile == null) return NotFound();
+        if (saveFile == null) return NotFound(ErrorMessage<object>(404, "save.notFound"));
 
         // 写入文件系统（规范路径，自动修复 DB save_path）
         await _saveFileService.WriteSaveBytes(saveFile, userId.Value, data);
@@ -441,10 +463,10 @@ public class EmulatorController : LocalizedControllerBase
     public async Task<IActionResult> LoadState(Guid saveFileId, int slot)
     {
         var userId = _userContext.UserId;
-        if (userId == null) return Unauthorized();
+        if (userId == null) return Unauthorized(ErrorMessage<object>(401, "common.unauthorized"));
         var st = await _db.QueryFirstOrDefaultAsync<EmulatorSaveStateEntity>("SELECT * FROM emulator_save_states WHERE save_file_id=@Sf AND slot=@Sl",
             new { Sf = saveFileId, Sl = slot });
-        if (st == null) return NotFound();
+        if (st == null) return NotFound(ErrorMessage<object>(404, "emulator.saveStateNotFound"));
         return File(st.StateData, "application/octet-stream");
     }
 
@@ -470,8 +492,8 @@ public class EmulatorController : LocalizedControllerBase
             if (!emuSettings.TryGetValue("azahar.exe_path", out var exeRaw) || string.IsNullOrWhiteSpace(exeRaw))
             {
                 result["azaharReady"] = false;
-                result["error"] = "未配置 Azahar 路径，请前往设置页配置";
-                return Ok(ApiResponse<object>.Ok(result));
+                result["error"] = Text("emulator.azaharPathNotConfiguredSettings");
+                return Ok(OkMessage(result, "emulator.ready"));
             }
             var exe = NormalizeExePath(exeRaw);
             result["exePath"] = exe;
@@ -489,8 +511,8 @@ public class EmulatorController : LocalizedControllerBase
             if (!emuSettings.TryGetValue("desmume.exe_path", out var exeRaw) || string.IsNullOrWhiteSpace(exeRaw))
             {
                 result["desmumeReady"] = false;
-                result["error"] = "未配置 DeSmuME 路径，请前往设置页配置";
-                return Ok(ApiResponse<object>.Ok(result));
+                result["error"] = Text("emulator.desmumePathNotConfiguredSettings");
+                return Ok(OkMessage(result, "emulator.ready"));
             }
             var exe = NormalizeExePath(exeRaw);
             result["exePath"] = exe;
@@ -502,13 +524,13 @@ public class EmulatorController : LocalizedControllerBase
             if (rom == null)
             {
                 result["desmumeReady"] = false;
-                result["error"] = "未找到 ROM 文件，请先导入";
-                return Ok(ApiResponse<object>.Ok(result));
+                result["error"] = Text("emulator.romFileMissingImportFirst");
+                return Ok(OkMessage(result, "emulator.ready"));
             }
             result["desmumeReady"] = true;
         }
 
-        return Ok(ApiResponse<object>.Ok(result, "ready"));
+        return Ok(OkMessage(result, "emulator.ready"));
     }
 
     /// <summary>
@@ -523,7 +545,7 @@ public class EmulatorController : LocalizedControllerBase
 
         var save = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
             "SELECT * FROM save_files WHERE id=@Id AND user_id=@Uid", new { Id = saveFileId, Uid = userId });
-        if (save == null) return NotFound(ApiResponse<object>.Error(404, "存档不存在"));
+        if (save == null) return NotFound(ErrorMessage<object>(404, "save.notFound"));
 
         var gen = save.Generation;
         var gameVersion = save.GameVersion ?? 0;
@@ -533,12 +555,12 @@ public class EmulatorController : LocalizedControllerBase
         // 读取 pkmanager 存档二进制
         var saveData = _saveFileService.ReadSaveBytes(save, userId.Value);
         if (saveData.Length == 0)
-            return BadRequest(ApiResponse<object>.Error(400, "存档文件不存在"));
+            return BadRequest(ErrorMessage<object>(400, "emulator.serverSaveFileMissing"));
 
         var saveDataBase64 = Convert.ToBase64String(saveData);
         var syncToken = CreateSyncToken(saveFileId, userId.Value);
 
-        await _saveFileService.CreateBackup(saveFileId, userId.Value, "启动本地模拟器前");
+        await _saveFileService.CreateBackup(saveFileId, userId.Value, Messages.Get("emulator.backupLabel.beforeLocalLaunch"));
 
         string emulatorType;
         string exePath;
@@ -552,7 +574,7 @@ public class EmulatorController : LocalizedControllerBase
             // ── 3DS Azahar ──
             emulatorType = "azahar";
             if (!emuSettings.TryGetValue("azahar.exe_path", out var azExeRaw) || string.IsNullOrWhiteSpace(azExeRaw))
-                return BadRequest(ApiResponse<object>.Error(400, "未配置 Azahar 路径，请前往 /settings 设置"));
+                return BadRequest(ErrorMessage<object>(400, "emulator.azaharPathNotConfiguredSettings"));
             exePath = NormalizeExePath(azExeRaw);
             saveDir = NormalizeDirPath(emuSettings.GetValueOrDefault("azahar.data_dir") ?? "");
             if (string.IsNullOrWhiteSpace(saveDir))
@@ -568,14 +590,14 @@ public class EmulatorController : LocalizedControllerBase
             // ── NDS DeSmuME ──
             emulatorType = "desmume";
             if (!emuSettings.TryGetValue("desmume.exe_path", out var dsExeRaw) || string.IsNullOrWhiteSpace(dsExeRaw))
-                return BadRequest(ApiResponse<object>.Error(400, "未配置 DeSmuME 路径，请前往 /settings 设置"));
+                return BadRequest(ErrorMessage<object>(400, "emulator.desmumePathNotConfiguredSettings"));
             exePath = NormalizeExePath(dsExeRaw);
             saveDir = NormalizeDirPath(emuSettings.GetValueOrDefault("desmume.save_dir") ?? "");
             if (string.IsNullOrWhiteSpace(saveDir))
                 saveDir = GetDefaultDeSmuMESaveDir();
 
             var rom = await GetPreferredNdsRom(gen, gameVersion);
-            if (rom == null) return BadRequest(ApiResponse<object>.Error(400, "未找到对应 NDS ROM，请先导入"));
+            if (rom == null) return BadRequest(ErrorMessage<object>(400, "emulator.ndsRomNotFound"));
             romPath = rom.LocalPath ?? rom.GameId;
 
             var romFileName = Path.GetFileNameWithoutExtension(romPath);
@@ -605,7 +627,7 @@ public class EmulatorController : LocalizedControllerBase
             fileName = save.Filename,
             saveFileId,
             syncToken,
-        }, "启动包已就绪，请由浏览器端调起模拟器"));
+        }, Text("emulator.launchPackageReady"), "emulator.launchPackageReady"));
     }
 
     // ── 临时启动 Token（供本地协议处理器使用）───────────────
@@ -624,7 +646,7 @@ public class EmulatorController : LocalizedControllerBase
         // 复用 LaunchLocal 的逻辑构建启动包
         var save = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
             "SELECT * FROM save_files WHERE id=@Id AND user_id=@Uid", new { Id = saveFileId, Uid = userId });
-        if (save == null) return NotFound();
+        if (save == null) return NotFound(ErrorMessage<object>(404, "save.notFound"));
 
         var gen = save.Generation;
         var gameVersion = save.GameVersion ?? 0;
@@ -633,7 +655,7 @@ public class EmulatorController : LocalizedControllerBase
 
         var saveData = _saveFileService.ReadSaveBytes(save, userId.Value);
         if (saveData.Length == 0)
-            return BadRequest(ApiResponse<object>.Error(400, "存档文件不存在"));
+            return BadRequest(ErrorMessage<object>(400, "emulator.serverSaveFileMissing"));
 
         var saveDataBase64 = Convert.ToBase64String(saveData);
         var syncToken = CreateSyncToken(saveFileId, userId.Value);
@@ -644,7 +666,7 @@ public class EmulatorController : LocalizedControllerBase
         {
             emulatorType = "azahar";
             if (!emuSettings.TryGetValue("azahar.exe_path", out var azExeRaw) || string.IsNullOrWhiteSpace(azExeRaw))
-                return BadRequest(ApiResponse<object>.Error(400, "未配置 Azahar 路径"));
+                return BadRequest(ErrorMessage<object>(400, "emulator.azaharPathNotConfigured"));
             exePath = NormalizeExePath(azExeRaw);
             saveDir = NormalizeDirPath(emuSettings.GetValueOrDefault("azahar.data_dir") ?? "");
             if (string.IsNullOrWhiteSpace(saveDir)) saveDir = GetDefaultAzaharDataDir();
@@ -656,12 +678,12 @@ public class EmulatorController : LocalizedControllerBase
         {
             emulatorType = "desmume";
             if (!emuSettings.TryGetValue("desmume.exe_path", out var dsExeRaw) || string.IsNullOrWhiteSpace(dsExeRaw))
-                return BadRequest(ApiResponse<object>.Error(400, "未配置 DeSmuME 路径"));
+                return BadRequest(ErrorMessage<object>(400, "emulator.desmumePathNotConfigured"));
             exePath = NormalizeExePath(dsExeRaw);
             saveDir = NormalizeDirPath(emuSettings.GetValueOrDefault("desmume.save_dir") ?? "");
             if (string.IsNullOrWhiteSpace(saveDir)) saveDir = GetDefaultDeSmuMESaveDir();
             var rom = await GetPreferredNdsRom(gen, gameVersion);
-            if (rom == null) return BadRequest(ApiResponse<object>.Error(400, "未找到 ROM"));
+            if (rom == null) return BadRequest(ErrorMessage<object>(400, "emulator.romNotFound"));
             romPath = rom.LocalPath ?? rom.GameId;
             var romFileName = Path.GetFileNameWithoutExtension(romPath);
             emuSavePath = Path.Combine(saveDir, $"{romFileName}.dsv");
@@ -749,7 +771,7 @@ public class EmulatorController : LocalizedControllerBase
 
         var save = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
             "SELECT * FROM save_files WHERE id=@Id AND user_id=@Uid", new { Id = saveFileId, Uid = userId });
-        if (save == null) return NotFound();
+        if (save == null) return NotFound(ErrorMessage<object>(404, "save.notFound"));
 
         var gen = save.Generation;
         var gameVersion = save.GameVersion ?? 0;
@@ -797,7 +819,7 @@ public class EmulatorController : LocalizedControllerBase
             new { Data = data, Id = saveFileId });
 
         // Create backup (after sync)
-        await _saveFileService.CreateBackup(saveFileId, userId.Value, "从本地模拟器同步");
+        await _saveFileService.CreateBackup(saveFileId, userId.Value, Messages.Get("emulator.backupLabel.afterLocalSync"));
 
         // 恢复本地备份（把 AZAHAR/DeSmuME 的原始存档放回去）
         var backupDir = Path.Combine(saveDir, "pkmanager_backup");
@@ -850,7 +872,7 @@ public class EmulatorController : LocalizedControllerBase
 
         var save = await _db.QueryFirstOrDefaultAsync<Models.Entity.SaveFile>(
             "SELECT * FROM save_files WHERE id=@Id AND user_id=@Uid", new { Id = saveFileId, Uid = userId });
-        if (save == null) return NotFound();
+        if (save == null) return NotFound(ErrorMessage<object>(404, "save.notFound"));
 
         var gen = save.Generation;
         var gameVersion = save.GameVersion ?? 0;
@@ -1013,6 +1035,25 @@ public class EmulatorController : LocalizedControllerBase
         21 or 66 => "pkm_black",
         22 => "pkm_white2",
         23 or 67 => "pkm_black2",
+        _ => null,
+    };
+
+    private static int? GetRomGameVersion(string gameId) => gameId switch
+    {
+        "pkm_sapphire" => 1,
+        "pkm_ruby" => 2,
+        "pkm_emerald" => 3,
+        "pkm_firered" => 4,
+        "pkm_leafgreen" => 5,
+        "pkm_heartgold" => 7,
+        "pkm_soulsilver" => 8,
+        "pkm_diamond" => 10,
+        "pkm_pearl" => 11,
+        "pkm_platinum" => 12,
+        "pkm_white" => 20,
+        "pkm_black" => 21,
+        "pkm_white2" => 22,
+        "pkm_black2" => 23,
         _ => null,
     };
 

@@ -1,8 +1,10 @@
 using PKHeX.Core;
 using PkManager.Server.Helpers;
+using PkManager.Server.Localization;
 using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace PkManager.Server.Services;
 
@@ -13,14 +15,31 @@ public class PokemonEditService
 {
     private static readonly MethodInfo? PK5CalculateAbilityIndexMethod =
         typeof(PK5).GetMethod("CalculateAbilityIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+    private static readonly string[] MarkingPropertyNames =
+    [
+        "MarkingCircle",
+        "MarkingTriangle",
+        "MarkingSquare",
+        "MarkingHeart",
+        "MarkingStar",
+        "MarkingDiamond"
+    ];
 
     private readonly ParseService _parseService;
     private readonly IPkhexStringProvider _pkhexStrings;
+    private readonly ILanguageResolver _languageResolver;
+    private readonly IBackendMessageLocalizer _messages;
 
-    public PokemonEditService(ParseService parseService, IPkhexStringProvider pkhexStrings)
+    public PokemonEditService(
+        ParseService parseService,
+        IPkhexStringProvider pkhexStrings,
+        ILanguageResolver languageResolver,
+        IBackendMessageLocalizer messages)
     {
         _parseService = parseService;
         _pkhexStrings = pkhexStrings;
+        _languageResolver = languageResolver;
+        _messages = messages;
     }
 
     /// <summary>
@@ -39,15 +58,7 @@ public class PokemonEditService
             IsValid = true,  // 始终返回true允许保存
             Status = status,
             Report = status != LegalityStatus.Legal ? GetChineseReport(legality) : null,
-            Judgements = legality.Results.Select(r => new JudgementDto
-            {
-                Identifier = r.Identifier.ToString(),
-                Judgement = r.Judgement.ToString(),
-                Comment = "", // TODO: use LegalityFormatting.Report() in v26
-                Issue = GetHumanReadableIssue(r),
-                CanFix = CanAutoFix(r),
-                FixAction = GetFixAction(r)
-            }).ToList(),
+            Judgements = BuildJudgements(legality),
             UpdatedPokemon = _parseService.MapToPokemonDto(original)
         };
     }
@@ -397,10 +408,7 @@ public class PokemonEditService
 
         // ── Cosmetic Tab ──────────────────────────────────
         if (request.Markings != null && request.Markings.Length >= 6)
-        {
-            var markProp = pkm.GetType().GetProperty("Marking");
-            markProp?.SetValue(pkm, (byte)request.Markings[0]);
-        }
+            ApplyMarkings(pkm, request.Markings);
 
         if (request.ContestCool.HasValue && pkm is IContestStats cs)
         {
@@ -551,15 +559,7 @@ public class PokemonEditService
             IsValid = status == LegalityStatus.Legal,
             Status = status,
             Report = status == LegalityStatus.Legal ? null : GetChineseReport(legality),
-            Judgements = legality.Results.Select(r => new JudgementDto
-            {
-                Identifier = r.Identifier.ToString(),
-                Judgement = r.Judgement.ToString(),
-                Comment = "", // TODO: use LegalityFormatting.Report() in v26
-                Issue = GetHumanReadableIssue(r),
-                CanFix = CanAutoFix(r),
-                FixAction = GetFixAction(r)
-            }).ToList()
+            Judgements = BuildJudgements(legality)
         };
     }
 
@@ -590,7 +590,7 @@ public class PokemonEditService
                 Level = pkm.CurrentLevel,
                 IsShiny = pkm.IsShiny,
                 Status = status,
-                FirstIssue = status != LegalityStatus.Legal ? GetFirstIssue(la) : null
+                FirstIssue = status != LegalityStatus.Legal ? GetFirstIssue(la, _languageResolver.CurrentLang) : null
             });
         }
 
@@ -615,7 +615,7 @@ public class PokemonEditService
                     Level = pkm.CurrentLevel,
                     IsShiny = pkm.IsShiny,
                     Status = status,
-                    FirstIssue = status != LegalityStatus.Legal ? GetFirstIssue(la) : null
+                    FirstIssue = status != LegalityStatus.Legal ? GetFirstIssue(la, _languageResolver.CurrentLang) : null
                 });
             }
         }
@@ -642,11 +642,11 @@ public class PokemonEditService
     public static LegalityStatus ComputeLegalityStatus(LegalityAnalysis la)
         => LegalizationService.ComputeLegalityStatus(la);
 
-    public static string GetFirstIssue(LegalityAnalysis la)
-        => LegalizationService.GetFirstIssue(la);
+    public string GetFirstIssue(LegalityAnalysis la, string? lang = null)
+        => LocalizeIssue(LegalizationService.GetFirstIssue(la), lang);
 
-    public static string GetHumanReadableIssue(CheckResult r)
-        => LegalizationService.GetHumanReadableIssue(r);
+    public string GetHumanReadableIssue(CheckResult r, string? lang = null)
+        => LocalizeIssue(LegalizationService.GetHumanReadableIssue(r), lang);
 
     public static bool CanAutoFix(CheckResult r)
         => LegalizationService.CanAutoFix(r);
@@ -660,6 +660,143 @@ public class PokemonEditService
             return list[index];
         return fallback;
     }
+
+    internal List<JudgementDto> BuildJudgements(LegalityAnalysis legality)
+    {
+        var context = LegalityLocalizationContext.Create(legality, NormalizePkhexLanguage(_languageResolver.CurrentLang));
+        var judgements = new List<JudgementDto>(legality.Results.Count);
+
+        foreach (var result in legality.Results)
+        {
+            judgements.Add(new JudgementDto
+            {
+                Identifier = result.Identifier.ToString(),
+                Judgement = result.Judgement.ToString(),
+                Comment = context.Humanize(result, verbose: false),
+                Issue = GetHumanReadableIssue(result, _languageResolver.CurrentLang),
+                CanFix = CanAutoFix(result),
+                FixAction = GetFixAction(result)
+            });
+        }
+
+        return judgements;
+    }
+
+    private static void ApplyMarkings(PKM pkm, int[] markings)
+    {
+        var type = pkm.GetType();
+        var markingCount = GetMarkingCount(pkm);
+        var count = Math.Min(Math.Min(markings.Length, markingCount), 6);
+
+        var setMarking = type.GetMethod("SetMarking", [typeof(int), typeof(bool)])
+            ?? type.GetMethod("SetMarking", BindingFlags.Instance | BindingFlags.Public, null, [typeof(int), typeof(MarkingColor)], null)
+            ?? type.GetMethod("SetMarking");
+        if (setMarking != null)
+        {
+            var valueType = setMarking.GetParameters()[1].ParameterType;
+            for (int i = 0; i < count; i++)
+                setMarking.Invoke(pkm, [i, ConvertMarkingValue(markings[i], valueType)]);
+            return;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            var prop = type.GetProperty(MarkingPropertyNames[i]);
+            if (prop == null || !prop.CanWrite)
+                continue;
+
+            prop.SetValue(pkm, ConvertMarkingValue(markings[i], prop.PropertyType));
+        }
+    }
+
+    private static int GetMarkingCount(PKM pkm)
+    {
+        var prop = pkm.GetType().GetProperty("MarkingCount");
+        if (prop?.GetValue(pkm) is int count)
+            return count;
+        return 6;
+    }
+
+    private static object ConvertMarkingValue(int value, Type targetType)
+    {
+        var normalizedType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        if (normalizedType == typeof(bool))
+            return value != 0;
+
+        if (normalizedType.IsEnum)
+        {
+            if (Enum.IsDefined(normalizedType, value))
+                return Enum.ToObject(normalizedType, value);
+            return Enum.ToObject(normalizedType, 0);
+        }
+
+        return Convert.ChangeType(value, normalizedType);
+    }
+
+    private string LocalizeIssue(string issue, string? lang = null)
+    {
+        if (string.IsNullOrWhiteSpace(issue))
+            return issue;
+
+        if (issue == "__LEGALIZE_INVALID_MOVES_PRESENT__")
+            return _messages.GetForLanguage(lang, "legalize.invalidMovesPresent");
+        if (issue == "__LEGALIZE_INVALID_RELEARN_MOVES_PRESENT__")
+            return _messages.GetForLanguage(lang, "legalize.invalidRelearnMovesPresent");
+
+        var match = Regex.Match(issue, @"^(?<icon>⚠️|❌)\s(?<name>.+?):\s(?<comment>.+)$");
+        if (!match.Success)
+            return issue;
+
+        var icon = match.Groups["icon"].Value;
+        var token = match.Groups["name"].Value;
+        var name = LocalizeCheckName(token, lang);
+        var comment = _messages.GetForLanguage(lang, "legalize.checkFailed", name);
+        return $"{icon} {name}: {comment}";
+    }
+
+    private string LocalizeCheckName(string token, string? lang)
+    {
+        var key = token switch
+        {
+            "__LEGALIZE_CHECK_NAME_ENCOUNTER__" => "legalize.checkName.encounter",
+            "__LEGALIZE_CHECK_NAME_CURRENT_MOVE__" => "legalize.checkName.currentMove",
+            "__LEGALIZE_CHECK_NAME_RELEARN_MOVE__" => "legalize.checkName.relearnMove",
+            "__LEGALIZE_CHECK_NAME_SHINY__" => "legalize.checkName.shiny",
+            "__LEGALIZE_CHECK_NAME_GENDER__" => "legalize.checkName.gender",
+            "__LEGALIZE_CHECK_NAME_LANGUAGE__" => "legalize.checkName.language",
+            "__LEGALIZE_CHECK_NAME_NICKNAME__" => "legalize.checkName.nickname",
+            "__LEGALIZE_CHECK_NAME_TRAINER__" => "legalize.checkName.trainer",
+            "__LEGALIZE_CHECK_NAME_LEVEL__" => "legalize.checkName.level",
+            "__LEGALIZE_CHECK_NAME_BALL__" => "legalize.checkName.ball",
+            "__LEGALIZE_CHECK_NAME_MEMORY__" => "legalize.checkName.memory",
+            "__LEGALIZE_CHECK_NAME_GEOGRAPHY__" => "legalize.checkName.geography",
+            "__LEGALIZE_CHECK_NAME_FORM__" => "legalize.checkName.form",
+            "__LEGALIZE_CHECK_NAME_EGG__" => "legalize.checkName.egg",
+            "__LEGALIZE_CHECK_NAME_MISC__" => "legalize.checkName.misc",
+            "__LEGALIZE_CHECK_NAME_FATEFUL__" => "legalize.checkName.fateful",
+            "__LEGALIZE_CHECK_NAME_RIBBON__" => "legalize.checkName.ribbon",
+            "__LEGALIZE_CHECK_NAME_TRAINING__" => "legalize.checkName.training",
+            "__LEGALIZE_CHECK_NAME_ABILITY__" => "legalize.checkName.ability",
+            "__LEGALIZE_CHECK_NAME_EVOLUTION__" => "legalize.checkName.evolution",
+            "__LEGALIZE_CHECK_NAME_NATURE__" => "legalize.checkName.nature",
+            "__LEGALIZE_CHECK_NAME_GAME_ORIGIN__" => "legalize.checkName.gameOrigin",
+            "__LEGALIZE_CHECK_NAME_HELD_ITEM__" => "legalize.checkName.heldItem",
+            "__LEGALIZE_CHECK_NAME_RIBBON_MARK__" => "legalize.checkName.ribbonMark",
+            "__LEGALIZE_CHECK_NAME_MARKING__" => "legalize.checkName.marking",
+            _ => null
+        };
+
+        return key == null ? token : _messages.GetForLanguage(lang, key);
+    }
+
+    private static string NormalizePkhexLanguage(string? lang) => lang switch
+    {
+        "zh-Hans" => "zh-Hans",
+        "zh-Hant" => "zh-Hant",
+        "es-419" => "es",
+        _ when string.IsNullOrWhiteSpace(lang) => "zh-Hans",
+        _ => lang!
+    };
 
     /// <summary>Set a property by name using reflection, with automatic type conversion.</summary>
     private static void SetPropertyValue(object obj, string propertyName, object value)

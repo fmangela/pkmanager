@@ -158,9 +158,22 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "PkManager API", Version = "v1" });
-
-    // TODO: JWT Bearer security definition — OpenApi v2.x API 变更 (SecuritySchemeType→IOpenApiSecurityScheme)
-    // 暂时跳过，Swagger UI 仍可浏览 API 文档
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Bearer token. Example: Bearer {token}",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
+    });
+    options.AddSecurityRequirement(_ => new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecuritySchemeReference("Bearer", null!, null!),
+            []
+        }
+    });
 });
 
 // ── CORS ────────────────────────────────────────────────

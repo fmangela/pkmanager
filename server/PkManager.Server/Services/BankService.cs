@@ -4,6 +4,7 @@ using Dapper;
 using Npgsql;
 using PKHeX.Core;
 using PkManager.Server.Helpers;
+using PkManager.Server.Localization;
 using PkManager.Server.Models.Entity;
 using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
@@ -21,9 +22,11 @@ public class BankService
     private readonly PokemonEditService _editService;
     private readonly LegalityCacheService _legalityCache;
     private readonly IPkhexStringProvider _pkhexStrings;
+    private readonly IBackendMessageLocalizer _messages;
+    private readonly ILanguageResolver _languageResolver;
 
     public BankService(NpgsqlConnection db, ParseService parseService, SaveFileService saveFileService,
-        PokemonEditService editService, LegalityCacheService legalityCache, IPkhexStringProvider pkhexStrings)
+        PokemonEditService editService, LegalityCacheService legalityCache, IPkhexStringProvider pkhexStrings, IBackendMessageLocalizer messages, ILanguageResolver languageResolver)
     {
         _db = db;
         _parseService = parseService;
@@ -31,6 +34,8 @@ public class BankService
         _editService = editService;
         _legalityCache = legalityCache;
         _pkhexStrings = pkhexStrings;
+        _messages = messages;
+        _languageResolver = languageResolver;
     }
 
     /// <summary>
@@ -670,7 +675,7 @@ public class BankService
                     SlotId = $"bank:{rec.Id}", BoxIndex = -1, SlotIndex = -1, IsParty = false,
                     Species = rec.Species, SpeciesName = rec.SpeciesName ?? $"#{rec.Species}",
                     Nickname = rec.Nickname, Level = rec.Level, IsShiny = rec.IsShiny,
-                    Status = LegalityStatus.Illegal, FirstIssue = "缺少PKM数据"
+                    Status = LegalityStatus.Illegal, FirstIssue = _messages.Get("bank.legalityMissingPkmData")
                 });
                 continue;
             }
@@ -690,7 +695,7 @@ public class BankService
                     Nickname = pkm.Nickname, Level = pkm.CurrentLevel, IsShiny = pkm.IsShiny,
                     Status = status,
                     FirstIssue = status != LegalityStatus.Legal
-                        ? LegalizationService.GetFirstIssue(la) : null
+                        ? _editService.GetFirstIssue(la, _languageResolver.CurrentLang) : null
                 });
             }
             catch
@@ -700,7 +705,7 @@ public class BankService
                     SlotId = $"bank:{rec.Id}", BoxIndex = -1, SlotIndex = -1, IsParty = false,
                     Species = rec.Species, SpeciesName = rec.SpeciesName ?? $"#{rec.Species}",
                     Nickname = rec.Nickname, Level = rec.Level, IsShiny = rec.IsShiny,
-                    Status = LegalityStatus.Illegal, FirstIssue = "PKM解析失败"
+                    Status = LegalityStatus.Illegal, FirstIssue = _messages.Get("bank.legalityParseFailed")
                 });
             }
         }

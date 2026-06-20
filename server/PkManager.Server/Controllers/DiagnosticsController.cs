@@ -6,8 +6,10 @@ namespace PkManager.Server.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class DiagnosticsController : ControllerBase
+public class DiagnosticsController : LocalizedControllerBase
 {
+    private static readonly SemaphoreSlim ClientLogLock = new(1, 1);
+    private static readonly SemaphoreSlim BackendLogLock = new(1, 1);
     private readonly string _logDir;
 
     public DiagnosticsController(IWebHostEnvironment env)
@@ -18,6 +20,7 @@ public class DiagnosticsController : ControllerBase
     }
 
     private string LogFilePath => Path.Combine(_logDir, "client-errors.jsonl");
+    private string BackendLogFilePath => Path.Combine(_logDir, "backend-errors.jsonl");
 
     /// <summary>
     /// 接收客户端错误日志（sendBeacon POST）
@@ -31,7 +34,7 @@ public class DiagnosticsController : ControllerBase
             var body = await reader.ReadToEndAsync();
 
             if (string.IsNullOrWhiteSpace(body))
-                return BadRequest(ApiResponse<object>.Error(400, "empty body"));
+                return BadRequest(ErrorMessage<object>(400, "diagnostics.emptyBody"));
 
             // Validate it's valid JSON
             using var doc = JsonDocument.Parse(body);
@@ -43,17 +46,25 @@ public class DiagnosticsController : ControllerBase
                 payload = doc.RootElement
             });
 
-            await System.IO.File.AppendAllTextAsync(LogFilePath, line + "\n");
+            await ClientLogLock.WaitAsync();
+            try
+            {
+                await System.IO.File.AppendAllTextAsync(LogFilePath, line + "\n");
+            }
+            finally
+            {
+                ClientLogLock.Release();
+            }
 
-            return Ok(ApiResponse<object>.Ok(new { logged = true }, "logged"));
+            return Ok(OkMessage(new { logged = true }, "diagnostics.logged"));
         }
         catch (JsonException)
         {
-            return BadRequest(ApiResponse<object>.Error(400, "invalid JSON"));
+            return BadRequest(ErrorMessage<object>(400, "diagnostics.invalidJson"));
         }
         catch (Exception ex)
         {
-            return StatusCode(500, ApiResponse<object>.Error(500, $"failed to write log: {ex.Message}"));
+            return StatusCode(500, ErrorMessage<object>(500, "diagnostics.writeFailed", ex.Message));
         }
     }
 
@@ -107,7 +118,7 @@ public class DiagnosticsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, ApiResponse<DiagnosticsReportDto>.Error(500, ex.Message));
+            return StatusCode(500, ErrorMessage<DiagnosticsReportDto>(500, "diagnostics.writeFailed", ex.Message));
         }
     }
 
@@ -115,19 +126,52 @@ public class DiagnosticsController : ControllerBase
     /// 清空客户端错误日志
     /// </summary>
     [HttpDelete("clear")]
-    public ActionResult<ApiResponse<object>> Clear()
+    public async Task<ActionResult<ApiResponse<object>>> Clear()
     {
         try
         {
-            if (System.IO.File.Exists(LogFilePath))
+            await ClientLogLock.WaitAsync();
+            try
             {
-                System.IO.File.WriteAllText(LogFilePath, "");
+                if (System.IO.File.Exists(LogFilePath))
+                    await System.IO.File.WriteAllTextAsync(LogFilePath, "");
             }
-            return Ok(ApiResponse<object>.Ok(new { cleared = true }, "cleared"));
+            finally
+            {
+                ClientLogLock.Release();
+            }
+            return Ok(OkMessage(new { cleared = true }, "diagnostics.cleared"));
         }
         catch (Exception ex)
         {
-            return StatusCode(500, ApiResponse<object>.Error(500, ex.Message));
+            return StatusCode(500, ErrorMessage<object>(500, "diagnostics.writeFailed", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// 清空后端异常日志
+    /// </summary>
+    [HttpDelete("clear-backend")]
+    public async Task<ActionResult<ApiResponse<object>>> ClearBackend()
+    {
+        try
+        {
+            await BackendLogLock.WaitAsync();
+            try
+            {
+                if (System.IO.File.Exists(BackendLogFilePath))
+                    await System.IO.File.WriteAllTextAsync(BackendLogFilePath, "");
+            }
+            finally
+            {
+                BackendLogLock.Release();
+            }
+
+            return Ok(OkMessage(new { cleared = true }, "diagnostics.cleared"));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, ErrorMessage<object>(500, "diagnostics.writeFailed", ex.Message));
         }
     }
 
@@ -138,8 +182,7 @@ public class DiagnosticsController : ControllerBase
     public async Task<ActionResult<ApiResponse<DiagnosticsReportDto>>> GetBackendErrors(
         [FromQuery] int hours = 24)
     {
-        var filePath = Path.Combine(_logDir, "backend-errors.jsonl");
-        if (!System.IO.File.Exists(filePath))
+        if (!System.IO.File.Exists(BackendLogFilePath))
         {
             return Ok(ApiResponse<DiagnosticsReportDto>.Ok(new DiagnosticsReportDto
             {
@@ -150,7 +193,7 @@ public class DiagnosticsController : ControllerBase
         }
 
         var cutoff = DateTime.UtcNow.AddHours(-hours);
-        var lines = await System.IO.File.ReadAllLinesAsync(filePath);
+        var lines = await System.IO.File.ReadAllLinesAsync(BackendLogFilePath);
         var items = new List<object>();
 
         foreach (var line in lines)
@@ -175,6 +218,8 @@ public class DiagnosticsController : ControllerBase
             RecentItems = items.ToArray(),
         }));
     }
+
+    internal static SemaphoreSlim GetBackendLogLock() => BackendLogLock;
 
     /// <summary>
     /// 获取日志文件大小

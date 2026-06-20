@@ -27,12 +27,12 @@ public class ExceptionLoggingMiddleware
         }
         catch (Exception ex)
         {
-            LogException(context, ex);
+            await LogExceptionAsync(context, ex);
             throw; // Let ASP.NET Core's default exception handler also process it
         }
     }
 
-    private void LogException(HttpContext context, Exception ex)
+    private async Task LogExceptionAsync(HttpContext context, Exception ex)
     {
         try
         {
@@ -51,7 +51,16 @@ public class ExceptionLoggingMiddleware
 
             var line = JsonSerializer.Serialize(entry);
             var filePath = Path.Combine(_logDir, "backend-errors.jsonl");
-            File.AppendAllText(filePath, line + "\n");
+            var logLock = PkManager.Server.Controllers.DiagnosticsController.GetBackendLogLock();
+            await logLock.WaitAsync();
+            try
+            {
+                await File.AppendAllTextAsync(filePath, line + "\n");
+            }
+            finally
+            {
+                logLock.Release();
+            }
         }
         catch
         {

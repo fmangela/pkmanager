@@ -86,7 +86,7 @@ public class PokemonController : LocalizedControllerBase
             var result = _editService.ApplyEdits(pkm, request);
 
             // 自动备份（编辑前）
-            await _saveFileService.CreateBackup(request.SaveFileId, userId.Value, "编辑前自动备份");
+            await _saveFileService.CreateBackup(request.SaveFileId, userId.Value, Text("save.backupLabel.beforeEdit"));
 
             // 直接写入 raw_save_data
             PKM? persisted;
@@ -632,7 +632,7 @@ public class PokemonController : LocalizedControllerBase
             var compat = sav.GetCompatiblePKM(pkm);
             if (compat == null)
                 return Ok(OkMessage(
-                    new EncounterGenerateResultDto { Success = false, Error = "宝可梦格式与目标存档不兼容" },
+                    new EncounterGenerateResultDto { Success = false, Error = Text("pokemon.encounterPkmIncompatible") },
                     "pokemon.encounterGenerateFailed"));
 
             // 在兼容实体上跑合法性分析

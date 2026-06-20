@@ -160,7 +160,7 @@ public class SaveFileController : LocalizedControllerBase
     {
         var userId = _userContext.UserId;
         if (userId == null) return UnauthorizedMessage<object>();
-        await _saveFileService.CreateBackup(id, userId.Value, "手动保存");
+        await _saveFileService.CreateBackup(id, userId.Value, Text("save.backupLabel.manual"));
         return Ok(OkMessage(new { }, "save.backupCreated"));
     }
 
@@ -507,13 +507,13 @@ public class SaveFileController : LocalizedControllerBase
         }
     }
 
-    private static string GetSortLabel(string? sortBy) => sortBy?.Trim().ToLowerInvariant() switch
+    private string GetSortLabel(string? sortBy) => sortBy?.Trim().ToLowerInvariant() switch
     {
-        "species" => "物种编号",
-        "level" => "等级",
-        "shiny" => "闪光优先",
-        "name" => "名称",
-        _ => "指定方式",
+        "species" => Text("save.sortLabel.species"),
+        "level" => Text("save.sortLabel.level"),
+        "shiny" => Text("save.sortLabel.shiny"),
+        "name" => Text("save.sortLabel.name"),
+        _ => Text("save.sortLabel.unspecified"),
     };
 
     /// <summary>

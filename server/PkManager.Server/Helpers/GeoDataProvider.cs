@@ -58,7 +58,7 @@ public class GeoDataProvider : IGeoDataProvider
         if (regions.Count == 0)
             return regions;
 
-        regions.Insert(0, new ResourceItem { Id = 0, Name = "—" });
+        regions.Insert(0, new ResourceItem { Id = 0, Name = _messages.Get("geo.placeholder.empty") });
         return regions;
     }
 
@@ -69,7 +69,7 @@ public class GeoDataProvider : IGeoDataProvider
 
         var langCode = ResolveLang(lang);
         var name = GeoLocation.GetCountryName(langCode, countryCode.Value);
-        return IsInvalid(name) ? $"[{countryCode}]" : name;
+        return IsInvalid(name) ? _messages.GetOrFallback(langCode, "geo.placeholder.unknownId", "[{0}]", countryCode.Value) : name;
     }
 
     public string? GetRegionName(byte? countryCode, byte? regionCode, string? lang = null)
@@ -77,13 +77,13 @@ public class GeoDataProvider : IGeoDataProvider
         if (regionCode == null)
             return null;
         if (regionCode == 0)
-            return "—";
+            return _messages.Get("geo.placeholder.empty");
         if (countryCode == null)
-            return $"[{regionCode}]";
+            return _messages.GetOrFallback(ResolveLang(lang), "geo.placeholder.unknownId", "[{0}]", regionCode.Value);
 
         var langCode = ResolveLang(lang);
         var name = GeoLocation.GetRegionName(langCode, countryCode.Value, regionCode.Value);
-        return IsInvalid(name) ? $"[{regionCode}]" : name;
+        return IsInvalid(name) ? _messages.GetOrFallback(langCode, "geo.placeholder.unknownId", "[{0}]", regionCode.Value) : name;
     }
 
     public string? GetConsoleRegionName(byte? consoleRegion, string? lang = null)
@@ -94,8 +94,8 @@ public class GeoDataProvider : IGeoDataProvider
         var key = $"geo.consoleRegion.{consoleRegion.Value}";
         return consoleRegion.Value switch
         {
-            <= 6 => _messages.GetOrFallback(ResolveLang(lang), key, $"[{consoleRegion.Value}]"),
-            _ => $"[{consoleRegion.Value}]"
+            <= 6 => _messages.GetOrFallback(ResolveLang(lang), key, _messages.GetOrFallback(ResolveLang(lang), "geo.placeholder.unknownId", "[{0}]", consoleRegion.Value)),
+            _ => _messages.GetOrFallback(ResolveLang(lang), "geo.placeholder.unknownId", "[{0}]", consoleRegion.Value)
         };
     }
 
