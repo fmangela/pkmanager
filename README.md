@@ -288,7 +288,7 @@ pkmanager/
 
 ## License
 
-[TBD]
+This project is licensed under **GPL-3.0-or-later**. See [LICENSE](LICENSE) for the full text.
 
 ---
 

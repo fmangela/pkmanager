@@ -288,7 +288,7 @@ pkmanager/
 
 ## 许可证
 
-[待定]
+本项目基于 **GPL-3.0-or-later** 协议发布。完整条款见 [LICENSE](LICENSE)。
 
 ---
 
