@@ -31,6 +31,30 @@
 
 ---
 
+## 界面展示
+
+### 控制台
+
+![控制台](image/dashboard.png)
+
+### 存档管理
+
+![存档管理](image/saves.png)
+
+### 抓宠编辑器 & 银行
+
+![抓宠编辑器 & 银行](image/bank.png)
+
+### 在线模拟器
+
+![在线模拟器](image/game.png)
+
+### 系统设置
+
+![系统设置](image/settings.png)
+
+---
+
 ## 技术栈
 
 | 层级 | 技术 |

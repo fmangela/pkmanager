@@ -31,6 +31,30 @@ A full-stack web application for uploading, visualizing, editing, and managing s
 
 ---
 
+## Screenshots
+
+### Dashboard
+
+![Dashboard](image/dashboard.png)
+
+### Save Files
+
+![Save Files](image/saves.png)
+
+### Creature Editor & Bank
+
+![Creature Editor & Bank](image/bank.png)
+
+### In-Browser Emulator
+
+![In-Browser Emulator](image/game.png)
+
+### Settings
+
+![Settings](image/settings.png)
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
