@@ -79,6 +79,7 @@
   "diagnostics.logged": "ログを記録しました",
   "diagnostics.cleared": "ログを消去しました",
   "diagnostics.writeFailed": "ログの書き込みに失敗しました: {0}",
+  "diagnostics.readFailed": "ログの読み取りに失敗しました: {0}",
   "emulator.ready": "準備完了",
   "emulator.romNotFound": "ROM が見つかりません",
   "emulator.romDirectoryMissing": "ROM ディレクトリが存在しません: {0}",

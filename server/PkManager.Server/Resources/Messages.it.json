@@ -79,6 +79,7 @@
   "diagnostics.logged": "Voce di log registrata",
   "diagnostics.cleared": "Log cancellati",
   "diagnostics.writeFailed": "Impossibile scrivere il log: {0}",
+  "diagnostics.readFailed": "Impossibile leggere il log: {0}",
   "emulator.ready": "Pronto",
   "emulator.romNotFound": "ROM non trovata",
   "emulator.romDirectoryMissing": "La directory ROM non esiste: {0}",

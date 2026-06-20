@@ -79,6 +79,7 @@
   "diagnostics.logged": "Entrada de registro guardada",
   "diagnostics.cleared": "Registros borrados",
   "diagnostics.writeFailed": "No se pudo escribir el registro: {0}",
+  "diagnostics.readFailed": "No se pudo leer el registro: {0}",
   "emulator.ready": "Listo",
   "emulator.romNotFound": "No se encontró la ROM",
   "emulator.romDirectoryMissing": "El directorio de ROM no existe: {0}",

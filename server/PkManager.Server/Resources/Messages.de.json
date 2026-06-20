@@ -79,6 +79,7 @@
   "diagnostics.logged": "Logeintrag gespeichert",
   "diagnostics.cleared": "Logs geleert",
   "diagnostics.writeFailed": "Protokoll konnte nicht geschrieben werden: {0}",
+  "diagnostics.readFailed": "Protokoll konnte nicht gelesen werden: {0}",
   "emulator.ready": "Bereit",
   "emulator.romNotFound": "ROM nicht gefunden",
   "emulator.romDirectoryMissing": "ROM-Verzeichnis existiert nicht: {0}",

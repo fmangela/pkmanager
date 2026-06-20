@@ -79,6 +79,7 @@
   "diagnostics.logged": "日志已记录",
   "diagnostics.cleared": "日志已清空",
   "diagnostics.writeFailed": "写入日志失败: {0}",
+  "diagnostics.readFailed": "读取日志失败: {0}",
   "emulator.ready": "就绪",
   "emulator.romNotFound": "ROM 不存在",
   "emulator.romDirectoryMissing": "ROM 目录不存在: {0}",

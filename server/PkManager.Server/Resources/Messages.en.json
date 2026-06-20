@@ -79,6 +79,7 @@
   "diagnostics.logged": "Log entry recorded",
   "diagnostics.cleared": "Logs cleared",
   "diagnostics.writeFailed": "Failed to write log: {0}",
+  "diagnostics.readFailed": "Failed to read log: {0}",
   "emulator.ready": "Ready",
   "emulator.romNotFound": "ROM not found",
   "emulator.romDirectoryMissing": "ROM directory does not exist: {0}",

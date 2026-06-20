@@ -79,6 +79,7 @@
   "diagnostics.logged": "로그를 기록했습니다",
   "diagnostics.cleared": "로그를 비웠습니다",
   "diagnostics.writeFailed": "로그 기록에 실패했습니다: {0}",
+  "diagnostics.readFailed": "로그 읽기에 실패했습니다: {0}",
   "emulator.ready": "준비 완료",
   "emulator.romNotFound": "ROM을 찾을 수 없습니다",
   "emulator.romDirectoryMissing": "ROM 디렉터리가 없습니다: {0}",

@@ -170,6 +170,8 @@ builder.Services.AddSwaggerGen(options =>
     options.AddSecurityRequirement(_ => new OpenApiSecurityRequirement
     {
         {
+            // Microsoft.OpenApi v2.x: OpenApiSecuritySchemeReference 构造函数的后两个参数
+            // (JsonNode, OpenApiExternalDocs) 接受 null — 运行时不会解引用，仅用于 Swagger doc 序列化
             new OpenApiSecuritySchemeReference("Bearer", null!, null!),
             []
         }

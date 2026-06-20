@@ -79,6 +79,7 @@
   "diagnostics.logged": "Entrée de journal enregistrée",
   "diagnostics.cleared": "Journaux vidés",
   "diagnostics.writeFailed": "Échec de l'écriture du journal : {0}",
+  "diagnostics.readFailed": "Échec de la lecture du journal : {0}",
   "emulator.ready": "Prêt",
   "emulator.romNotFound": "ROM introuvable",
   "emulator.romDirectoryMissing": "Le dossier ROM n'existe pas : {0}",

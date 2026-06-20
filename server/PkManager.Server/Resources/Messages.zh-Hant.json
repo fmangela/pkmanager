@@ -79,6 +79,7 @@
   "diagnostics.logged": "日誌已記錄",
   "diagnostics.cleared": "日誌已清空",
   "diagnostics.writeFailed": "寫入日誌失敗：{0}",
+  "diagnostics.readFailed": "讀取日誌失敗：{0}",
   "emulator.ready": "就緒",
   "emulator.romNotFound": "找不到 ROM",
   "emulator.romDirectoryMissing": "ROM 目錄不存在：{0}",

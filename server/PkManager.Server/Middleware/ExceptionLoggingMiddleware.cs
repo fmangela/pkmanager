@@ -42,7 +42,7 @@ public class ExceptionLoggingMiddleware
                 method = context.Request.Method,
                 path = context.Request.Path.ToString(),
                 query = context.Request.QueryString.ToString(),
-                statusCode = context.Response.StatusCode,
+                statusCode = 500, // 此中间件仅捕获未处理异常，响应尚未被错误处理器写入，StatusCode 仍为默认 200
                 exceptionType = ex.GetType().FullName,
                 message = ex.Message,
                 stackTrace = ex.StackTrace,
@@ -52,7 +52,14 @@ public class ExceptionLoggingMiddleware
             var line = JsonSerializer.Serialize(entry);
             var filePath = Path.Combine(_logDir, "backend-errors.jsonl");
             var logLock = PkManager.Server.Controllers.DiagnosticsController.GetBackendLogLock();
-            await logLock.WaitAsync();
+            if (!await logLock.WaitAsync(TimeSpan.FromSeconds(5)))
+            {
+                // Lock is busy (e.g. someone is reading/clearing the log file).
+                // Fall back to console so the exception is at least observable.
+                Console.WriteLine($"[ExceptionLoggingMiddleware] Log lock busy — {ex.GetType().Name}: {ex.Message}");
+                Console.WriteLine($"[ExceptionLoggingMiddleware]   at {ex.StackTrace}");
+                return;
+            }
             try
             {
                 await File.AppendAllTextAsync(filePath, line + "\n");
@@ -62,9 +69,10 @@ public class ExceptionLoggingMiddleware
                 logLock.Release();
             }
         }
-        catch
+        catch (Exception logEx)
         {
             // Logging must never throw — fall back to console
+            Console.WriteLine($"[ExceptionLoggingMiddleware] Failed to write error log: {logEx.Message}");
         }
     }
 }

@@ -20,20 +20,20 @@ public class EmulatorController : LocalizedControllerBase
     private static readonly TimeSpan SyncTokenLifetime = TimeSpan.FromHours(12);
     private static readonly RomConfigEntry[] SupportedLocalRoms =
     [
-        new("pkm_ruby", 2, 3, "ROM_PKM_RUBY"),
-        new("pkm_sapphire", 1, 3, "ROM_PKM_SAPPHIRE"),
-        new("pkm_emerald", 3, 3, "ROM_PKM_EMERALD"),
-        new("pkm_firered", 4, 3, "ROM_PKM_FIRERED"),
-        new("pkm_leafgreen", 5, 3, "ROM_PKM_LEAFGREEN"),
-        new("pkm_diamond", 10, 4, "ROM_PKM_DIAMOND"),
-        new("pkm_pearl", 11, 4, "ROM_PKM_PEARL"),
-        new("pkm_platinum", 12, 4, "ROM_PKM_PLATINUM"),
-        new("pkm_heartgold", 7, 4, "ROM_PKM_HEARTGOLD"),
-        new("pkm_soulsilver", 8, 4, "ROM_PKM_SOULSILVER"),
-        new("pkm_black", 21, 5, "ROM_PKM_BLACK"),
-        new("pkm_white", 20, 5, "ROM_PKM_WHITE"),
-        new("pkm_black2", 23, 5, "ROM_PKM_BLACK2"),
-        new("pkm_white2", 22, 5, "ROM_PKM_WHITE2"),
+        new("pkm_ruby", 3, "ROM_PKM_RUBY"),
+        new("pkm_sapphire", 3, "ROM_PKM_SAPPHIRE"),
+        new("pkm_emerald", 3, "ROM_PKM_EMERALD"),
+        new("pkm_firered", 3, "ROM_PKM_FIRERED"),
+        new("pkm_leafgreen", 3, "ROM_PKM_LEAFGREEN"),
+        new("pkm_diamond", 4, "ROM_PKM_DIAMOND"),
+        new("pkm_pearl", 4, "ROM_PKM_PEARL"),
+        new("pkm_platinum", 4, "ROM_PKM_PLATINUM"),
+        new("pkm_heartgold", 4, "ROM_PKM_HEARTGOLD"),
+        new("pkm_soulsilver", 4, "ROM_PKM_SOULSILVER"),
+        new("pkm_black", 5, "ROM_PKM_BLACK"),
+        new("pkm_white", 5, "ROM_PKM_WHITE"),
+        new("pkm_black2", 5, "ROM_PKM_BLACK2"),
+        new("pkm_white2", 5, "ROM_PKM_WHITE2"),
     ];
     private readonly NpgsqlConnection _db;
     private readonly SaveFileService _saveFileService;
@@ -165,7 +165,7 @@ public class EmulatorController : LocalizedControllerBase
         return Path.GetFullPath(Path.Combine(_romDir, configuredPath));
     }
 
-    private sealed record RomConfigEntry(string GameId, int GameVersion, int Generation, string ConfigKey);
+    private sealed record RomConfigEntry(string GameId, int Generation, string ConfigKey);
 
     /// <summary>上传 ROM（管理员用）</summary>
     [HttpPost("roms/upload")]

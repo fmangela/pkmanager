@@ -46,7 +46,8 @@ public class DiagnosticsController : LocalizedControllerBase
                 payload = doc.RootElement
             });
 
-            await ClientLogLock.WaitAsync();
+            if (!await ClientLogLock.WaitAsync(TimeSpan.FromSeconds(5)))
+                return StatusCode(503, ErrorMessage<object>(503, "diagnostics.writeFailed", "Lock timeout"));
             try
             {
                 await System.IO.File.AppendAllTextAsync(LogFilePath, line + "\n");
@@ -77,18 +78,30 @@ public class DiagnosticsController : LocalizedControllerBase
     {
         try
         {
-            if (!System.IO.File.Exists(LogFilePath))
+            string[] lines;
+            if (!await ClientLogLock.WaitAsync(TimeSpan.FromSeconds(5)))
+                return StatusCode(503, ErrorMessage<DiagnosticsReportDto>(503, "diagnostics.readFailed", "Lock timeout"));
+            try
             {
-                return Ok(ApiResponse<DiagnosticsReportDto>.Ok(new DiagnosticsReportDto
+                if (!System.IO.File.Exists(LogFilePath))
                 {
-                    TotalErrors = 0,
-                    Hours = hours,
-                    RecentItems = Array.Empty<object>(),
-                }));
+                    return Ok(ApiResponse<DiagnosticsReportDto>.Ok(new DiagnosticsReportDto
+                    {
+                        TotalErrors = 0,
+                        Hours = hours,
+                        RecentItems = Array.Empty<object>(),
+                    }));
+                }
+
+                lines = await System.IO.File.ReadAllLinesAsync(LogFilePath);
+            }
+            finally
+            {
+                ClientLogLock.Release();
             }
 
+            // Parse outside the lock so sendBeacon uploads are not blocked
             var cutoff = DateTime.UtcNow.AddHours(-hours);
-            var lines = await System.IO.File.ReadAllLinesAsync(LogFilePath);
             var items = new List<object>();
 
             foreach (var line in lines)
@@ -118,7 +131,7 @@ public class DiagnosticsController : LocalizedControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, ErrorMessage<DiagnosticsReportDto>(500, "diagnostics.writeFailed", ex.Message));
+            return StatusCode(500, ErrorMessage<DiagnosticsReportDto>(500, "diagnostics.readFailed", ex.Message));
         }
     }
 
@@ -130,7 +143,8 @@ public class DiagnosticsController : LocalizedControllerBase
     {
         try
         {
-            await ClientLogLock.WaitAsync();
+            if (!await ClientLogLock.WaitAsync(TimeSpan.FromSeconds(5)))
+                return StatusCode(503, ErrorMessage<object>(503, "diagnostics.writeFailed", "Lock timeout"));
             try
             {
                 if (System.IO.File.Exists(LogFilePath))
@@ -156,7 +170,8 @@ public class DiagnosticsController : LocalizedControllerBase
     {
         try
         {
-            await BackendLogLock.WaitAsync();
+            if (!await BackendLogLock.WaitAsync(TimeSpan.FromSeconds(5)))
+                return StatusCode(503, ErrorMessage<object>(503, "diagnostics.writeFailed", "Lock timeout"));
             try
             {
                 if (System.IO.File.Exists(BackendLogFilePath))
@@ -182,41 +197,60 @@ public class DiagnosticsController : LocalizedControllerBase
     public async Task<ActionResult<ApiResponse<DiagnosticsReportDto>>> GetBackendErrors(
         [FromQuery] int hours = 24)
     {
-        if (!System.IO.File.Exists(BackendLogFilePath))
+        try
         {
-            return Ok(ApiResponse<DiagnosticsReportDto>.Ok(new DiagnosticsReportDto
-            {
-                TotalErrors = 0,
-                Hours = hours,
-                RecentItems = Array.Empty<object>(),
-            }));
-        }
-
-        var cutoff = DateTime.UtcNow.AddHours(-hours);
-        var lines = await System.IO.File.ReadAllLinesAsync(BackendLogFilePath);
-        var items = new List<object>();
-
-        foreach (var line in lines)
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
+            string[] lines;
+            if (!await BackendLogLock.WaitAsync(TimeSpan.FromSeconds(5)))
+                return StatusCode(503, ErrorMessage<DiagnosticsReportDto>(503, "diagnostics.readFailed", "Lock timeout"));
             try
             {
-                var entry = JsonSerializer.Deserialize<JsonElement>(line);
-                var ts = entry.GetProperty("timestamp").GetString();
-                if (DateTime.TryParse(ts, out var dt) && dt >= cutoff)
+                if (!System.IO.File.Exists(BackendLogFilePath))
                 {
-                    items.Add(entry);
+                    return Ok(ApiResponse<DiagnosticsReportDto>.Ok(new DiagnosticsReportDto
+                    {
+                        TotalErrors = 0,
+                        Hours = hours,
+                        RecentItems = Array.Empty<object>(),
+                    }));
                 }
-            }
-            catch { /* skip malformed lines */ }
-        }
 
-        return Ok(ApiResponse<DiagnosticsReportDto>.Ok(new DiagnosticsReportDto
+                lines = await System.IO.File.ReadAllLinesAsync(BackendLogFilePath);
+            }
+            finally
+            {
+                BackendLogLock.Release();
+            }
+
+            // Parse outside the lock so backend exception logging is not blocked
+            var cutoff = DateTime.UtcNow.AddHours(-hours);
+            var items = new List<object>();
+
+            foreach (var line in lines)
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                try
+                {
+                    var entry = JsonSerializer.Deserialize<JsonElement>(line);
+                    var ts = entry.GetProperty("timestamp").GetString();
+                    if (DateTime.TryParse(ts, out var dt) && dt >= cutoff)
+                    {
+                        items.Add(entry);
+                    }
+                }
+                catch { /* skip malformed lines */ }
+            }
+
+            return Ok(ApiResponse<DiagnosticsReportDto>.Ok(new DiagnosticsReportDto
+            {
+                TotalErrors = items.Count,
+                Hours = hours,
+                RecentItems = items.ToArray(),
+            }));
+        }
+        catch (Exception ex)
         {
-            TotalErrors = items.Count,
-            Hours = hours,
-            RecentItems = items.ToArray(),
-        }));
+            return StatusCode(500, ErrorMessage<DiagnosticsReportDto>(500, "diagnostics.readFailed", ex.Message));
+        }
     }
 
     internal static SemaphoreSlim GetBackendLogLock() => BackendLogLock;
@@ -225,20 +259,29 @@ public class DiagnosticsController : LocalizedControllerBase
     /// 获取日志文件大小
     /// </summary>
     [HttpGet("stats")]
-    public ActionResult<ApiResponse<object>> GetStats()
+    public async Task<ActionResult<ApiResponse<object>>> GetStats()
     {
-        if (!System.IO.File.Exists(LogFilePath))
+        if (!await ClientLogLock.WaitAsync(TimeSpan.FromSeconds(5)))
+            return StatusCode(503, ErrorMessage<object>(503, "diagnostics.readFailed", "Lock timeout"));
+        try
         {
-            return Ok(ApiResponse<object>.Ok(new { exists = false, sizeBytes = 0, lineCount = 0 }));
-        }
+            if (!System.IO.File.Exists(LogFilePath))
+            {
+                return Ok(ApiResponse<object>.Ok(new { exists = false, sizeBytes = 0, lineCount = 0 }));
+            }
 
-        var info = new FileInfo(LogFilePath);
-        return Ok(ApiResponse<object>.Ok(new
+            var info = new FileInfo(LogFilePath);
+            return Ok(ApiResponse<object>.Ok(new
+            {
+                exists = true,
+                sizeBytes = info.Length,
+                path = LogFilePath,
+            }));
+        }
+        finally
         {
-            exists = true,
-            sizeBytes = info.Length,
-            path = LogFilePath,
-        }));
+            ClientLogLock.Release();
+        }
     }
 }
 
