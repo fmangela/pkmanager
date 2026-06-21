@@ -45,6 +45,10 @@ A full-stack web application for uploading, visualizing, editing, and managing s
 
 ![Creature Editor & Bank](image/bank.png)
 
+### Creature Editor
+
+![Creature Editor](image/edit.png)
+
 ### In-Browser Emulator
 
 ![In-Browser Emulator](image/game.png)
