@@ -70,5 +70,7 @@
   "api.timeout": "請求超時",
   "api.networkError": "網路連線失敗",
   "api.requestFailed": "失敗",
-  "api.tokenExpiredRedirect": "Token 已過期，即將跳轉登入頁"
+  "api.tokenExpiredRedirect": "Token 已過期，即將跳轉登入頁",
+  "moveToBankBatchSuccess": "Sent {{count}} Pokemon to bank.",
+  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed."
 }

@@ -70,5 +70,7 @@
   "api.timeout": "Request timed out",
   "api.networkError": "Network connection failed",
   "api.requestFailed": "failed",
-  "api.tokenExpiredRedirect": "Token expired. Redirecting to the login page."
+  "api.tokenExpiredRedirect": "Token expired. Redirecting to the login page.",
+  "moveToBankBatchSuccess": "Sent {{count}} Pokemon to bank.",
+  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed."
 }

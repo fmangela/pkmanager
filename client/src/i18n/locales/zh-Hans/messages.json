@@ -70,5 +70,7 @@
   "api.timeout": "请求超时",
   "api.networkError": "网络连接失败",
   "api.requestFailed": "失败",
-  "api.tokenExpiredRedirect": "Token 已过期，即将跳转登录页"
+  "api.tokenExpiredRedirect": "Token 已过期，即将跳转登录页",
+  "moveToBankBatchSuccess": "已将 {{count}} 只宝可梦发送到银行",
+  "moveToBankBatchPartial": "已发送 {{moved}} 只到银行，{{failed}} 只失败"
 }

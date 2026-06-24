@@ -60,6 +60,8 @@
   "bank.batchDeleteSuccess": "已刪除 {0} 隻寶可夢",
   "bank.batchMovePartialSuccess": "已移動 {0} 隻，{1} 隻失敗",
   "bank.batchMoveSuccess": "已移動 {0} 隻寶可夢到存檔",
+  "bank.batchMoveFromSaveSuccess": "Sent {0} Pokemon to bank",
+  "bank.batchMoveFromSavePartialSuccess": "Sent {0} Pokemon to bank, {1} failed",
   "bank.moveToSaveSuccess": "已傳送到存檔",
   "bank.backfillCompleted": "回填完成：修復 {0} 筆，略過 {1} 筆（缺少原始資料），失敗 {2} 筆",
   "bank.cachedResult": "來自快取",

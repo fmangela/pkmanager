@@ -70,5 +70,7 @@
   "api.timeout": "Richiesta scaduta",
   "api.networkError": "Connessione di rete non riuscita",
   "api.requestFailed": "non riuscita",
-  "api.tokenExpiredRedirect": "Token scaduto. Reindirizzamento alla pagina di accesso."
+  "api.tokenExpiredRedirect": "Token scaduto. Reindirizzamento alla pagina di accesso.",
+  "moveToBankBatchSuccess": "Sent {{count}} Pokemon to bank.",
+  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed."
 }

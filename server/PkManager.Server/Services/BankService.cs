@@ -457,6 +457,42 @@ public class BankService
     }
 
     /// <summary>
+    /// 批量从存档移动宝可梦到银行（非原子操作，允许部分成功）
+    /// </summary>
+    public async Task<BatchMoveFromSaveResult> BatchMoveFromSave(
+        Guid userId, Guid saveFileId, List<SlotLocation> slots)
+    {
+        if (slots.Count == 0)
+            throw BusinessException.FromKey("bank.selectPokemonRequired", 400);
+
+        var moved = 0;
+        var failedSlots = new List<SlotLocation>();
+
+        foreach (var slot in slots)
+        {
+            try
+            {
+                var (bankId, _) = await MoveFromSave(userId, saveFileId, slot.BoxIndex, slot.SlotIndex);
+                moved++;
+            }
+            catch (BusinessException)
+            {
+                // 业务级失败（空槽位、存档不存在等）→ 记录为部分失败
+                failedSlots.Add(slot);
+            }
+            // 系统异常（DB故障、序列化失败等）→ 继续抛出，不伪装为部分成功
+        }
+
+        _legalityCache.InvalidateBank(userId);
+        return new BatchMoveFromSaveResult
+        {
+            MovedCount = moved,
+            FailedCount = failedSlots.Count,
+            FailedSlots = failedSlots
+        };
+    }
+
+    /// <summary>
     /// 从银行删除宝可梦
     /// </summary>
     public async Task Delete(Guid bankPokemonId, Guid userId)
@@ -957,6 +993,19 @@ public class BatchMoveResult
     public int MovedCount { get; set; }
     public int FailedCount { get; set; }
     public List<Guid> FailedIds { get; set; } = new();
+}
+
+public class BatchMoveFromSaveResult
+{
+    public int MovedCount { get; set; }
+    public int FailedCount { get; set; }
+    public List<SlotLocation> FailedSlots { get; set; } = new();
+}
+
+public class SlotLocation
+{
+    public int BoxIndex { get; set; }
+    public int SlotIndex { get; set; }
 }
 
 public class BackfillResult

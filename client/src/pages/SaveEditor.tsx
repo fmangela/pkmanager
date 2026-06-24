@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Typography, Button, App, Spin, Tag, Tooltip, Space, Popconfirm, Dropdown, Select,
+  Typography, Button, App, Spin, Tag, Tooltip, Space, Popconfirm, Dropdown, Select, Checkbox,
   Tabs, Segmented,
 } from 'antd';
 import type { MenuProps } from 'antd';
@@ -39,8 +39,6 @@ const { Title, Text } = Typography;
 
 // ── ID helpers ────────────────────────────────────────
 const saveSlotId = (box: number, slot: number) => `save:${box}:${slot}`;
-const bankItemId = (bankId: string) => `bank:${bankId}`;
-const bankDropId = 'bank-drop-zone';
 const parseSaveSlot = (id: string) => ({ boxIndex: +id.split(':')[1], slotIndex: +id.split(':')[2] });
 
 const tabLabel = (icon: React.ReactNode, label: string) => (
@@ -72,8 +70,11 @@ const DraggableSlot: React.FC<{
   boxIndex: number; slot: BoxSlotDto; onPokemonClick?: (p: PokemonDto) => void;
   legalityStatus?: LegalityStatus;
   spriteStyle?: SpriteStyle;
-  selected?: boolean;
-}> = ({ boxIndex, slot, onPokemonClick, legalityStatus, spriteStyle, selected }) => {
+  isEditSelected?: boolean;
+  isMultiSelected?: boolean;
+  showCheckbox?: boolean;
+  onToggleSelect?: (boxIndex: number, slotIndex: number, shiftKey: boolean) => void;
+}> = ({ boxIndex, slot, onPokemonClick, legalityStatus, spriteStyle, isEditSelected, isMultiSelected, showCheckbox, onToggleSelect }) => {
   const { t } = useTranslation(['pages', 'editor']);
   const slotId = saveSlotId(boxIndex, slot.slotIndex);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: slotId, disabled: slot.isEmpty });
@@ -81,6 +82,7 @@ const DraggableSlot: React.FC<{
 
   const p = slot.pokemon;
   const isEmpty = slot.isEmpty;
+  const isSelected = isEditSelected || isMultiSelected;
 
   // Legality dot color
   const legalityColor =
@@ -93,7 +95,7 @@ const DraggableSlot: React.FC<{
     isEmpty ? 'is-empty' : '',
     isOver ? 'is-drop-target' : '',
     isDragging ? 'is-dragging' : '',
-    selected ? 'is-selected' : '',
+    isSelected ? 'is-selected' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -108,6 +110,22 @@ const DraggableSlot: React.FC<{
         <Text type="secondary" className="pokemon-slot-card__slot-index">{slot.slotIndex + 1}</Text>
       ) : (
         <>
+          {/* Multi-select checkbox */}
+          {showCheckbox && (
+            <div
+              className="pokemon-slot-card__checkbox"
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <Checkbox
+                checked={isMultiSelected ?? false}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  onToggleSelect?.(boxIndex, slot.slotIndex, e.shiftKey);
+                }}
+              />
+            </div>
+          )}
           <div className="pokemon-slot-card__sprite-shell">
             <PokemonSprite speciesId={p!.species} width={32} height={32}
               variant={spriteStyle}
@@ -161,45 +179,14 @@ const DraggableSlot: React.FC<{
   );
 };
 
-// ── Draggable Bank Item ──────────────────────────────
-const DraggableBankItem: React.FC<{ pokemon: BankListItem; spriteStyle?: SpriteStyle }> = ({ pokemon, spriteStyle }) => {
-  const id = bankItemId(pokemon.id);
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
-  const className = [
-    'bank-pokemon-chip',
-    pokemon.isShiny ? 'is-shiny' : '',
-    isDragging ? 'is-dragging' : '',
-  ].filter(Boolean).join(' ');
-
-  return (
-    <div
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      className={className}
-    >
-      <PokemonSprite speciesId={pokemon.species} width={40} height={40}
-        variant={spriteStyle}
-      />
-      <div className="bank-pokemon-chip__name">{pokemon.nickname || pokemon.speciesName}</div>
-      <Tag color="blue" className="bank-pokemon-chip__level">Lv.{pokemon.level}</Tag>
-    </div>
-  );
-};
-
-// ── Droppable Bank Zone ──────────────────────────────
-const DroppableBankZone: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { setNodeRef, isOver } = useDroppable({ id: bankDropId });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`bank-drop-zone${isOver ? ' is-drop-target' : ''}`}
-    >
-      {children}
-    </div>
-  );
-};
+// ── Static Bank Chip ─────────────────────────────────
+const BankChip: React.FC<{ pokemon: BankListItem; spriteStyle?: SpriteStyle }> = ({ pokemon, spriteStyle }) => (
+  <div className="bank-pokemon-chip">
+    <PokemonSprite speciesId={pokemon.species} width={40} height={40} variant={spriteStyle} />
+    <div className="bank-pokemon-chip__name">{pokemon.nickname || pokemon.speciesName}</div>
+    <Tag color="blue" className="bank-pokemon-chip__level">Lv.{pokemon.level}</Tag>
+  </div>
+);
 
 // ── Main Editor Page ─────────────────────────────────
 const SaveEditor: React.FC = () => {
@@ -227,6 +214,11 @@ const SaveEditor: React.FC = () => {
   const [legalityMap, setLegalityMap] = useState<Record<string, LegalityStatus>>({});
   const [allBoxesOpen, setAllBoxesOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('boxes');
+
+  // ── Multi-select state ─────────────────────────
+  const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
+  const [lastSelectedSlotIndex, setLastSelectedSlotIndex] = useState<number | null>(null);
+  const [batchSendingToBank, setBatchSendingToBank] = useState(false);
   const BOX_SORT_LABELS: Record<SaveBoxSortBy, string> = {
     species: t('saveEditor.boxSortSpecies', { ns: 'pages', defaultValue: '物种编号' }),
     level: t('saveEditor.boxSortLevel', { ns: 'pages', defaultValue: '等级' }),
@@ -273,6 +265,12 @@ const SaveEditor: React.FC = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [saveData?.boxes.length, editPanelOpen]);
 
+  // Clear multi-select when switching boxes
+  useEffect(() => {
+    setSelectedSlots(new Set());
+    setLastSelectedSlotIndex(null);
+  }, [activeBox]);
+
   // After saveData refreshes, update editingPokemon if the panel is open
   useEffect(() => {
     if (!editPanelOpen || !editingPokemon || !saveData) return;
@@ -306,15 +304,6 @@ const SaveEditor: React.FC = () => {
         label: slot?.pokemon?.nickname || slot?.pokemon?.speciesName || t('pokemon', { ns: 'common', defaultValue: '宝可梦' }),
         meta: `${boxLabel} · ${typeof level === 'number' ? `Lv.${level}` : t('saveEditor.dragSlot', { ns: 'pages', defaultValue: '槽位 {{slot}}', slot: slotIndex + 1 })}`,
       });
-    } else if (activeId.startsWith('bank:')) {
-      const bankId = activeId.replace('bank:', '');
-      const item = bankPokemon.find(p => p.id === bankId);
-      setActiveDrag({
-        label: item?.nickname || item?.speciesName || t('pokemon', { ns: 'common', defaultValue: '宝可梦' }),
-        meta: typeof item?.level === 'number'
-          ? `${t('saveEditor.dragBank', { ns: 'pages', defaultValue: '银行库存' })} · Lv.${item.level}`
-          : t('saveEditor.dragBank', { ns: 'pages', defaultValue: '银行库存' }),
-      });
     }
   };
 
@@ -325,29 +314,6 @@ const SaveEditor: React.FC = () => {
 
     const fromId = String(active.id);
     const toId = String(over.id);
-
-    // Save → Bank
-    if (fromId.startsWith('save:') && toId === bankDropId) {
-      const { boxIndex, slotIndex } = parseSaveSlot(fromId);
-      try {
-        await bankApi.fromSave({ saveFileId: id, boxIndex, slotIndex });
-        message.success(t('storedInBank', { ns: 'messages', defaultValue: '已存入银行' }));
-        fetchData();
-      } catch { message.error(t('operationFailed', { ns: 'messages', defaultValue: '操作失败' })); }
-      return;
-    }
-
-    // Bank → Save
-    if (fromId.startsWith('bank:') && toId.startsWith('save:')) {
-      const bankPokemonId = fromId.replace('bank:', '');
-      const { boxIndex, slotIndex } = parseSaveSlot(toId);
-      try {
-        await bankApi.moveToSave(id, { bankPokemonId, targetBoxIndex: boxIndex, targetSlotIndex: slotIndex });
-        message.success(t('movedToSave', { ns: 'messages', defaultValue: '已移入存档' }));
-        fetchData();
-      } catch { message.error(t('operationFailed', { ns: 'messages', defaultValue: '操作失败' })); }
-      return;
-    }
 
     // Save → Save (internal move)
     if (fromId.startsWith('save:') && toId.startsWith('save:')) {
@@ -364,6 +330,76 @@ const SaveEditor: React.FC = () => {
       } catch { message.error(t('moveFailed', { ns: 'messages', defaultValue: '移动失败' })); }
     }
   };
+
+  // ── Multi-select helpers ──────────────────────────
+  const isMultiSelected = useCallback((boxIndex: number, slotIndex: number) =>
+    selectedSlots.has(saveSlotId(boxIndex, slotIndex)),
+  [selectedSlots]);
+
+  const toggleSlotSelect = useCallback((boxIndex: number, slotIndex: number, shiftKey: boolean) => {
+    // 防御：空槽位不允许加入多选
+    if (saveData?.boxes[boxIndex]?.slots[slotIndex]?.isEmpty) return;
+    setSelectedSlots(prev => {
+      const next = new Set(prev);
+      const slotId = saveSlotId(boxIndex, slotIndex);
+
+      if (shiftKey && lastSelectedSlotIndex !== null) {
+        // Append non-empty slots in range between anchor and current
+        const start = Math.min(lastSelectedSlotIndex, slotIndex);
+        const end = Math.max(lastSelectedSlotIndex, slotIndex);
+        for (let i = start; i <= end; i++) {
+          const slot = saveData?.boxes[boxIndex]?.slots[i];
+          if (slot && !slot.isEmpty) {
+            next.add(saveSlotId(boxIndex, i));
+          }
+        }
+      } else {
+        // Toggle single slot
+        if (next.has(slotId)) {
+          next.delete(slotId);
+        } else {
+          next.add(slotId);
+        }
+      }
+
+      return next;
+    });
+    setLastSelectedSlotIndex(slotIndex);
+  }, [lastSelectedSlotIndex, saveData]);
+
+  const handleBatchSendToBank = useCallback(async () => {
+    if (!id || selectedSlots.size === 0) return;
+    setBatchSendingToBank(true);
+    try {
+      const slots = Array.from(selectedSlots).map(sid => {
+        const parsed = parseSaveSlot(sid);
+        return { boxIndex: parsed.boxIndex, slotIndex: parsed.slotIndex };
+      });
+      const res = await bankApi.batchFromSave({ saveFileId: id, slots });
+      const { movedCount, failedCount } = res.data;
+      if (failedCount > 0) {
+        message.warning(t('moveToBankBatchPartial', {
+          ns: 'messages',
+          defaultValue: 'Sent {{moved}} to bank, {{failed}} failed.',
+          moved: movedCount,
+          failed: failedCount,
+        }));
+      } else {
+        message.success(t('moveToBankBatchSuccess', {
+          ns: 'messages',
+          defaultValue: 'Sent {{count}} Pokemon to bank.',
+          count: movedCount,
+        }));
+      }
+      setSelectedSlots(new Set());
+      setLastSelectedSlotIndex(null);
+      fetchData();
+    } catch {
+      message.error(t('operationFailed', { ns: 'messages', defaultValue: '操作失败' }));
+    } finally {
+      setBatchSendingToBank(false);
+    }
+  }, [id, selectedSlots, message, t, fetchData]);
 
   const handleSave = async () => { if (!id) return; try { await saveFileApi.save(id); message.success(t('backupCreated', { ns: 'messages', defaultValue: '已创建备份' })); } catch { message.error(t('backupCreateFailed', { ns: 'messages', defaultValue: '创建备份失败' })); } };
   const handleDownload = async () => {
@@ -669,13 +705,15 @@ const SaveEditor: React.FC = () => {
                   value={activeBox}
                   className="save-editor-toolbar__select"
                   onChange={setActiveBox}
-                  options={boxList.map((box) => {
-                    const used = box.slots.filter(slot => !slot.isEmpty).length;
-                    return {
-                      value: box.boxIndex,
-                      label: `Box ${box.boxIndex + 1}: ${box.boxName} (${used}/${box.capacity})`,
-                    };
-                  })}
+                  options={boxList
+                    .filter((box) => box.boxIndex != null)
+                    .map((box) => {
+                      const used = box.slots.filter(slot => !slot.isEmpty).length;
+                      return {
+                        value: box.boxIndex,
+                        label: `Box ${box.boxIndex + 1}: ${box.boxName} (${used}/${box.capacity})`,
+                      };
+                    })}
                 />
                 <div className="save-editor-toolbar__spacer" />
                 <Tooltip title={t('saveEditor.legalityScanTooltip', { ns: 'pages', defaultValue: '扫描当前存档中所有箱子与队伍宝可梦的合法性' })}>
@@ -691,6 +729,30 @@ const SaveEditor: React.FC = () => {
                   <Button icon={<SortAscendingOutlined />} loading={sortingBoxes}>{t('saveEditor.sortAllBoxes', { ns: 'pages', defaultValue: '全部排序' })}</Button>
                 </Dropdown>
               </section>
+
+              {/* Batch action bar */}
+              {selectedSlots.size > 0 && (
+                <section className="app-panel" style={{ marginBottom: 16, background: '#e6f4ff', border: '1px solid #91caff', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text strong>
+                    {t('saveEditor.selectedSlotCount', { ns: 'pages', defaultValue: '{{count}} selected', count: selectedSlots.size })}
+                  </Text>
+                  <Space>
+                    <Popconfirm
+                      title={t('saveEditor.sendToBankConfirm', { ns: 'pages', defaultValue: 'Send {{count}} Pokemon to bank?', count: selectedSlots.size })}
+                      onConfirm={handleBatchSendToBank}
+                      okText={t('confirm', { ns: 'common', defaultValue: '确定' })}
+                      cancelText={t('cancel', { ns: 'common', defaultValue: '取消' })}
+                    >
+                      <Button icon={<BankOutlined />} loading={batchSendingToBank}>
+                        {t('saveEditor.sendToBank', { ns: 'pages', defaultValue: '发送到银行' })}
+                      </Button>
+                    </Popconfirm>
+                    <Button onClick={() => { setSelectedSlots(new Set()); setLastSelectedSlotIndex(null); }}>
+                      {t('saveEditor.clearSelection', { ns: 'pages', defaultValue: '清除选择' })}
+                    </Button>
+                  </Space>
+                </section>
+              )}
 
               <div className="save-editor-grid-layout">
                 <aside className="app-panel save-editor-sidebar">
@@ -765,7 +827,10 @@ const SaveEditor: React.FC = () => {
                             slot={slot}
                             legalityStatus={legalityMap[slotKey]}
                             spriteStyle={spriteStyle}
-                            selected={editPanelOpen && !editingIsParty && editingBoxIndex === activeBox && editingSlotIndex === slot.slotIndex}
+                            isEditSelected={editPanelOpen && !editingIsParty && editingBoxIndex === activeBox && editingSlotIndex === slot.slotIndex}
+                            isMultiSelected={isMultiSelected(activeBox, slot.slotIndex)}
+                            showCheckbox={true}
+                            onToggleSelect={toggleSlotSelect}
                             onPokemonClick={(pokemon) => {
                               setEditingPokemon(pokemon);
                               setEditingBoxIndex(activeBox);
@@ -827,13 +892,13 @@ const SaveEditor: React.FC = () => {
                     <Text strong><BankOutlined /> {t('saveEditor.myBank', { ns: 'pages', defaultValue: '我的银行' })}</Text>
                     <Text type="secondary" className="save-editor-panel-heading__meta">{t('saveEditor.bankStoredCount', { ns: 'pages', defaultValue: '{{count}} 只已入库', count: bankPokemon.length })}</Text>
                   </div>
-                  <DroppableBankZone>
+                  <div className="save-editor-bank-list">
                     {bankPokemon.length === 0 ? (
-                      <Text type="secondary" className="save-editor-bank-panel__empty">{t('saveEditor.bankDropHint', { ns: 'pages', defaultValue: '拖拽宝可梦到这里存入银行' })}</Text>
+                      <Text type="secondary" className="save-editor-bank-panel__empty">{t('saveEditor.bankEmpty', { ns: 'pages', defaultValue: '银行中暂无宝可梦' })}</Text>
                     ) : (
-                      bankPokemon.map((pokemon) => <DraggableBankItem key={pokemon.id} pokemon={pokemon} spriteStyle={spriteStyle} />)
+                      bankPokemon.map((pokemon) => <BankChip key={pokemon.id} pokemon={pokemon} spriteStyle={spriteStyle} />)
                     )}
-                  </DroppableBankZone>
+                  </div>
                 </section>
               </div>
 

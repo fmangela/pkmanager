@@ -60,6 +60,8 @@
   "bank.batchDeleteSuccess": "Se eliminaron {0} Pokémon",
   "bank.batchMovePartialSuccess": "Se movieron {0} Pokémon y fallaron {1}",
   "bank.batchMoveSuccess": "Se movieron {0} Pokémon al guardado",
+  "bank.batchMoveFromSaveSuccess": "Sent {0} Pokemon to bank",
+  "bank.batchMoveFromSavePartialSuccess": "Sent {0} Pokemon to bank, {1} failed",
   "bank.moveToSaveSuccess": "Enviado al guardado",
   "bank.backfillCompleted": "Backfill completado: {0} corregidos, {1} omitidos (faltan datos originales), {2} fallidos",
   "bank.cachedResult": "Cargado desde caché",

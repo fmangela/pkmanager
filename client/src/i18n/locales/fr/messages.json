@@ -70,5 +70,7 @@
   "api.timeout": "La requete a expire",
   "api.networkError": "Echec de la connexion reseau",
   "api.requestFailed": "echec",
-  "api.tokenExpiredRedirect": "Le jeton a expire. Redirection vers la page de connexion."
+  "api.tokenExpiredRedirect": "Le jeton a expire. Redirection vers la page de connexion.",
+  "moveToBankBatchSuccess": "Sent {{count}} Pokemon to bank.",
+  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed."
 }

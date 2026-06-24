@@ -60,6 +60,8 @@
   "bank.batchDeleteSuccess": "포켓몬 {0}마리를 삭제했습니다",
   "bank.batchMovePartialSuccess": "{0}마리를 이동했고, {1}마리는 실패했습니다",
   "bank.batchMoveSuccess": "포켓몬 {0}마리를 세이브로 이동했습니다",
+  "bank.batchMoveFromSaveSuccess": "Sent {0} Pokemon to bank",
+  "bank.batchMoveFromSavePartialSuccess": "Sent {0} Pokemon to bank, {1} failed",
   "bank.moveToSaveSuccess": "세이브로 보냈습니다",
   "bank.backfillCompleted": "보정 완료: 수정 {0}건, 건너뜀 {1}건(원본 데이터 없음), 실패 {2}건",
   "bank.cachedResult": "캐시에서 불러옴",

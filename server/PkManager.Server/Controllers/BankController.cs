@@ -83,6 +83,39 @@ public class BankController : LocalizedControllerBase
     }
 
     /// <summary>
+    /// 批量从存档保存宝可梦到银行
+    /// </summary>
+    [HttpPost("batch-from-save")]
+    public async Task<ActionResult<ApiResponse<object>>> BatchMoveFromSave([FromBody] BatchMoveFromSaveRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null) return UnauthorizedMessage<object>();
+
+        try
+        {
+            var result = await _bankService.BatchMoveFromSave(
+                userId.Value, request.SaveFileId, request.Slots);
+
+            return Ok(ApiResponse<object>.Ok(new
+            {
+                MovedCount = result.MovedCount,
+                FailedCount = result.FailedCount,
+                FailedSlots = result.FailedSlots
+            },
+            result.FailedCount > 0
+                ? Text("bank.batchMoveFromSavePartialSuccess", result.MovedCount, result.FailedCount)
+                : Text("bank.batchMoveFromSaveSuccess", result.MovedCount),
+            result.FailedCount > 0
+                ? "bank.batchMoveFromSavePartialSuccess"
+                : "bank.batchMoveFromSaveSuccess"));
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(FromBusinessException<object>(ex));
+        }
+    }
+
+    /// <summary>
     /// 获取银行中单只宝可梦详情
     /// </summary>
     [HttpGet("{id:guid}")]
@@ -326,4 +359,10 @@ public class BatchMoveToSaveRequest
     public List<Guid> Ids { get; set; } = new();
     public Guid SaveFileId { get; set; }
     public int TargetBoxIndex { get; set; }
+}
+
+public class BatchMoveFromSaveRequest
+{
+    public Guid SaveFileId { get; set; }
+    public List<SlotLocation> Slots { get; set; } = new();
 }

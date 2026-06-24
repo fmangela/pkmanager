@@ -70,5 +70,7 @@
   "api.timeout": "リクエストがタイムアウトしました",
   "api.networkError": "ネットワーク接続に失敗しました",
   "api.requestFailed": "失敗",
-  "api.tokenExpiredRedirect": "Token の有効期限が切れたため、ログインページへ移動します。"
+  "api.tokenExpiredRedirect": "Token の有効期限が切れたため、ログインページへ移動します。",
+  "moveToBankBatchSuccess": "Sent {{count}} Pokemon to bank.",
+  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed."
 }

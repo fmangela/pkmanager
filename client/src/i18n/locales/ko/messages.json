@@ -70,5 +70,7 @@
   "api.timeout": "요청 시간이 초과되었습니다",
   "api.networkError": "네트워크 연결에 실패했습니다",
   "api.requestFailed": "실패",
-  "api.tokenExpiredRedirect": "토큰이 만료되었습니다. 로그인 페이지로 이동합니다."
+  "api.tokenExpiredRedirect": "토큰이 만료되었습니다. 로그인 페이지로 이동합니다.",
+  "moveToBankBatchSuccess": "Sent {{count}} Pokemon to bank.",
+  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed."
 }

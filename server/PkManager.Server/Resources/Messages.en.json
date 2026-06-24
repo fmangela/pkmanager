@@ -60,6 +60,8 @@
   "bank.batchDeleteSuccess": "Deleted {0} Pokemon",
   "bank.batchMovePartialSuccess": "Moved {0} Pokemon, {1} failed",
   "bank.batchMoveSuccess": "Moved {0} Pokemon into save",
+  "bank.batchMoveFromSaveSuccess": "Sent {0} Pokemon to bank",
+  "bank.batchMoveFromSavePartialSuccess": "Sent {0} Pokemon to bank, {1} failed",
   "bank.moveToSaveSuccess": "Sent to save",
   "bank.backfillCompleted": "Backfill complete: fixed {0}, skipped {1} (missing raw data), failed {2}",
   "bank.cachedResult": "Loaded from cache",

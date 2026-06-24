@@ -70,5 +70,7 @@
   "api.timeout": "La solicitud excedio el tiempo limite",
   "api.networkError": "Fallo la conexion de red",
   "api.requestFailed": "fallo",
-  "api.tokenExpiredRedirect": "El token ha expirado. Redirigiendo a la pagina de inicio de sesion."
+  "api.tokenExpiredRedirect": "El token ha expirado. Redirigiendo a la pagina de inicio de sesion.",
+  "moveToBankBatchSuccess": "Sent {{count}} Pokemon to bank.",
+  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed."
 }

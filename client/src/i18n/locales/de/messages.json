@@ -70,5 +70,7 @@
   "api.timeout": "Zeitueberschreitung bei der Anfrage",
   "api.networkError": "Netzwerkverbindung fehlgeschlagen",
   "api.requestFailed": "fehlgeschlagen",
-  "api.tokenExpiredRedirect": "Token abgelaufen. Weiterleitung zur Anmeldeseite."
+  "api.tokenExpiredRedirect": "Token abgelaufen. Weiterleitung zur Anmeldeseite.",
+  "moveToBankBatchSuccess": "Sent {{count}} Pokemon to bank.",
+  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed."
 }

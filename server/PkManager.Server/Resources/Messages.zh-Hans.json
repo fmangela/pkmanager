@@ -60,6 +60,8 @@
   "bank.batchDeleteSuccess": "已删除 {0} 只宝可梦",
   "bank.batchMovePartialSuccess": "已移动 {0} 只，{1} 只失败",
   "bank.batchMoveSuccess": "已移动 {0} 只宝可梦到存档",
+  "bank.batchMoveFromSaveSuccess": "已将 {0} 只宝可梦发送到银行",
+  "bank.batchMoveFromSavePartialSuccess": "已发送 {0} 只到银行，{1} 只失败",
   "bank.moveToSaveSuccess": "已发送到存档",
   "bank.backfillCompleted": "回填完成：修复 {0} 条，跳过 {1} 条（缺少原始数据），失败 {2} 条",
   "bank.cachedResult": "来自缓存",

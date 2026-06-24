@@ -725,9 +725,22 @@ public class PokemonEditService
 
         if (normalizedType.IsEnum)
         {
-            if (Enum.IsDefined(normalizedType, value))
-                return Enum.ToObject(normalizedType, value);
-            return Enum.ToObject(normalizedType, 0);
+            var underlyingType = Enum.GetUnderlyingType(normalizedType);
+            var defaultValue = Convert.ChangeType(0, underlyingType);
+
+            object convertedValue;
+            try
+            {
+                convertedValue = Convert.ChangeType(value, underlyingType);
+            }
+            catch
+            {
+                return Enum.ToObject(normalizedType, defaultValue);
+            }
+
+            if (Enum.IsDefined(normalizedType, convertedValue))
+                return Enum.ToObject(normalizedType, convertedValue);
+            return Enum.ToObject(normalizedType, defaultValue);
         }
 
         return Convert.ChangeType(value, normalizedType);
