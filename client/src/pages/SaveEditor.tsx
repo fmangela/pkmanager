@@ -183,6 +183,9 @@ const DraggableSlot: React.FC<{
 const BankChip: React.FC<{ pokemon: BankListItem; spriteStyle?: SpriteStyle }> = ({ pokemon, spriteStyle }) => (
   <div className="bank-pokemon-chip">
     <PokemonSprite speciesId={pokemon.species} width={40} height={40} variant={spriteStyle} />
+    <Text type="secondary" style={{ fontSize: 9, fontFamily: 'monospace', lineHeight: 1 }}>
+      #{String(pokemon.species).padStart(3, '0')}
+    </Text>
     <div className="bank-pokemon-chip__name">{pokemon.nickname || pokemon.speciesName}</div>
     <Tag color="blue" className="bank-pokemon-chip__level">Lv.{pokemon.level}</Tag>
   </div>

@@ -281,7 +281,10 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
                 }
               }}
             />
-            <span style={{ fontWeight: 600 }}>
+            <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+              <Text type="secondary" style={{ fontFamily: 'monospace', marginRight: 4 }}>
+                #{String(pokemon.species).padStart(3, '0')}
+              </Text>
               {pokemon.nickname || pokemon.speciesName} Lv.{pokemon.level}
             </span>
             {pokemon.isShiny && <Tag color="gold">✨ {t('bank.shinyTag', { ns: 'pages', defaultValue: '闪光' })}</Tag>}
@@ -321,7 +324,9 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
         )}
         {!hasPkmData ? (
           <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label={t('showdown.field.species', { ns: 'editor', defaultValue: '物种' })}>{pokemon.speciesName}</Descriptions.Item>
+            <Descriptions.Item label={t('showdown.field.species', { ns: 'editor', defaultValue: '物种' })}>
+              #{String(pokemon.species).padStart(3, '0')} {pokemon.speciesName}
+            </Descriptions.Item>
             <Descriptions.Item label={t('showdown.field.level', { ns: 'editor', defaultValue: '等级' })}>Lv.{pokemon.level}</Descriptions.Item>
             {pokemon.nickname && <Descriptions.Item label={t('showdown.field.nickname', { ns: 'editor', defaultValue: '昵称' })}>{pokemon.nickname}</Descriptions.Item>}
             <Descriptions.Item label={t('showdown.field.nature', { ns: 'editor', defaultValue: '性格' })}>{pokemon.natureName || '-'}</Descriptions.Item>
@@ -416,7 +421,7 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
         <Text type="secondary">{t('bankEdit.sendToSaveHint', {
           ns: 'editor',
           defaultValue: '将 "{{name}}" 发送到目标箱子（自动填充空位）',
-          name: pokemon.nickname || pokemon.speciesName,
+          name: `#${String(pokemon.species).padStart(3, '0')} ${pokemon.nickname || pokemon.speciesName}`,
         })}</Text>
       </Modal>
     </>

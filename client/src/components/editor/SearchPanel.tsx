@@ -261,7 +261,15 @@ const SearchPanel: React.FC<Props> = ({ saveFileId, onJumpToSlot }) => {
       ),
     },
     {
-      title: et('search.colSpecies', '物种'), dataIndex: 'speciesName', key: 'species', width: 120,
+      title: et('search.colSpecies', '物种'), dataIndex: 'speciesName', key: 'species', width: 140,
+      render: (name: string, r: PokemonSearchItemDto) => (
+        <span>
+          <Text type="secondary" style={{ fontFamily: 'monospace', marginRight: 4 }}>
+            #{String(r.speciesId).padStart(3, '0')}
+          </Text>
+          {name}
+        </span>
+      ),
     },
     {
       title: et('search.colNickname', '昵称'), dataIndex: 'nickname', key: 'nickname', width: 100,

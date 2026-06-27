@@ -22,6 +22,8 @@ import type { ApiError } from '../api/axios';
 
 const { Text } = Typography;
 
+const formatDexNo = (species: number) => `#${String(species).padStart(3, '0')}`;
+
 const BankPage: React.FC = () => {
   const { t } = useTranslation(['pages', 'messages', 'common']);
   const [pokemon, setPokemon] = useState<BankListItem[]>([]);
@@ -311,6 +313,13 @@ const BankPage: React.FC = () => {
           )}
         </div>
 
+        {/* Dex number */}
+        <div style={{ marginTop: 0, marginBottom: 2 }}>
+          <Text type="secondary" style={{ fontSize: 11, fontFamily: 'monospace' }}>
+            {formatDexNo(p.species)}
+          </Text>
+        </div>
+
         {/* Info */}
         <div style={{ marginTop: 4, marginBottom: 2 }}>
           <Text strong>{p.nickname || p.speciesName}</Text>
@@ -388,6 +397,9 @@ const BankPage: React.FC = () => {
             </Col>
             {/* Info */}
             <Col flex="auto">
+              <Text type="secondary" style={{ fontSize: 11, fontFamily: 'monospace', marginRight: 8 }}>
+                {formatDexNo(p.species)}
+              </Text>
               <Text strong>{p.nickname || p.speciesName}</Text>
               {p.nickname && <Text type="secondary" style={{ marginLeft: 8 }}>({p.speciesName})</Text>}
               <div>
