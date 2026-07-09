@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
   Modal, Button, Space, Tag, Checkbox, Alert, Spin, App, Tooltip,
 } from 'antd';
@@ -38,10 +38,31 @@ const EvolutionModal: React.FC<Props> = ({
   const [selectedIdx, setSelectedIdx] = useState<number>(0);
   const [createShedinja, setCreateShedinja] = useState(false);
   const { message } = App.useApp();
+  const editSnapshotKey = JSON.stringify(editSnapshot ?? {});
+  const stableEditSnapshotRef = useRef<Record<string, unknown>>(editSnapshot ?? {});
+
+  const handleLoadPathsError = useEffectEvent((err: unknown) => {
+    message.error((err as ApiError).response?.data?.message || et('evolution.loadPathsFailed', '获取进化路径失败'));
+    onClose();
+  });
+
+  useEffect(() => {
+    stableEditSnapshotRef.current = editSnapshot ?? {};
+  }, [editSnapshot]);
 
   // Fetch evolution paths when modal opens
   useEffect(() => {
-    if (!open || !pokemon.pkmDataBase64 || !saveFileId) return;
+    if (!open) {
+      setLoading(false);
+      setPathData(null);
+      setSelectedIdx(0);
+      setCreateShedinja(false);
+      return;
+    }
+    if (!pokemon.pkmDataBase64 || !saveFileId) return;
+
+    let cancelled = false;
+
     setLoading(true);
     setPathData(null);
     setSelectedIdx(0);
@@ -50,17 +71,25 @@ const EvolutionModal: React.FC<Props> = ({
     evolutionApi.getEvolutions({
       pkmDataBase64: pokemon.pkmDataBase64,
       saveFileId: saveFileId,
-      editSnapshot,
+      editSnapshot: stableEditSnapshotRef.current,
     }).then(res => {
+      if (cancelled) return;
       setPathData(res.data);
       // Select the first available option by default
       const firstAvailable = res.data.options.findIndex(o => o.isAvailable);
       if (firstAvailable >= 0) setSelectedIdx(firstAvailable);
     }).catch((err: unknown) => {
-      message.error((err as ApiError).response?.data?.message || et('evolution.loadPathsFailed', '获取进化路径失败'));
-      onClose();
-    }).finally(() => setLoading(false));
-  }, [editSnapshot, et, message, onClose, open, pokemon.pkmDataBase64, saveFileId]);
+      if (cancelled) return;
+      handleLoadPathsError(err);
+    }).finally(() => {
+      if (cancelled) return;
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editSnapshotKey, open, pokemon.pkmDataBase64, saveFileId]);
 
   const handleEvolve = async () => {
     const option = pathData?.options[selectedIdx];
