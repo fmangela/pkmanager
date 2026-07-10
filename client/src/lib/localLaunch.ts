@@ -156,7 +156,7 @@ export const launchLocalSave = async (
   const res = await emulatorApi.launchLocal(saveFileId);
   const pkg = res.data as LaunchLocalResult;
   if (!pkg.romPath) {
-    throw new Error(getI18nText('localLaunch.romPathMissing', undefined, 'messages') || '未找到游戏内容文件路径，请检查模拟器数据目录配置');
+    throw new Error(getI18nText('localLaunch.romPathMissing', undefined, 'messages') || 'Game content path was not found. Check the emulator data directory configuration.');
   }
 
   const { fileName, scriptContent } = isWin
@@ -166,7 +166,7 @@ export const launchLocalSave = async (
   triggerDownload(scriptContent, fileName, isWin ? 'text/plain' : 'text/x-sh');
   message.info(
     getI18nText('localLaunch.scriptDownloaded', { fileName }, 'messages')
-    || `未检测到一键启动协议，已下载启动脚本（${fileName}）。运行该脚本以注入存档、启动模拟器，并在退出后自动同步。`,
+    || `No one-click launch protocol was detected. The launch script (${fileName}) was downloaded. Run it to inject the save, start the emulator, and sync automatically after exit.`,
     8,
   );
 };

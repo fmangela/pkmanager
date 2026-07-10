@@ -182,5 +182,6 @@
   "bank.sortLevelAsc": "等级 ↑",
   "bank.sortSpeciesDesc": "物种编号 ↓",
   "bank.sortSpeciesAsc": "物种编号 ↑",
-  "bank.savePokemonCount": "{{count}}只"
+  "bank.savePokemonCount": "{{count}}只",
+  "bank.moveSaveOption": "{{filename}} ({{trainer}} · {{game}} · {{count}} 只)"
 }

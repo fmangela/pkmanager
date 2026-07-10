@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ThemeProvider } from './components/ThemeProvider';
 
 import LoginPage from './pages/Login';
@@ -52,13 +53,17 @@ const HealthChecker: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     fetch('/api/health', { signal: AbortSignal.timeout(5000) })
       .then((r) => {
         if (r.ok) {
-          store.log({ category: 'health', level: 'info', message: 'API 可达' });
+          store.log({
+            category: 'health',
+            level: 'info',
+            message: i18n.t('diagnostic.apiReachable', { ns: 'messages', defaultValue: 'API 可达' }),
+          });
           store.setHealth('ok');
         } else {
           store.log({
             category: 'health',
             level: 'error',
-            message: `API 返回状态 ${r.status}`,
+            message: i18n.t('diagnostic.apiStatus', { ns: 'messages', defaultValue: 'API 返回状态 {{status}}', status: r.status }),
           });
           store.setHealth('degraded');
         }
@@ -67,7 +72,7 @@ const HealthChecker: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         store.log({
           category: 'health',
           level: 'error',
-          message: `API 不可达: ${err.message}`,
+          message: i18n.t('diagnostic.apiUnavailable', { ns: 'messages', defaultValue: 'API 不可达: {{error}}', error: err.message }),
         });
         store.setHealth('down');
       });
@@ -84,13 +89,21 @@ const HealthChecker: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             void i18n.changeLanguage(user.preferredLang);
           }
           if (user) setUser(user);
-          store.log({ category: 'health', level: 'info', message: 'Auth Token 有效' });
+          store.log({
+            category: 'health',
+            level: 'info',
+            message: i18n.t('diagnostic.authTokenValid', { ns: 'messages', defaultValue: 'Auth Token 有效' }),
+          });
         })
         .catch((err) => {
           store.log({
             category: 'auth',
             level: 'warn',
-            message: `Auth Token 验证失败: ${err.response?.status || err.message}`,
+            message: i18n.t('diagnostic.authTokenInvalid', {
+              ns: 'messages',
+              defaultValue: 'Auth Token 验证失败: {{error}}',
+              error: err.response?.status || err.message,
+            }),
           });
           store.setHealth('degraded');
         });
@@ -103,6 +116,8 @@ const HealthChecker: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 // ── App ─────────────────────────────────────────────────────────────
 
 const App: React.FC = () => {
+  const { t } = useTranslation('messages');
+
   return (
     <ThemeProvider>
         <ErrorBoundary name="app-root">
@@ -147,7 +162,7 @@ const App: React.FC = () => {
                   path="/play/:saveFileId"
                   element={
                     <ProtectedRoute>
-                      <LazyRoute name="gba-emulator" fallback="加载模拟器...">
+                      <LazyRoute name="gba-emulator" fallback={t('loading.gbaEmulator', '加载模拟器...')}>
                         <EmulatorPage />
                       </LazyRoute>
                     </ProtectedRoute>
@@ -157,7 +172,7 @@ const App: React.FC = () => {
                   path="/play/new/:gameId"
                   element={
                     <ProtectedRoute>
-                      <LazyRoute name="gba-emulator-new" fallback="加载模拟器 (新游戏)...">
+                      <LazyRoute name="gba-emulator-new" fallback={t('loading.gbaEmulatorNew', '加载模拟器 (新游戏)...')}>
                         <EmulatorPage />
                       </LazyRoute>
                     </ProtectedRoute>
@@ -167,7 +182,7 @@ const App: React.FC = () => {
                   path="/play-nds/:saveFileId"
                   element={
                     <ProtectedRoute>
-                      <LazyRoute name="nds-emulator" fallback="加载 NDS 模拟器...">
+                      <LazyRoute name="nds-emulator" fallback={t('loading.ndsEmulator', '加载 NDS 模拟器...')}>
                         <NdsEmulatorPage />
                       </LazyRoute>
                     </ProtectedRoute>
@@ -177,7 +192,7 @@ const App: React.FC = () => {
                   path="/play-nds/new/:gameId"
                   element={
                     <ProtectedRoute>
-                      <LazyRoute name="nds-emulator-new" fallback="加载 NDS 模拟器 (新游戏)...">
+                      <LazyRoute name="nds-emulator-new" fallback={t('loading.ndsEmulatorNew', '加载 NDS 模拟器 (新游戏)...')}>
                         <NdsEmulatorPage />
                       </LazyRoute>
                     </ProtectedRoute>

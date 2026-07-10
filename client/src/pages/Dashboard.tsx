@@ -45,13 +45,13 @@ const DashboardPage: React.FC = () => {
       useDiagnosticStore.getState().log({
         category: 'api',
         level: 'error',
-        message: '加载存档列表失败',
+        message: t('loadSaveListFailed', { ns: 'messages', defaultValue: '加载存档列表失败' }),
         stack: (err as ApiError).message,
       });
     } finally {
       setLoadingSaves(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (selectedGame) fetchSaves();

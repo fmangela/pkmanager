@@ -182,5 +182,6 @@
   "bank.sortLevelAsc": "Level ↑",
   "bank.sortSpeciesDesc": "Species ID ↓",
   "bank.sortSpeciesAsc": "Species ID ↑",
-  "bank.savePokemonCount": "{{count}} Pokemon"
+  "bank.savePokemonCount": "{{count}} Pokemon",
+  "bank.moveSaveOption": "{{filename}} ({{trainer}} · {{game}} · {{count}} Pokemon)"
 }

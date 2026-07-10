@@ -120,7 +120,7 @@ public class EvolutionService
                 SpeciesName = strings.Species[targetSpecies],
                 Form = destForm,
                 FormName = formName,
-                MethodLabel = GetChineseMethodLabel(displayMethod, strings),
+                MethodLabel = GetMethodLabel(displayMethod, strings),
                 RequiredLevel = displayMethod.Level,
                 Argument = displayMethod.Argument,
                 IsAvailable = isAvailable,
@@ -440,102 +440,96 @@ public class EvolutionService
         return false;
     }
 
-    private static string GetBlockReason(EvolutionCheckResult result) =>
+    private string GetBlockReason(EvolutionCheckResult result) =>
         result switch
         {
-            EvolutionCheckResult.Valid => "Unknown reason",
-            EvolutionCheckResult.InsufficientLevel => "Insufficient level",
-            EvolutionCheckResult.BadGender => "Gender does not match",
-            EvolutionCheckResult.BadForm => "Form does not match",
-            EvolutionCheckResult.WrongEC => "Encryption constant does not match",
-            EvolutionCheckResult.VisitVersion => "Version does not match",
-            EvolutionCheckResult.LowContestStat => "Contest stat is too low",
-            EvolutionCheckResult.Untraded => "Trade is required",
-            _ => $"Requirements not met ({result})",
+            EvolutionCheckResult.Valid => Text("evolution.blockReasonUnknown"),
+            EvolutionCheckResult.InsufficientLevel => Text("evolution.blockReasonLevel"),
+            EvolutionCheckResult.BadGender => Text("evolution.blockReasonGender"),
+            EvolutionCheckResult.BadForm => Text("evolution.blockReasonForm"),
+            EvolutionCheckResult.WrongEC => Text("evolution.blockReasonEc"),
+            EvolutionCheckResult.VisitVersion => Text("evolution.blockReasonVersion"),
+            EvolutionCheckResult.LowContestStat => Text("evolution.blockReasonContest"),
+            EvolutionCheckResult.Untraded => Text("evolution.blockReasonTrade"),
+            _ => Text("evolution.blockReasonGeneric", result),
         };
 
     /// <summary>
-    /// 将 EvolutionMethod 映射为中文进化方式标签。
+    /// 将 EvolutionMethod 映射为当前请求语言的进化方式标签。
     /// 覆盖 Gen1-7 使用的 ~30 种进化类型，其余回退到通用标签。
     /// </summary>
-    private static string GetChineseMethodLabel(EvolutionMethod m, GameStrings strings)
+    private string GetMethodLabel(EvolutionMethod m, GameStrings strings)
     {
         string ItemName(int id) =>
-            id > 0 && id < strings.Item.Count ? strings.Item[id] : $"道具{id}";
+            id > 0 && id < strings.Item.Count ? strings.Item[id] : Text("evolution.method.itemFallback", id);
 
         return m.Method switch
         {
-            // ── 等级类 ──
-            EvolutionType.LevelUp => m.Level > 1 ? $"等级{m.Level}以上" : "升级",
-            EvolutionType.LevelUpFriendship => $"亲密度升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpFriendshipMorning => $"亲密度升级·白天 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpFriendshipNight => $"亲密度升级·夜晚 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpATK => $"攻击＞防御时升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpAeqD => $"攻击＝防御时升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpDEF => $"防御＞攻击时升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpECl5 => $"随机EC＜5升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpECgeq5 => $"随机EC≥5升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpMale => $"♂ 升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpFemale => $"♀ 升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpKnowMove => $"习得{m.Argument}后升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpBeauty => $"美丽度{m.Argument}+升级",
-            EvolutionType.LevelUpVersion => $"特定版本升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpVersionDay => $"特定版本白天升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpVersionNight => $"特定版本夜晚升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpMorning => $"白天升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpNight => $"夜晚升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpDusk => $"黄昏升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpElectric => $"电气石洞穴升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpForest => $"森林升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpCold => $"寒冷地带升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpSummit => $"山顶升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpWormhole => $"究极之洞升级 (Lv.{m.Level}+)",
-
-            // ── 道具类 ──
-            EvolutionType.UseItem => $"使用{ItemName(m.Argument)}",
-            EvolutionType.UseItemMale => $"♂ 使用{ItemName(m.Argument)}",
-            EvolutionType.UseItemFemale => $"♀ 使用{ItemName(m.Argument)}",
-            EvolutionType.UseItemWormhole => $"究极之洞使用{ItemName(m.Argument)}",
-            EvolutionType.UseItemFullMoon => $"满月之夜使用{ItemName(m.Argument)}",
-
-            // ── 通讯交换类 ──
-            EvolutionType.Trade => "通讯交换",
-            EvolutionType.TradeHeldItem => $"通讯交换 (携带{ItemName(m.Argument)})",
-            EvolutionType.TradeShelmetKarrablast => "通讯交换 (盖盖虫/小嘴蜗)",
-
-            // ── 特殊类 ──
-            EvolutionType.LevelUpWithTeammate => $"同行有特定宝可梦时升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpHeldItemDay => $"白天携带{ItemName(m.Argument)}升级",
-            EvolutionType.LevelUpHeldItemNight => $"夜晚携带{ItemName(m.Argument)}升级",
-            EvolutionType.LevelUpNatureAmped => $"昂扬性格升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpNatureLowKey => $"低调性格升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpFormFemale1 => $"♀特定形态升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpAffection50MoveType => $"友好度+特定招式升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpMoveType => $"特定属性招式升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpWeather => $"特定天气升级 (Lv.{m.Level}+)",
-            EvolutionType.LevelUpInverted => $"倒置升级 (Lv.{m.Level}+)",
-            EvolutionType.TowerOfDarkness => "恶之塔",
-            EvolutionType.TowerOfWaters => "水之塔",
-            EvolutionType.CriticalHitsInBattle => "3次击中要害后升级",
-            EvolutionType.HitPointsLostInBattle => "受到特定HP损伤后升级",
-            EvolutionType.Spin => "旋转进化",
-            EvolutionType.Hisui => "洗翠地区进化",
-            EvolutionType.UseMoveAgileStyle => "使用迅疾招式",
-            EvolutionType.UseMoveStrongStyle => "使用刚猛招式",
-            EvolutionType.UseMoveBarbBarrage => "使用千针鱼招式",
-            EvolutionType.LevelUpWalkStepsWith => $"行走{m.Argument}步后升级",
-            EvolutionType.LevelUpUnionCircle => "联盟集友圈升级",
-            EvolutionType.LevelUpInBattleEC100 => "战斗中升级 (特定EC)",
-            EvolutionType.LevelUpInBattleECElse => "战斗中升级 (其他EC)",
-            EvolutionType.LevelUpCollect999 => $"收集{m.Argument}×999后升级",
-            EvolutionType.LevelUpDefeatEquals => "击败特定宝可梦后升级",
-            EvolutionType.LevelUpUseMoveSpecial => "使用特定招式后升级",
-            EvolutionType.LevelUpKnowMoveECElse => "习得招式后升级 (其他EC)",
-            EvolutionType.LevelUpKnowMoveEC100 => "习得招式后升级 (特定EC)",
-            EvolutionType.LevelUpRecoilDamageMale => "♂受到反伤后升级",
-            EvolutionType.LevelUpRecoilDamageFemale => "♀受到反伤后升级",
-
-            _ => $"特殊进化[{m.Method}]",
+            EvolutionType.LevelUp => m.Level > 1
+                ? Text("evolution.method.levelUpAbove", m.Level)
+                : Text("evolution.method.levelUp"),
+            EvolutionType.LevelUpFriendship => Text("evolution.method.friendship", m.Level),
+            EvolutionType.LevelUpFriendshipMorning => Text("evolution.method.friendshipMorning", m.Level),
+            EvolutionType.LevelUpFriendshipNight => Text("evolution.method.friendshipNight", m.Level),
+            EvolutionType.LevelUpATK => Text("evolution.method.levelUpAtk", m.Level),
+            EvolutionType.LevelUpAeqD => Text("evolution.method.levelUpAeqD", m.Level),
+            EvolutionType.LevelUpDEF => Text("evolution.method.levelUpDef", m.Level),
+            EvolutionType.LevelUpECl5 => Text("evolution.method.levelUpEcLow", m.Level),
+            EvolutionType.LevelUpECgeq5 => Text("evolution.method.levelUpEcHigh", m.Level),
+            EvolutionType.LevelUpMale => Text("evolution.method.levelUpMale", m.Level),
+            EvolutionType.LevelUpFemale => Text("evolution.method.levelUpFemale", m.Level),
+            EvolutionType.LevelUpKnowMove => Text("evolution.method.knowMove", m.Argument, m.Level),
+            EvolutionType.LevelUpBeauty => Text("evolution.method.beauty", m.Argument),
+            EvolutionType.LevelUpVersion => Text("evolution.method.version", m.Level),
+            EvolutionType.LevelUpVersionDay => Text("evolution.method.versionDay", m.Level),
+            EvolutionType.LevelUpVersionNight => Text("evolution.method.versionNight", m.Level),
+            EvolutionType.LevelUpMorning => Text("evolution.method.morning", m.Level),
+            EvolutionType.LevelUpNight => Text("evolution.method.night", m.Level),
+            EvolutionType.LevelUpDusk => Text("evolution.method.dusk", m.Level),
+            EvolutionType.LevelUpElectric => Text("evolution.method.electric", m.Level),
+            EvolutionType.LevelUpForest => Text("evolution.method.forest", m.Level),
+            EvolutionType.LevelUpCold => Text("evolution.method.cold", m.Level),
+            EvolutionType.LevelUpSummit => Text("evolution.method.summit", m.Level),
+            EvolutionType.LevelUpWormhole => Text("evolution.method.wormhole", m.Level),
+            EvolutionType.UseItem => Text("evolution.method.useItem", ItemName(m.Argument)),
+            EvolutionType.UseItemMale => Text("evolution.method.useItemMale", ItemName(m.Argument)),
+            EvolutionType.UseItemFemale => Text("evolution.method.useItemFemale", ItemName(m.Argument)),
+            EvolutionType.UseItemWormhole => Text("evolution.method.useItemWormhole", ItemName(m.Argument)),
+            EvolutionType.UseItemFullMoon => Text("evolution.method.useItemFullMoon", ItemName(m.Argument)),
+            EvolutionType.Trade => Text("evolution.method.trade"),
+            EvolutionType.TradeHeldItem => Text("evolution.method.tradeHeldItem", ItemName(m.Argument)),
+            EvolutionType.TradeShelmetKarrablast => Text("evolution.method.tradeShelmetKarrablast"),
+            EvolutionType.LevelUpWithTeammate => Text("evolution.method.withTeammate", m.Level),
+            EvolutionType.LevelUpHeldItemDay => Text("evolution.method.heldItemDay", ItemName(m.Argument)),
+            EvolutionType.LevelUpHeldItemNight => Text("evolution.method.heldItemNight", ItemName(m.Argument)),
+            EvolutionType.LevelUpNatureAmped => Text("evolution.method.natureAmped", m.Level),
+            EvolutionType.LevelUpNatureLowKey => Text("evolution.method.natureLowKey", m.Level),
+            EvolutionType.LevelUpFormFemale1 => Text("evolution.method.formFemale1", m.Level),
+            EvolutionType.LevelUpAffection50MoveType => Text("evolution.method.affectionMoveType", m.Level),
+            EvolutionType.LevelUpMoveType => Text("evolution.method.moveType", m.Level),
+            EvolutionType.LevelUpWeather => Text("evolution.method.weather", m.Level),
+            EvolutionType.LevelUpInverted => Text("evolution.method.inverted", m.Level),
+            EvolutionType.TowerOfDarkness => Text("evolution.method.towerOfDarkness"),
+            EvolutionType.TowerOfWaters => Text("evolution.method.towerOfWaters"),
+            EvolutionType.CriticalHitsInBattle => Text("evolution.method.criticalHits"),
+            EvolutionType.HitPointsLostInBattle => Text("evolution.method.hitPointsLost"),
+            EvolutionType.Spin => Text("evolution.method.spin"),
+            EvolutionType.Hisui => Text("evolution.method.hisui"),
+            EvolutionType.UseMoveAgileStyle => Text("evolution.method.useMoveAgile"),
+            EvolutionType.UseMoveStrongStyle => Text("evolution.method.useMoveStrong"),
+            EvolutionType.UseMoveBarbBarrage => Text("evolution.method.useMoveBarbBarrage"),
+            EvolutionType.LevelUpWalkStepsWith => Text("evolution.method.walkSteps", m.Argument),
+            EvolutionType.LevelUpUnionCircle => Text("evolution.method.unionCircle"),
+            EvolutionType.LevelUpInBattleEC100 => Text("evolution.method.inBattleEc100"),
+            EvolutionType.LevelUpInBattleECElse => Text("evolution.method.inBattleEcElse"),
+            EvolutionType.LevelUpCollect999 => Text("evolution.method.collect999", m.Argument),
+            EvolutionType.LevelUpDefeatEquals => Text("evolution.method.defeatEquals"),
+            EvolutionType.LevelUpUseMoveSpecial => Text("evolution.method.useMoveSpecial"),
+            EvolutionType.LevelUpKnowMoveECElse => Text("evolution.method.knowMoveEcElse"),
+            EvolutionType.LevelUpKnowMoveEC100 => Text("evolution.method.knowMoveEc100"),
+            EvolutionType.LevelUpRecoilDamageMale => Text("evolution.method.recoilDamageMale"),
+            EvolutionType.LevelUpRecoilDamageFemale => Text("evolution.method.recoilDamageFemale"),
+            _ => Text("evolution.method.special", m.Method),
         };
     }
 

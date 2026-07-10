@@ -75,7 +75,7 @@ export async function createMGBA(canvas: HTMLCanvasElement): Promise<MGBAEmulato
       return new Promise<void>((resolve, reject) => {
         try {
           if (!module.uploadCheats) {
-            reject(new Error('mGBA cheats API 不可用'));
+            reject(new Error('mGBA cheats API unavailable'));
             return;
           }
           module.uploadCheats(file, () => resolve());

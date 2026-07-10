@@ -6,10 +6,10 @@ import { useResourceStore } from '../stores/resourceStore';
 import { SUPPORTED_LANGS } from '../i18n/i18n';
 
 const LANGUAGE_LABELS: Record<string, string> = {
-  'zh-Hans': '简体中文',
-  'zh-Hant': '繁體中文',
+  'zh-Hans': '简体中文', // i18n-ignore: language self-name
+  'zh-Hant': '繁體中文', // i18n-ignore: language self-name
   en: 'English',
-  ja: '日本語',
+  ja: '日本語', // i18n-ignore: language self-name
   fr: 'Français',
   it: 'Italiano',
   de: 'Deutsch',

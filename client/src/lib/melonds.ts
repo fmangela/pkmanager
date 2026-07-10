@@ -115,7 +115,7 @@ export const NDS_KEY_MAP: Record<string, DsInputButton> = {
 export const NDS_BTN_LABEL: Record<string, string> = {
   A: 'A', B: 'B', X: 'X', Y: 'Y', L: 'L', R: 'R',
   START: 'Start', SELECT: 'Select',
-  DPAD_UP: '↑上', DPAD_DOWN: '↓下', DPAD_LEFT: '←左', DPAD_RIGHT: '→右',
+  DPAD_UP: '↑', DPAD_DOWN: '↓', DPAD_LEFT: '←', DPAD_RIGHT: '→',
 };
 
 export function getNdsRomDisplayName(gameId: string): string {

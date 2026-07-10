@@ -2,6 +2,7 @@ using System.Linq;
 using System.Text;
 using PKHeX.Core;
 using PkManager.Server.Helpers;
+using PkManager.Server.Localization;
 using PkManager.Server.Models.Response;
 
 namespace PkManager.Server.Services;
@@ -16,12 +17,17 @@ public class ParseService
     private static readonly byte[] DeSmuMEMarker = Encoding.ASCII.GetBytes("|-DESMUME SAVE-|");
     private readonly IGeoDataProvider _geoDataProvider;
     private readonly IPkhexStringProvider _pkhexStrings;
+    private readonly IBackendMessageLocalizer _messages;
 
-    public ParseService(IPkhexStringProvider pkhexStrings, IGeoDataProvider geoDataProvider)
+    public ParseService(IPkhexStringProvider pkhexStrings, IGeoDataProvider geoDataProvider,
+        IBackendMessageLocalizer messages)
     {
         _pkhexStrings = pkhexStrings;
         _geoDataProvider = geoDataProvider;
+        _messages = messages;
     }
+
+    private string Text(string key, params object?[] args) => _messages.Get(key, args);
 
     private static bool IsDeSmuMESave(byte[] saveData)
     {
@@ -69,14 +75,14 @@ public class ParseService
         // 文件大小检查，给出友好提示
         var knownSizes = new Dictionary<int, string>
         {
-            { 131072, "GBA (128KB) — 红/蓝/绿宝石、火红/叶绿" },
-            { 524288, "NDS (512KB) — 珍珠/钻石/白金/心金/魂银/黑/白" },
-            { 1048576, "3DS (1MB) — X/Y/OR/AS/太阳/月亮" },
+            { 131072, Text("parse.sizeKnown.gba") },
+            { 524288, Text("parse.sizeKnown.nds") },
+            { 1048576, Text("parse.sizeKnown.3ds") },
         };
 
         var sizeHint = knownSizes.ContainsKey(saveData.Length)
-            ? $"（识别为 {knownSizes[saveData.Length]} 存档）"
-            : $"（文件大小 {saveData.Length} 字节，常见大小: {string.Join(", ", knownSizes.Select(k => $"{k.Key}"))}）";
+            ? Text("parse.sizeHint.known", knownSizes[saveData.Length])
+            : Text("parse.sizeHint.unknown", saveData.Length, string.Join(", ", knownSizes.Select(k => $"{k.Key}")));
 
         PKHeX.Core.SaveFile sav;
         try
@@ -250,7 +256,7 @@ public class ParseService
         for (int i = 0; i < 4; i++)
         {
             var moveId = pkm.GetMove(i);
-            var moveName = GetSafeString(moveStrings, moveId, $"招式{moveId}");
+            var moveName = GetSafeString(moveStrings, moveId, Text("parse.moveFallback", moveId));
             byte moveType = 0;
             string? moveTypeName = null;
             byte? basePower = null;
@@ -473,11 +479,17 @@ public class ParseService
     }
 
     // ── 语言名称映射 ──────────────────────────────
-    private static string GetLanguageName(int langId) => langId switch
+    private string GetLanguageName(int langId) => langId switch
     {
-        1 => "日本語", 2 => "English", 3 => "Français", 4 => "Italiano",
-        5 => "Deutsch", 7 => "Español", 8 => "한국어",
-        9 => "简体中文", 10 => "繁體中文",
+        1 => Text("common.language.ja"),
+        2 => Text("common.language.en"),
+        3 => Text("common.language.fr"),
+        4 => Text("common.language.it"),
+        5 => Text("common.language.de"),
+        7 => Text("common.language.es"),
+        8 => Text("common.language.ko"),
+        9 => Text("common.language.zhHans"),
+        10 => Text("common.language.zhHant"),
         _ => $"Language {langId}"
     };
 

@@ -373,7 +373,14 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
             optionFilterProp="label"
             options={moveSaves.map(s => ({
               value: s.saveFileId,
-              label: `${s.filename} (${s.trainerName || '?'} · ${s.gameVersionName || `Gen${s.generation}`} · ${s.pokemonCount}只)`,
+              label: t('bank.moveSaveOption', {
+                ns: 'pages',
+                filename: s.filename,
+                trainer: s.trainerName || '?',
+                game: s.gameVersionName || `Gen${s.generation}`,
+                count: s.pokemonCount,
+                defaultValue: '{{filename}} ({{trainer}} · {{game}} · {{count}} 只)',
+              }),
             }))}
           />
         </div>

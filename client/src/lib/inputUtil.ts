@@ -11,10 +11,10 @@ export const GAMEPAD_BUTTON_LABELS: Record<number, string> = {
   9: 'Start',
   10: 'L3',
   11: 'R3',
-  12: '↑上',
-  13: '↓下',
-  14: '←左',
-  15: '→右',
+  12: '↑',
+  13: '↓',
+  14: '←',
+  15: '→',
 };
 
 export const GAMEPAD_DEADZONE_DEFAULT = 0.5;

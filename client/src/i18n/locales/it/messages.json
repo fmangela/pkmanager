@@ -72,5 +72,14 @@
   "api.requestFailed": "non riuscita",
   "api.tokenExpiredRedirect": "Token scaduto. Reindirizzamento alla pagina di accesso.",
   "moveToBankBatchSuccess": "Sent {{count}} Pokemon to bank.",
-  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed."
+  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed.",
+  "diagnostic.apiReachable": "API reachable",
+  "diagnostic.apiStatus": "API returned status {{status}}",
+  "diagnostic.apiUnavailable": "API unreachable: {{error}}",
+  "diagnostic.authTokenValid": "Auth token valid",
+  "diagnostic.authTokenInvalid": "Auth token validation failed: {{error}}",
+  "loading.gbaEmulator": "Loading emulator...",
+  "loading.gbaEmulatorNew": "Loading emulator (new game)...",
+  "loading.ndsEmulator": "Loading NDS emulator...",
+  "loading.ndsEmulatorNew": "Loading NDS emulator (new game)..."
 }

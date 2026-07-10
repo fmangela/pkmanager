@@ -41,7 +41,10 @@ const MovesTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
   }, [generation, pokemon.form, pokemon.species, t]);
 
   const baseMoves = speciesMoves.length > 0 ? speciesMoves : (moves || []);
-  const moveOptions = [{ value: 0, label: '— 无 —' }, ...baseMoves.map(m => ({ value: m.id, label: m.name }))];
+  const moveOptions = [
+    { value: 0, label: t('moves.none', { ns: 'editor', defaultValue: '— 无 —' }) },
+    ...baseMoves.map(m => ({ value: m.id, label: m.name })),
+  ];
 
   const movesArr = pokemon.moves || [];
   const ppArr = pokemon.movePPs || [0,0,0,0];

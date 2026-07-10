@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Npgsql;
 using PKHeX.Core;
 using PkManager.Server.Helpers;
+using PkManager.Server.Localization;
 using PkManager.Server.Models.Entity;
 using PkManager.Server.Models.Request;
 using PkManager.Server.Models.Response;
@@ -23,16 +24,21 @@ public class SaveFileService
     private readonly ParseService _parseService;
     private readonly LegalityCacheService _legalityCache;
     private readonly IPkhexStringProvider _pkhexStrings;
+    private readonly IBackendMessageLocalizer _messages;
 
     public SaveFileService(NpgsqlConnection db, ParseService parseService,
-        IWebHostEnvironment env, LegalityCacheService legalityCache, IPkhexStringProvider pkhexStrings)
+        IWebHostEnvironment env, LegalityCacheService legalityCache, IPkhexStringProvider pkhexStrings,
+        IBackendMessageLocalizer messages)
     {
         _db = db;
         _parseService = parseService;
         _legalityCache = legalityCache;
         _pkhexStrings = pkhexStrings;
+        _messages = messages;
         _baseSaveDir = Path.Combine(env.ContentRootPath, "data", "saves");
     }
+
+    private string Text(string key, params object?[] args) => _messages.Get(key, args);
 
     // ═══ 文件系统辅助 ════════════════════════════════════
 
@@ -227,25 +233,26 @@ public class SaveFileService
     {
         var gameInfo = gameId switch
         {
-            "pkm_sapphire" => (generation: 3, version: 1, name: "宝可梦 蓝宝石"),
-            "pkm_ruby" => (generation: 3, version: 2, name: "宝可梦 红宝石"),
-            "pkm_emerald" => (generation: 3, version: 3, name: "宝可梦 绿宝石"),
-            "pkm_firered" => (generation: 3, version: 4, name: "宝可梦 火红"),
-            "pkm_leafgreen" => (generation: 3, version: 5, name: "宝可梦 叶绿"),
-            "pkm_diamond" => (generation: 4, version: 10, name: "宝可梦 钻石"),
-            "pkm_pearl" => (generation: 4, version: 11, name: "宝可梦 珍珠"),
-            "pkm_platinum" => (generation: 4, version: 12, name: "宝可梦 白金"),
-            "pkm_heartgold" => (generation: 4, version: 7, name: "宝可梦 心金"),
-            "pkm_soulsilver" => (generation: 4, version: 8, name: "宝可梦 魂银"),
-            "pkm_white" => (generation: 5, version: 20, name: "宝可梦 白"),
-            "pkm_black" => (generation: 5, version: 21, name: "宝可梦 黑"),
-            "pkm_white2" => (generation: 5, version: 22, name: "宝可梦 白2"),
-            "pkm_black2" => (generation: 5, version: 23, name: "宝可梦 黑2"),
+            "pkm_sapphire" => (generation: 3, version: 1, nameKey: "save.newGameName.pkm_sapphire"),
+            "pkm_ruby" => (generation: 3, version: 2, nameKey: "save.newGameName.pkm_ruby"),
+            "pkm_emerald" => (generation: 3, version: 3, nameKey: "save.newGameName.pkm_emerald"),
+            "pkm_firered" => (generation: 3, version: 4, nameKey: "save.newGameName.pkm_firered"),
+            "pkm_leafgreen" => (generation: 3, version: 5, nameKey: "save.newGameName.pkm_leafgreen"),
+            "pkm_diamond" => (generation: 4, version: 10, nameKey: "save.newGameName.pkm_diamond"),
+            "pkm_pearl" => (generation: 4, version: 11, nameKey: "save.newGameName.pkm_pearl"),
+            "pkm_platinum" => (generation: 4, version: 12, nameKey: "save.newGameName.pkm_platinum"),
+            "pkm_heartgold" => (generation: 4, version: 7, nameKey: "save.newGameName.pkm_heartgold"),
+            "pkm_soulsilver" => (generation: 4, version: 8, nameKey: "save.newGameName.pkm_soulsilver"),
+            "pkm_white" => (generation: 5, version: 20, nameKey: "save.newGameName.pkm_white"),
+            "pkm_black" => (generation: 5, version: 21, nameKey: "save.newGameName.pkm_black"),
+            "pkm_white2" => (generation: 5, version: 22, nameKey: "save.newGameName.pkm_white2"),
+            "pkm_black2" => (generation: 5, version: 23, nameKey: "save.newGameName.pkm_black2"),
             _ => throw BusinessException.FromKey("save.unknownGame", 400, gameId)
         };
 
         var saveFileId = Guid.NewGuid();
-        var filename = $"{gameInfo.name} - {DateTime.Now:yyyy-MM-dd HH:mm}";
+        var gameName = Text(gameInfo.nameKey);
+        var filename = $"{gameName} - {DateTime.Now:yyyy-MM-dd HH:mm}";
 
         // 统一流程：创建空占位记录，由模拟器首次游戏内保存时通过 sync-save 填充存档数据
         // 不再使用 PKHeX 预创建空白存档（NDS Gen4/5 的 SAV4/SAV5 无公开构造函数会导致崩溃）
@@ -255,7 +262,7 @@ public class SaveFileService
             FileSize = 0L,
             Generation = gameInfo.generation,
             GameVersion = gameInfo.version,
-            GameVersionName = gameInfo.name,
+            GameVersionName = gameName,
             Boxes = new(),
             Party = new()
         };
@@ -548,7 +555,7 @@ public class SaveFileService
 
         await _db.ExecuteAsync(
             "INSERT INTO save_backups (id, save_file_id, label, backup_path, raw_save_data) VALUES (@Id, @SfId, @Label, @Path, @Data)",
-            new { Id = backupId, SfId = saveFileId, Label = label ?? $"备份 {DateTime.Now:yyyy-MM-dd HH:mm}", Path = backupPath, Data = Array.Empty<byte>() });
+            new { Id = backupId, SfId = saveFileId, Label = label ?? Text("save.backupLabel.default", DateTime.Now), Path = backupPath, Data = Array.Empty<byte>() });
 
         // 保留最近 5 份
         var oldBackups = await _db.QueryAsync<SaveBackupEntity>(
@@ -575,7 +582,7 @@ public class SaveFileService
             throw BusinessException.FromKey("save.backupUnavailable", 400);
 
         // 恢复前先备份当前
-        await CreateBackup(saveFileId, userId, "恢复前自动备份");
+        await CreateBackup(saveFileId, userId, Text("save.backupLabel.beforeRestore"));
         await WriteSaveBytes(sf, userId, data);
         _legalityCache.InvalidateSave(saveFileId);
     }
@@ -832,12 +839,12 @@ public class SaveFileService
     // ═══ 图鉴编辑（Pokédex Editor）═════════════════════
 
     /// <summary>后端集中判定图鉴可见范围与支持状态 — 唯一数据源，前端不自行映射</summary>
-    private static (int visibleMax, bool supported, string? reason) GetDexVisibility(
+    private (int visibleMax, bool supported, string? reason) GetDexVisibility(
         int generation, int gameVersion)
     {
         // LA (PKHeX version = 47) — 研究任务体系，V1 不支持
         if (gameVersion == 47)
-            return (0, false, "Pokémon Legends: Arceus 的研究任务体系暂不支持，请使用 PKHeX 桌面版编辑图鉴");
+            return (0, false, Text("save.pokedex.unsupportedLegendsArceus"));
 
         // V1 其余存档均支持；visibleMax=0 表示"使用 MaxSpeciesID"
         return (0, true, null);
@@ -1079,7 +1086,7 @@ public class SaveFileService
     /// 读写均由此表驱动，不手写 if/switch。
     /// </summary>
     private sealed record OPowerMeta(
-        string Key, string Name, string Category,
+        string Key, string Category,
         OPower6FieldType? FieldType, OPower6BattleType? BattleType,
         OPower6Index IdxLv1, OPower6Index IdxLv2, OPower6Index IdxLv3,
         OPower6Index? IdxS, OPower6Index? IdxMax);
@@ -1087,24 +1094,24 @@ public class SaveFileService
     private static readonly OPowerMeta[] OPowerMetaTable =
     [
         // ── Field (10) ──
-        new("hatching",    "孵化",   "field", OPower6FieldType.Hatching,    null, OPower6Index.Hatching1,    OPower6Index.Hatching2,    OPower6Index.Hatching3,    OPower6Index.HatchingS, OPower6Index.HatchingMAX),
-        new("bargain",     "打折",   "field", OPower6FieldType.Bargain,     null, OPower6Index.Bargain1,     OPower6Index.Bargain2,     OPower6Index.Bargain3,     OPower6Index.BargainS,  OPower6Index.BargainMAX),
-        new("prizeMoney",  "奖金",   "field", OPower6FieldType.PrizeMoney,  null, OPower6Index.PrizeMoney1,  OPower6Index.PrizeMoney2,  OPower6Index.PrizeMoney3,  OPower6Index.PrizeMoneyS, OPower6Index.PrizeMoneyMAX),
-        new("experience",  "经验",   "field", OPower6FieldType.Experience,  null, OPower6Index.Experience1,  OPower6Index.Experience2,  OPower6Index.Experience3,  OPower6Index.ExperienceS, OPower6Index.ExperienceMAX),
-        new("capture",     "捕获",   "field", OPower6FieldType.Capture,     null, OPower6Index.Capture1,     OPower6Index.Capture2,     OPower6Index.Capture3,     OPower6Index.CaptureS,   OPower6Index.CaptureMAX),
-        new("encounter",   "遭遇",   "field", OPower6FieldType.Encounter,   null, OPower6Index.Encounter1,   OPower6Index.Encounter2,   OPower6Index.Encounter3,   null, null),
-        new("stealth",     "潜行",   "field", OPower6FieldType.Stealth,     null, OPower6Index.Stealth1,     OPower6Index.Stealth2,     OPower6Index.Stealth3,     null, null),
-        new("hpRestoring", "HP回复", "field", OPower6FieldType.HPRestoring, null, OPower6Index.HPRestoring1, OPower6Index.HPRestoring2, OPower6Index.HPRestoring3, null, null),
-        new("ppRestoring", "PP回复", "field", OPower6FieldType.PPRestoring, null, OPower6Index.PPRestoring1, OPower6Index.PPRestoring2, OPower6Index.PPRestoring3, null, null),
-        new("befriending", "友好",   "field", OPower6FieldType.Befriending, null, OPower6Index.Befriending1, OPower6Index.Befriending2, OPower6Index.Befriending3, OPower6Index.BefriendingS, OPower6Index.BefriendingMAX),
+        new("hatching",    "field", OPower6FieldType.Hatching,    null, OPower6Index.Hatching1,    OPower6Index.Hatching2,    OPower6Index.Hatching3,    OPower6Index.HatchingS, OPower6Index.HatchingMAX),
+        new("bargain",     "field", OPower6FieldType.Bargain,     null, OPower6Index.Bargain1,     OPower6Index.Bargain2,     OPower6Index.Bargain3,     OPower6Index.BargainS,  OPower6Index.BargainMAX),
+        new("prizeMoney",  "field", OPower6FieldType.PrizeMoney,  null, OPower6Index.PrizeMoney1,  OPower6Index.PrizeMoney2,  OPower6Index.PrizeMoney3,  OPower6Index.PrizeMoneyS, OPower6Index.PrizeMoneyMAX),
+        new("experience",  "field", OPower6FieldType.Experience,  null, OPower6Index.Experience1,  OPower6Index.Experience2,  OPower6Index.Experience3,  OPower6Index.ExperienceS, OPower6Index.ExperienceMAX),
+        new("capture",     "field", OPower6FieldType.Capture,     null, OPower6Index.Capture1,     OPower6Index.Capture2,     OPower6Index.Capture3,     OPower6Index.CaptureS,   OPower6Index.CaptureMAX),
+        new("encounter",   "field", OPower6FieldType.Encounter,   null, OPower6Index.Encounter1,   OPower6Index.Encounter2,   OPower6Index.Encounter3,   null, null),
+        new("stealth",     "field", OPower6FieldType.Stealth,     null, OPower6Index.Stealth1,     OPower6Index.Stealth2,     OPower6Index.Stealth3,     null, null),
+        new("hpRestoring", "field", OPower6FieldType.HPRestoring, null, OPower6Index.HPRestoring1, OPower6Index.HPRestoring2, OPower6Index.HPRestoring3, null, null),
+        new("ppRestoring", "field", OPower6FieldType.PPRestoring, null, OPower6Index.PPRestoring1, OPower6Index.PPRestoring2, OPower6Index.PPRestoring3, null, null),
+        new("befriending", "field", OPower6FieldType.Befriending, null, OPower6Index.Befriending1, OPower6Index.Befriending2, OPower6Index.Befriending3, OPower6Index.BefriendingS, OPower6Index.BefriendingMAX),
         // ── Battle (7) ──
-        new("attack",      "攻击",   "battle", null, OPower6BattleType.Attack,     OPower6Index.Attack1,       OPower6Index.Attack2,       OPower6Index.Attack3,       null, null),
-        new("defense",     "防御",   "battle", null, OPower6BattleType.Defense,    OPower6Index.Defense1,      OPower6Index.Defense2,      OPower6Index.Defense3,      null, null),
-        new("spAttack",    "特攻",   "battle", null, OPower6BattleType.Sp_Attack,  OPower6Index.SpecialAttack1,  OPower6Index.SpecialAttack2,  OPower6Index.SpecialAttack3,  null, null),
-        new("spDefense",   "特防",   "battle", null, OPower6BattleType.Sp_Defense, OPower6Index.SpecialDefense1, OPower6Index.SpecialDefense2, OPower6Index.SpecialDefense3, null, null),
-        new("speed",       "速度",   "battle", null, OPower6BattleType.Speed,      OPower6Index.Speed1,        OPower6Index.Speed2,        OPower6Index.Speed3,        null, null),
-        new("critical",    "会心",   "battle", null, OPower6BattleType.Critical,   OPower6Index.Critical1,     OPower6Index.Critical2,     OPower6Index.Critical3,     null, null),
-        new("accuracy",    "命中",   "battle", null, OPower6BattleType.Accuracy,   OPower6Index.Accuracy1,     OPower6Index.Accuracy2,     OPower6Index.Accuracy3,     null, null),
+        new("attack",      "battle", null, OPower6BattleType.Attack,     OPower6Index.Attack1,       OPower6Index.Attack2,       OPower6Index.Attack3,       null, null),
+        new("defense",     "battle", null, OPower6BattleType.Defense,    OPower6Index.Defense1,      OPower6Index.Defense2,      OPower6Index.Defense3,      null, null),
+        new("spAttack",    "battle", null, OPower6BattleType.Sp_Attack,  OPower6Index.SpecialAttack1,  OPower6Index.SpecialAttack2,  OPower6Index.SpecialAttack3,  null, null),
+        new("spDefense",   "battle", null, OPower6BattleType.Sp_Defense, OPower6Index.SpecialDefense1, OPower6Index.SpecialDefense2, OPower6Index.SpecialDefense3, null, null),
+        new("speed",       "battle", null, OPower6BattleType.Speed,      OPower6Index.Speed1,        OPower6Index.Speed2,        OPower6Index.Speed3,        null, null),
+        new("critical",    "battle", null, OPower6BattleType.Critical,   OPower6Index.Critical1,     OPower6Index.Critical2,     OPower6Index.Critical3,     null, null),
+        new("accuracy",    "battle", null, OPower6BattleType.Accuracy,   OPower6Index.Accuracy1,     OPower6Index.Accuracy2,     OPower6Index.Accuracy3,     null, null),
     ];
 
     /// <summary>
@@ -1128,13 +1135,13 @@ public class SaveFileService
             [
                 new Rtc3EntryDto
                 {
-                    Key = "initial", Label = "初始时钟",
+                    Key = "initial", Label = Text("save.genTools.rtc.initial"),
                     Day = clockInitial!.Day, Hour = clockInitial.Hour,
                     Minute = clockInitial.Minute, Second = clockInitial.Second,
                 },
                 new Rtc3EntryDto
                 {
-                    Key = "elapsed", Label = "已流逝时钟",
+                    Key = "elapsed", Label = Text("save.genTools.rtc.elapsed"),
                     Day = clockElapsed!.Day, Hour = clockElapsed.Hour,
                     Minute = clockElapsed.Minute, Second = clockElapsed.Second,
                 },
@@ -1153,7 +1160,7 @@ public class SaveFileService
                 var entry = new OPowerTypeEntryDto
                 {
                     Key = m.Key,
-                    Name = m.Name,
+                    Name = Text($"save.genTools.opower.{m.Key}"),
                     Category = m.Category,
                     Level1 = m.FieldType != null
                         ? oPower.GetLevel1(m.FieldType.Value)
@@ -1299,23 +1306,13 @@ public class SaveFileService
         cap.HasTotemStamps = totem != null;
         if (totem != null)
         {
-            // 15 Stamp7 中文名称
-            var stampNames = new Dictionary<int, string>
-            {
-                [0] = "官方宝可梦训练家", [1] = "美乐美乐考验完成", [2] = "阿卡拉考验完成",
-                [3] = "乌拉乌拉考验完成", [4] = "波尼考验完成", [5] = "岛屿巡礼完成",
-                [6] = "美乐美乐图鉴完成", [7] = "阿卡拉图鉴完成", [8] = "乌拉乌拉图鉴完成",
-                [9] = "波尼图鉴完成", [10] = "阿罗拉图鉴完成",
-                [11] = "单打连胜 50", [12] = "双打连胜 50", [13] = "多人连胜 50",
-                [14] = "宝可搜寻镜专家",
-            };
             var earnedStamps = new List<TotemStampItem>(15);
             uint bits = totem.Value.stamps;
             for (int i = 0; i < 15; i++)
             {
                 earnedStamps.Add(new TotemStampItem
                 {
-                    Name = stampNames.TryGetValue(i, out var n) ? n : $"Stamp {i}",
+                    Name = Text($"save.genTools.totemStamp.{i}"),
                     Earned = (bits & (1u << i)) != 0,
                 });
             }
@@ -1460,37 +1457,31 @@ public class SaveFileService
 
     // ── Trainer 辅助 ──────────────────────────────────
 
-    /// <summary>语言 ID → 中文名称</summary>
-    private static string? GetLanguageName(int langId) => langId switch
+    /// <summary>语言 ID → 当前请求语言显示名</summary>
+    private string? GetLanguageName(int langId) => langId switch
     {
-        1 => "日本語",
-        2 => "English",
-        3 => "Français",
-        4 => "Italiano",
-        5 => "Deutsch",
-        7 => "Español",
-        8 => "한국어",
-        9 => "简体中文",
-        10 => "繁體中文",
+        1 => Text("common.language.ja"),
+        2 => Text("common.language.en"),
+        3 => Text("common.language.fr"),
+        4 => Text("common.language.it"),
+        5 => Text("common.language.de"),
+        7 => Text("common.language.es"),
+        8 => Text("common.language.ko"),
+        9 => Text("common.language.zhHans"),
+        10 => Text("common.language.zhHant"),
         _ => langId > 0 ? $"Language {langId}" : null,
     };
 
     /// <summary>根据游戏版本返回 (徽章总数, 按 bit 顺序的徽章名称列表)</summary>
-    private static (int count, string[] names) GetBadgeInfo(PKHeX.Core.SaveFile sav)
+    private (int count, string[] names) GetBadgeInfo(PKHeX.Core.SaveFile sav)
     {
         var version = sav.Version;
-        // Kanto (Gen1 RBY, Gen2 GSC second set, Gen3 FRLG, Gen4 HGSS second set)
-        string[] kanto = ["灰色徽章", "蓝色徽章", "橙色徽章", "彩虹徽章", "粉色徽章", "金色徽章", "深红徽章", "绿色徽章"];
-        // Johto (Gen2 GSC, Gen4 HGSS first set)
-        string[] johto = ["飞翼徽章", "昆虫徽章", "普通徽章", "鬼魂徽章", "打击徽章", "矿物徽章", "冰河徽章", "升龙徽章"];
-        // Hoenn (Gen3 RS, Gen3 E, Gen6 ORAS)
-        string[] hoenn = ["岩石徽章", "拳击徽章", "电力徽章", "火焰徽章", "天平徽章", "羽毛徽章", "心灵徽章", "雨滴徽章"];
-        // Sinnoh (Gen4 DP, Gen4 Pt, Gen8 BDSP)
-        string[] sinnoh = ["石炭徽章", "森林徽章", "圆石徽章", "沼泽徽章", "遗迹徽章", "矿山徽章", "冰柱徽章", "灯塔徽章"];
-        // Kalos (Gen6 XY)
-        string[] kalos = ["虫虫徽章", "岩壁徽章", "格斗徽章", "植物徽章", "电压徽章", "妖精徽章", "超能徽章", "冰山徽章"];
-        // Galar (Gen8 SwSh)
-        string[] galar = ["草之徽章", "水之徽章", "火之徽章", "格斗徽章", "妖精徽章", "岩石徽章", "恶之徽章", "龙之徽章"];
+        var kanto = BadgeNames("kanto");
+        var johto = BadgeNames("johto");
+        var hoenn = BadgeNames("hoenn");
+        var sinnoh = BadgeNames("sinnoh");
+        var kalos = BadgeNames("kalos");
+        var galar = BadgeNames("galar");
 
         return version switch
         {
@@ -1532,6 +1523,11 @@ public class SaveFileService
         };
     }
 
+    private string[] BadgeNames(string region) =>
+        Enumerable.Range(0, 8)
+            .Select(i => Text($"save.badge.{region}.{i}"))
+            .ToArray();
+
     // ═══ 内部辅助 ═════════════════════════════════════════
 
     private async Task<SaveFileEntity> LoadSaveFileEntity(Guid saveFileId, Guid userId) =>
@@ -1555,7 +1551,7 @@ public class SaveFileService
     internal async Task WriteBackSave(SaveFileEntity sf, Guid userId, PKHeX.Core.SaveFile sav)
     {
         // 写入前自动备份
-        await CreateBackup(sf.Id, userId, "编辑前自动备份");
+        await CreateBackup(sf.Id, userId, Text("save.backupLabel.beforeEdit"));
         var originalData = ReadSaveBytes(sf, userId);
         var data = ParseService.FinalizeSaveBytes(sav, originalData);
         ValidateWrittenSave(data, sf.Filename);
@@ -1771,7 +1767,7 @@ public class SaveFileService
         return true;
     }
 
-    private static PokemonSearchItemDto MapSearchItem(PKM pk, GameStrings strings,
+    private PokemonSearchItemDto MapSearchItem(PKM pk, GameStrings strings,
         bool isParty, int slotIndex, int? boxIndex = null)
     {
         return new PokemonSearchItemDto
@@ -1793,8 +1789,8 @@ public class SaveFileService
             SlotIndex = slotIndex,
             IsParty = isParty,
             LocationLabel = isParty
-                ? $"同行 · 槽 {slotIndex + 1}"
-                : $"Box {boxIndex!.Value + 1} · 槽 {slotIndex + 1}",
+                ? Text("save.search.location.party", slotIndex + 1)
+                : Text("save.search.location.box", boxIndex!.Value + 1, slotIndex + 1),
         };
     }
 

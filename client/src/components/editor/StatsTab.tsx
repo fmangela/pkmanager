@@ -13,9 +13,15 @@ interface Props {
 const StatsTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
   const { t } = useTranslation('editor');
   const STAT_LABELS = ['HP', t('stats.atkShort', '攻击'), t('stats.defShort', '防御'), t('stats.spaShort', '特攻'), t('stats.spdShort', '特防'), t('stats.speShort', '速度')];
-  const HIDDEN_POWER_TYPES = [
-    '格斗', '飞行', '毒', '地面', '岩石', '虫', '幽灵', '钢',
-    '火', '水', '草', '电', '超能力', '冰', '龙', '恶',
+  const HIDDEN_POWER_TYPE_KEYS = [
+    'stats.hiddenPowerType.fighting', 'stats.hiddenPowerType.flying',
+    'stats.hiddenPowerType.poison', 'stats.hiddenPowerType.ground',
+    'stats.hiddenPowerType.rock', 'stats.hiddenPowerType.bug',
+    'stats.hiddenPowerType.ghost', 'stats.hiddenPowerType.steel',
+    'stats.hiddenPowerType.fire', 'stats.hiddenPowerType.water',
+    'stats.hiddenPowerType.grass', 'stats.hiddenPowerType.electric',
+    'stats.hiddenPowerType.psychic', 'stats.hiddenPowerType.ice',
+    'stats.hiddenPowerType.dragon', 'stats.hiddenPowerType.dark',
   ];
   const g = generation;
   const evs = pokemon.evs || [0,0,0,0,0,0];
@@ -58,7 +64,9 @@ const StatsTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 160 }}>
           <Tag color="purple" style={{ fontSize: 13, padding: '2px 10px' }}>
-            {t('stats.hiddenPower', '觉醒力量')}: {HIDDEN_POWER_TYPES[pokemon.hiddenPowerType] || `类型${pokemon.hiddenPowerType}`}
+            {t('stats.hiddenPower', '觉醒力量')}: {HIDDEN_POWER_TYPE_KEYS[pokemon.hiddenPowerType]
+              ? t(HIDDEN_POWER_TYPE_KEYS[pokemon.hiddenPowerType])
+              : t('stats.hiddenPowerType.unknown', { defaultValue: '类型{{type}}', type: pokemon.hiddenPowerType })}
           </Tag>
           <Tag color={evTotal > 510 ? 'red' : evTotal === 510 ? 'green' : 'blue'}>
             {t('stats.effortValues', '努力值')}: {evTotal} / 510

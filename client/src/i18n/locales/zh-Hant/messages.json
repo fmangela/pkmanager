@@ -72,5 +72,14 @@
   "api.requestFailed": "失敗",
   "api.tokenExpiredRedirect": "Token 已過期，即將跳轉登入頁",
   "moveToBankBatchSuccess": "Sent {{count}} Pokemon to bank.",
-  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed."
+  "moveToBankBatchPartial": "Sent {{moved}} to bank, {{failed}} failed.",
+  "diagnostic.apiReachable": "API 可达",
+  "diagnostic.apiStatus": "API 返回状态 {{status}}",
+  "diagnostic.apiUnavailable": "API 不可达: {{error}}",
+  "diagnostic.authTokenValid": "Auth Token 有效",
+  "diagnostic.authTokenInvalid": "Auth Token 验证失败: {{error}}",
+  "loading.gbaEmulator": "加载模拟器...",
+  "loading.gbaEmulatorNew": "加载模拟器 (新游戏)...",
+  "loading.ndsEmulator": "加载 NDS 模拟器...",
+  "loading.ndsEmulatorNew": "加载 NDS 模拟器 (新游戏)..."
 }

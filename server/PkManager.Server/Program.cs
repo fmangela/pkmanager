@@ -203,7 +203,7 @@ try
         ALTER TABLE users
         ADD COLUMN IF NOT EXISTS preferred_lang VARCHAR(10) NOT NULL DEFAULT 'zh-Hans';
 
-        COMMENT ON COLUMN users.preferred_lang IS '账号级界面语言偏好';
+        COMMENT ON COLUMN users.preferred_lang IS 'Account-level UI language preference';
         """);
 
     var saveFileService = scope.ServiceProvider.GetRequiredService<SaveFileService>();

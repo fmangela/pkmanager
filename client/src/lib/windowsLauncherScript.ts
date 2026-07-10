@@ -69,15 +69,15 @@ function Get-BytesSha256Hex([byte[]]$bytes) {
 
 function Get-DesmumeRomSearchTerms([int]$gameVersion) {
     switch ($gameVersion) {
-        10 { return @("diamond", "钻石") }
-        11 { return @("pearl", "珍珠") }
-        12 { return @("platinum", "白金") }
-        7  { return @("heartgold", "心金") }
-        8  { return @("soulsilver", "魂银") }
-        20 { return @("white", "白") }
-        21 { return @("black", "黑") }
-        22 { return @("white2", "白2") }
-        23 { return @("black2", "黑2") }
+        10 { return @("diamond", "钻石") } # i18n-ignore: ROM filename search alias
+        11 { return @("pearl", "珍珠") } # i18n-ignore: ROM filename search alias
+        12 { return @("platinum", "白金") } # i18n-ignore: ROM filename search alias
+        7  { return @("heartgold", "心金") } # i18n-ignore: ROM filename search alias
+        8  { return @("soulsilver", "魂银") } # i18n-ignore: ROM filename search alias
+        20 { return @("white", "白") } # i18n-ignore: ROM filename search alias
+        21 { return @("black", "黑") } # i18n-ignore: ROM filename search alias
+        22 { return @("white2", "白2") } # i18n-ignore: ROM filename search alias
+        23 { return @("black2", "黑2") } # i18n-ignore: ROM filename search alias
         default { return @() }
     }
 }
