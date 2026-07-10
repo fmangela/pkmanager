@@ -239,7 +239,7 @@ const EditPanel: React.FC<Props> = ({ open, pokemon, generation, saveFileId, box
     {
       key: 'moves',
       label: panelTabLabel(<ThunderboltOutlined />, et('editPanel.tabMoves', '招式')),
-      children: <MovesTab pokemon={pokemon} generation={generation} onChange={notifyChange} />,
+      children: <MovesTab pokemon={pokemon} generation={generation} gameVersion={pokemon.battleVersion || pokemon.originGame} onChange={notifyChange} />,
     },
     {
       key: 'otmisc',

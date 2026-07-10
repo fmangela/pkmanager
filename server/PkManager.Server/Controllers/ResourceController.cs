@@ -20,8 +20,8 @@ public class ResourceController : LocalizedControllerBase
 
     // Cache: species ID → valid ability IDs
     private static readonly ConcurrentDictionary<(ushort Species, byte Form, byte Gen), int[]> _abilityCache = new();
-    // Cache: species ID → valid move IDs per generation context
-    private static readonly ConcurrentDictionary<(ushort Species, byte Form, byte Gen), int[]> _learnsetCache = new();
+    // Cache: species ID → valid move IDs per generation/version context
+    private static readonly ConcurrentDictionary<(ushort Species, byte Form, byte Gen, GameVersion Version), int[]> _learnsetCache = new();
 
     // 37 个球种 item ID（与 PKHeX GameStrings.cs:54 Items_Ball 一致）
     private static readonly int[] BallItemIds =
@@ -338,14 +338,14 @@ public class ResourceController : LocalizedControllerBase
     /// 获取指定物种在当前世代可学习的招式列表
     /// </summary>
     [HttpGet("species/{speciesId:int}/moves")]
-    public ActionResult<ApiResponse<List<ResourceItem>>> SpeciesMoves(int speciesId, [FromQuery] int generation = 7, [FromQuery] int form = 0, [FromQuery] string? lang = null)
+    public ActionResult<ApiResponse<List<ResourceItem>>> SpeciesMoves(int speciesId, [FromQuery] int generation = 7, [FromQuery] int form = 0, [FromQuery] int? gameVersion = null, [FromQuery] string? lang = null)
     {
         if (_userContext.UserId == null)
             return UnauthorizedMessage<List<ResourceItem>>();
 
         try
         {
-            var moveIds = GetLearnableMoves((ushort)speciesId, (byte)Math.Max(0, form), generation);
+            var moveIds = GetLearnableMoves((ushort)speciesId, (byte)Math.Max(0, form), generation, gameVersion);
             var strings = _pkhexStrings.GetStrings(ResolveLang(lang));
 
             var items = new List<ResourceItem>();
@@ -420,16 +420,16 @@ public class ResourceController : LocalizedControllerBase
         }
     }
 
-    private static int[] GetLearnableMoves(ushort species, byte form, int generation)
+    private static int[] GetLearnableMoves(ushort species, byte form, int generation, int? gameVersion)
     {
         var gen = (byte)Math.Clamp(generation, 1, 9);
-        var key = (species, form, gen);
+        var version = ResolveLearnSourceVersion(generation, gameVersion);
+        var key = (species, form, gen, version);
         if (_learnsetCache.TryGetValue(key, out var cached))
             return cached;
 
         try
         {
-            var version = GetRepresentativeVersion(generation);
             var learnSource = GameData.GetLearnSource(version);
             var moveSet = new HashSet<int>();
 
@@ -457,7 +457,7 @@ public class ResourceController : LocalizedControllerBase
                 LevelUpRequired = 0,
                 Method = EvolutionType.None,
             };
-            learnSource.GetAllMoves(flags, blank, evo, MoveSourceType.ExternalSources);
+            learnSource.GetAllMoves(flags, blank, evo, MoveSourceType.All);
             for (int i = 1; i < flags.Length; i++)
             {
                 if (flags[i])
@@ -500,6 +500,66 @@ public class ResourceController : LocalizedControllerBase
         8 => GameVersion.SWSH,
         9 => GameVersion.SV,
         _ => GameVersion.USUM,
+    };
+
+    private static GameVersion ResolveLearnSourceVersion(int generation, int? gameVersion)
+    {
+        if (!gameVersion.HasValue)
+            return GetRepresentativeVersion(generation);
+
+        var version = NormalizeLearnSourceVersion((GameVersion)gameVersion.Value);
+        return GetVersionGeneration(version) == Math.Clamp(generation, 1, 9)
+            ? version
+            : GetRepresentativeVersion(generation);
+    }
+
+    private static GameVersion NormalizeLearnSourceVersion(GameVersion version) => version switch
+    {
+        GameVersion.RD or GameVersion.GN or GameVersion.BU => GameVersion.RB,
+        GameVersion.GD or GameVersion.SI => GameVersion.GS,
+        GameVersion.S or GameVersion.R => GameVersion.RS,
+        GameVersion.FR or GameVersion.LG => GameVersion.FRLG,
+        GameVersion.D or GameVersion.P => GameVersion.DP,
+        GameVersion.HG or GameVersion.SS => GameVersion.HGSS,
+        GameVersion.W or GameVersion.B => GameVersion.BW,
+        GameVersion.W2 or GameVersion.B2 => GameVersion.B2W2,
+        GameVersion.X or GameVersion.Y => GameVersion.XY,
+        GameVersion.OR or GameVersion.AS => GameVersion.ORAS,
+        GameVersion.SN or GameVersion.MN => GameVersion.SM,
+        GameVersion.US or GameVersion.UM => GameVersion.USUM,
+        GameVersion.GP or GameVersion.GE => GameVersion.GG,
+        GameVersion.SW or GameVersion.SH => GameVersion.SWSH,
+        GameVersion.BD or GameVersion.SP => GameVersion.BDSP,
+        GameVersion.SL or GameVersion.VL => GameVersion.SV,
+        _ => version,
+    };
+
+    private static int GetVersionGeneration(GameVersion version) => version switch
+    {
+        GameVersion.RD or GameVersion.GN or GameVersion.BU or GameVersion.YW
+            or GameVersion.RB or GameVersion.RBY or GameVersion.Gen1 => 1,
+        GameVersion.GD or GameVersion.SI or GameVersion.C
+            or GameVersion.GS or GameVersion.GSC or GameVersion.Gen2 => 2,
+        GameVersion.S or GameVersion.R or GameVersion.E or GameVersion.FR or GameVersion.LG
+            or GameVersion.RS or GameVersion.RSE or GameVersion.FRLG or GameVersion.RSBOX
+            or GameVersion.COLO or GameVersion.XD or GameVersion.CXD or GameVersion.BATREV
+            or GameVersion.Gen3 => 3,
+        GameVersion.D or GameVersion.P or GameVersion.Pt or GameVersion.HG or GameVersion.SS
+            or GameVersion.DP or GameVersion.DPPt or GameVersion.HGSS or GameVersion.Gen4 => 4,
+        GameVersion.W or GameVersion.B or GameVersion.W2 or GameVersion.B2
+            or GameVersion.BW or GameVersion.B2W2 or GameVersion.Gen5 => 5,
+        GameVersion.X or GameVersion.Y or GameVersion.OR or GameVersion.AS
+            or GameVersion.XY or GameVersion.ORASDEMO or GameVersion.ORAS or GameVersion.Gen6 => 6,
+        GameVersion.SN or GameVersion.MN or GameVersion.US or GameVersion.UM
+            or GameVersion.SM or GameVersion.USUM or GameVersion.GO
+            or GameVersion.GP or GameVersion.GE or GameVersion.GG
+            or GameVersion.Gen7 or GameVersion.Gen7b => 7,
+        GameVersion.SW or GameVersion.SH or GameVersion.SWSH
+            or GameVersion.PLA or GameVersion.BD or GameVersion.SP or GameVersion.BDSP
+            or GameVersion.Gen8 => 8,
+        GameVersion.SL or GameVersion.VL or GameVersion.SV
+            or GameVersion.ZA or GameVersion.CP or GameVersion.Gen9 => 9,
+        _ => 0,
     };
 
     private static EntityContext GetEntityContext(int generation) => generation switch

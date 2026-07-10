@@ -216,7 +216,7 @@ const BankEditDrawer: React.FC<Props> = ({ open, pokemon, bankId, onClose, onSav
   const tabItems = [
     { key: 'main', label: t('bankEdit.tabMain', { ns: 'editor', defaultValue: '基本信息' }), children: <MainTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
     { key: 'stats', label: t('bankEdit.tabStats', { ns: 'editor', defaultValue: '能力值' }), children: <StatsTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
-    { key: 'moves', label: t('bankEdit.tabMoves', { ns: 'editor', defaultValue: '招式' }), children: <MovesTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
+    { key: 'moves', label: t('bankEdit.tabMoves', { ns: 'editor', defaultValue: '招式' }), children: <MovesTab pokemon={pokemon} generation={generation} gameVersion={pokemon.battleVersion || pokemon.originGame} onChange={notifyChange} /> },
     { key: 'met', label: t('bankEdit.tabMet', { ns: 'editor', defaultValue: '相遇信息' }), children: <MetTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
     { key: 'otmisc', label: t('bankEdit.tabOtMisc', { ns: 'editor', defaultValue: '训练家/杂项' }), children: <OTMiscTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },
     { key: 'cosmetic', label: t('bankEdit.tabCosmetic', { ns: 'editor', defaultValue: '外观/装饰' }), children: <CosmeticTab pokemon={pokemon} generation={generation} onChange={notifyChange} /> },

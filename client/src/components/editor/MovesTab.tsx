@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Select, InputNumber, Tag, Space } from 'antd';
+import { Select, InputNumber, Tag, Space, Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { ApiError } from '../../api/axios';
 import type { PokemonDto } from '../../api/saveFile';
@@ -10,22 +10,24 @@ import { useDiagnosticStore } from '../../stores/diagnosticStore';
 interface Props {
   pokemon: PokemonDto;
   generation: number;
+  gameVersion?: number;
   onChange?: () => void;
 }
 
 const MOVE_CATEGORY_ICONS = ['🔄', '⚔️', '🔮'];
 const labelStyle: React.CSSProperties = { fontSize: 11, color: '#8c8c8c', marginBottom: 2 };
 
-const MovesTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
+const MovesTab: React.FC<Props> = ({ pokemon, generation, gameVersion, onChange }) => {
   const { t } = useTranslation(['editor', 'messages']);
   const { moves } = useResourceStore();
   const isGen6Plus = generation >= 6;
   const ch = () => onChange?.();
 
   const [speciesMoves, setSpeciesMoves] = useState<ResourceItem[]>([]);
+  const [showAllMoves, setShowAllMoves] = useState(false);
   useEffect(() => {
     if (pokemon.species > 0) {
-      resourceApi.speciesMoves(pokemon.species, generation, pokemon.form).then(res => {
+      resourceApi.speciesMoves(pokemon.species, generation, pokemon.form, undefined, gameVersion).then(res => {
         setSpeciesMoves(res.data || []);
       }).catch((err: unknown) => {
         setSpeciesMoves([]);
@@ -38,21 +40,44 @@ const MovesTab: React.FC<Props> = ({ pokemon, generation, onChange }) => {
     } else {
       setSpeciesMoves([]);
     }
-  }, [generation, pokemon.form, pokemon.species, t]);
-
-  const baseMoves = speciesMoves.length > 0 ? speciesMoves : (moves || []);
-  const moveOptions = [
-    { value: 0, label: t('moves.none', { ns: 'editor', defaultValue: '— 无 —' }) },
-    ...baseMoves.map(m => ({ value: m.id, label: m.name })),
-  ];
+  }, [gameVersion, generation, pokemon.form, pokemon.species, t]);
 
   const movesArr = pokemon.moves || [];
   const ppArr = pokemon.movePPs || [0,0,0,0];
   const ppUpArr = pokemon.movePPUps || [0,0,0,0];
+  const baseMoves = showAllMoves ? (moves || []) : speciesMoves.length > 0 ? speciesMoves : (moves || []);
+  const moveNameById = new Map((moves || []).map(m => [m.id, m.name]));
+  const moveOptionsById = new Map<number, { value: number; label: string }>();
+
+  moveOptionsById.set(0, { value: 0, label: t('moves.none', { ns: 'editor', defaultValue: '— 无 —' }) });
+  baseMoves.forEach(m => {
+    moveOptionsById.set(m.id, { value: m.id, label: m.name });
+  });
+
+  const addSelectedMoveOption = (moveId: number | undefined, moveName?: string) => {
+    if (!moveId || moveOptionsById.has(moveId)) return;
+    moveOptionsById.set(moveId, {
+      value: moveId,
+      label: moveName || moveNameById.get(moveId) || t('moves.unknownMove', { ns: 'editor', defaultValue: '招式 {{id}}', id: moveId }),
+    });
+  };
+
+  movesArr.forEach(m => addSelectedMoveOption(m.moveId, m.moveName));
+  pokemon.relearnMoves?.forEach((moveId, i) => {
+    addSelectedMoveOption(moveId, pokemon.relearnMoveNames?.[i]);
+  });
+
+  const moveOptions = Array.from(moveOptionsById.values());
 
   return (
     <div>
-      <div style={{ fontWeight: 500, marginBottom: 8 }}>{t('moves.currentMoves', { ns: 'editor', defaultValue: '当前招式' })}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+        <div style={{ fontWeight: 500 }}>{t('moves.currentMoves', { ns: 'editor', defaultValue: '当前招式' })}</div>
+        <Space size={6}>
+          <span style={{ fontSize: 12, color: '#666' }}>{t('moves.showAllMoves', { ns: 'editor', defaultValue: '显示全部招式' })}</span>
+          <Switch size="small" checked={showAllMoves} onChange={setShowAllMoves} />
+        </Space>
+      </div>
       {[0,1,2,3].map(i => {
         const m = movesArr[i] || { moveId: 0, moveName: '', moveType: 0, moveTypeName: '', moveCategory: 0, basePP: 0 };
         return (

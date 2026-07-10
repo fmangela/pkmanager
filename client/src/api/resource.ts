@@ -36,8 +36,8 @@ export const resourceApi = {
   speciesAbilities: (speciesId: number, generation?: number, form?: number, lang?: string) =>
     apiClient.get<ResourceItem[]>(`/Resource/species/${speciesId}/abilities`, { params: { generation, form, lang } }),
 
-  speciesMoves: (speciesId: number, generation?: number, form?: number, lang?: string) =>
-    apiClient.get<ResourceItem[]>(`/Resource/species/${speciesId}/moves`, { params: { generation, form, lang } }),
+  speciesMoves: (speciesId: number, generation?: number, form?: number, lang?: string, gameVersion?: number) =>
+    apiClient.get<ResourceItem[]>(`/Resource/species/${speciesId}/moves`, { params: { generation, form, lang, gameVersion } }),
 
   speciesExperience: (speciesId: number, generation?: number, form?: number, lang?: string) =>
     apiClient.get<SpeciesExperienceInfo>(`/Resource/species/${speciesId}/experience`, { params: { generation, form, lang } }),
