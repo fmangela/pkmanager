@@ -12,14 +12,24 @@ public class EditResultDto
 public class JudgementDto
 {
     public string Identifier { get; set; } = string.Empty;
-    public string Judgement { get; set; } = string.Empty;  // Valid / Fishy / Invalid
+    /// <summary>Severity value matching PKHeX.Core.Severity: Invalid=-1, Fishy=0, Valid=1. Use for UI color logic.</summary>
+    public sbyte Severity { get; set; }
+    /// <summary>Localized severity label (e.g. "非法"/"可疑"/"有效"). For display only — use <see cref="Severity"/> for logic.</summary>
+    public string Judgement { get; set; } = string.Empty;
+    /// <summary>PKHeX-localized detailed reason (primary display text from LegalityLocalizationContext.Humanize).</summary>
     public string Comment { get; set; } = string.Empty;
-    /// <summary>Human-readable issue description (Chinese)</summary>
+    /// <summary>Localized check category name (e.g. "相遇"/"球种"/"招式").</summary>
+    public string IdentifierLabel { get; set; } = string.Empty;
+    /// <summary>Legacy human-readable issue (kept for backward compat, prefer <see cref="Comment"/>).</summary>
     public string Issue { get; set; } = string.Empty;
     /// <summary>Whether a quick-fix is available for this issue</summary>
     public bool CanFix { get; set; }
     /// <summary>Quick-fix action name (e.g. "FixBall", "FixMetLocation")</summary>
     public string? FixAction { get; set; }
+    /// <summary>Localized quick-fix button label (e.g. "修正球种").</summary>
+    public string? FixActionLabel { get; set; }
+    /// <summary>Localized description of what the quick-fix does, for tooltip display.</summary>
+    public string? FixActionDesc { get; set; }
 }
 
 public enum LegalityStatus

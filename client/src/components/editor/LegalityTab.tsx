@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Tag, Button, Space, Empty, List, Image, Spin, App } from 'antd';
+import { Alert, Tag, Button, Space, Empty, List, Image, Spin, App, Tooltip } from 'antd';
 import { CheckCircleOutlined, WarningOutlined, CloseCircleOutlined, ToolOutlined, QrcodeOutlined, SafetyCertificateOutlined, ExportOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { LegalityStatus, JudgementDto } from '../../api/saveFile';
@@ -18,11 +18,32 @@ interface Props {
 
 const LEGALITY_STATUSES: readonly LegalityStatus[] = ['Legal', 'Fishy', 'Illegal'];
 
-const STATUS_CONFIG: Record<LegalityStatus, { color: string; icon: React.ReactNode; text: string }> = {
-  Legal: { color: 'green', icon: <CheckCircleOutlined />, text: 'Legal' },
-  Fishy: { color: 'orange', icon: <WarningOutlined />, text: 'Fishy' },
-  Illegal: { color: 'red', icon: <CloseCircleOutlined />, text: 'Illegal' },
+const STATUS_CONFIG: Record<LegalityStatus, { color: string; icon: React.ReactNode }> = {
+  Legal: { color: 'green', icon: <CheckCircleOutlined /> },
+  Fishy: { color: 'orange', icon: <WarningOutlined /> },
+  Illegal: { color: 'red', icon: <CloseCircleOutlined /> },
 };
+
+/** Severity → icon node (matches PKHeX.Core.Severity: Invalid=-1, Fishy=0, Valid=1). */
+function severityIcon(severity: number, fallbackJudgement: string): React.ReactNode {
+  if (severity === -1) return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
+  if (severity === 0) return <WarningOutlined style={{ color: '#faad14' }} />;
+  if (severity === 1) return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+  // Fallback for missing severity: derive from legacy judgement string
+  if (fallbackJudgement === 'Invalid') return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
+  if (fallbackJudgement === 'Fishy') return <WarningOutlined style={{ color: '#faad14' }} />;
+  return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+}
+
+/** Severity → tag color. */
+function severityColor(severity: number, fallbackJudgement: string): string {
+  if (severity === -1) return 'red';
+  if (severity === 0) return 'orange';
+  if (severity === 1) return 'green';
+  if (fallbackJudgement === 'Invalid') return 'red';
+  if (fallbackJudgement === 'Fishy') return 'orange';
+  return 'green';
+}
 
 const LegalityTab: React.FC<Props> = ({ status, report, judgements, onFix, onValidate, pkmDataBase64, editSnapshot }) => {
   const { t } = useTranslation(['editor', 'messages', 'common']);
@@ -137,12 +158,14 @@ const LegalityTab: React.FC<Props> = ({ status, report, judgements, onFix, onVal
           <div style={{ fontWeight: 500, marginBottom: 6 }}>{t('legality.quickFix', { ns: 'editor', defaultValue: '一键修复:' })}</div>
           <Space wrap>
             {fixableJudgements.map(j => (
-              <Button key={j.fixAction} size="small" icon={<ToolOutlined />}
-                type="primary" ghost
-                onClick={() => onFix(j.fixAction!)}
-              >
-                {getFixLabel(j.fixAction!)}
-              </Button>
+              <Tooltip key={j.fixAction} title={j.fixActionDesc || undefined}>
+                <Button size="small" icon={<ToolOutlined />}
+                  type="primary" ghost
+                  onClick={() => onFix(j.fixAction!)}
+                >
+                  {j.fixActionLabel || j.fixAction}
+                </Button>
+              </Tooltip>
             ))}
           </Space>
         </div>
@@ -211,27 +234,22 @@ const LegalityTab: React.FC<Props> = ({ status, report, judgements, onFix, onVal
           renderItem={j => (
             <List.Item>
               <List.Item.Meta
-                avatar={
-                  j.judgement === 'Invalid' ? <CloseCircleOutlined style={{ color: '#ff4d4f' }} /> :
-                  j.judgement === 'Fishy' ? <WarningOutlined style={{ color: '#faad14' }} /> :
-                  <CheckCircleOutlined style={{ color: '#52c41a' }} />
-                }
+                avatar={severityIcon(j.severity, j.judgement)}
                 title={
                   <Space>
-                    <Tag>{j.identifier}</Tag>
-                    <Tag color={
-                      j.judgement === 'Invalid' ? 'red' :
-                      j.judgement === 'Fishy' ? 'orange' : 'green'
-                    }>{j.judgement}</Tag>
+                    <Tag>{j.identifierLabel || j.identifier}</Tag>
+                    <Tag color={severityColor(j.severity, j.judgement)}>{j.judgement}</Tag>
                     {j.canFix && onFix && (
-                      <Button size="small" type="link" icon={<ToolOutlined />}
-                        onClick={() => onFix(j.fixAction!)}>
-                        {t('legality.fix', { ns: 'editor', defaultValue: '修复' })}
-                      </Button>
+                      <Tooltip title={j.fixActionDesc || undefined}>
+                        <Button size="small" type="link" icon={<ToolOutlined />}
+                          onClick={() => onFix(j.fixAction!)}>
+                          {j.fixActionLabel || t('legality.fix', { ns: 'editor', defaultValue: '修复' })}
+                        </Button>
+                      </Tooltip>
                     )}
                   </Space>
                 }
-                description={j.issue || j.comment}
+                description={j.comment || j.issue}
               />
             </List.Item>
           )}
@@ -247,16 +265,6 @@ const LegalityTab: React.FC<Props> = ({ status, report, judgements, onFix, onVal
     </div>
   );
 };
-
-function getFixLabel(action: string): string {
-  switch (action) {
-    case 'FixBall': return 'Fix Ball';
-    case 'FixMetLocation': return 'Fix Met Location';
-    case 'FixMoves': return 'Fix Moves';
-    case 'FixRelearnMoves': return 'Fix Relearn Moves';
-    default: return action;
-  }
-}
 
 function getErrorMessage(err: unknown, fallback: string): string {
   if (typeof err === 'object' && err && 'response' in err) {

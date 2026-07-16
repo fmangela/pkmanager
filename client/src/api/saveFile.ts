@@ -193,11 +193,22 @@ export type LegalityStatus = 'Legal' | 'Fishy' | 'Illegal';
 
 export interface JudgementDto {
   identifier: string;
+  /** Severity value matching PKHeX.Core.Severity: Invalid=-1, Fishy=0, Valid=1. Use for UI color logic. */
+  severity: number;
+  /** Localized severity label (e.g. "非法"/"可疑"/"有效"). For display only — use `severity` for logic. */
   judgement: string;
+  /** PKHeX-localized detailed reason (primary display text). */
   comment: string;
+  /** Localized check category name (e.g. "相遇"/"球种"/"招式"). */
+  identifierLabel: string;
+  /** Legacy human-readable issue (kept for backward compat, prefer `comment`). */
   issue: string;
   canFix: boolean;
   fixAction?: string;
+  /** Localized quick-fix button label (e.g. "修正球种"). */
+  fixActionLabel?: string;
+  /** Localized description of what the quick-fix does, for tooltip display. */
+  fixActionDesc?: string;
 }
 
 export interface EditResultDto {

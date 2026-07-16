@@ -57,19 +57,19 @@ public class PokemonEditService
         {
             IsValid = true,  // 始终返回true允许保存
             Status = status,
-            Report = status != LegalityStatus.Legal ? GetChineseReport(legality) : null,
+            Report = status != LegalityStatus.Legal ? GetLocalizedReport(legality) : null,
             Judgements = BuildJudgements(legality),
             UpdatedPokemon = _parseService.MapToPokemonDto(original)
         };
     }
 
     /// <summary>
-    /// 生成中文合法性报告
+    /// 生成当前用户语言下的合法性报告（复用 PKHeX.Core 自带多语言资源）。
     /// </summary>
-    private static string GetChineseReport(LegalityAnalysis la)
+    private string GetLocalizedReport(LegalityAnalysis la)
     {
-        // PKHeX.Core 的报告使用内置本地化，通常跟随游戏语言
-        return la.Report();
+        var lang = NormalizePkhexLanguage(_languageResolver.CurrentLang);
+        return la.Report(lang, verbose: false);
     }
 
     /// <summary>
@@ -558,7 +558,7 @@ public class PokemonEditService
         {
             IsValid = status == LegalityStatus.Legal,
             Status = status,
-            Report = status == LegalityStatus.Legal ? null : GetChineseReport(legality),
+            Report = status == LegalityStatus.Legal ? null : GetLocalizedReport(legality),
             Judgements = BuildJudgements(legality)
         };
     }
@@ -663,23 +663,68 @@ public class PokemonEditService
 
     internal List<JudgementDto> BuildJudgements(LegalityAnalysis legality)
     {
-        var context = LegalityLocalizationContext.Create(legality, NormalizePkhexLanguage(_languageResolver.CurrentLang));
+        var lang = _languageResolver.CurrentLang;
+        var context = LegalityLocalizationContext.Create(legality, NormalizePkhexLanguage(lang));
         var judgements = new List<JudgementDto>(legality.Results.Count);
 
         foreach (var result in legality.Results)
         {
+            var fixAction = GetFixAction(result);
+            var (fixLabel, fixDesc) = LocalizeFixAction(fixAction, lang);
             judgements.Add(new JudgementDto
             {
                 Identifier = result.Identifier.ToString(),
-                Judgement = result.Judgement.ToString(),
+                Severity = (sbyte)result.Judgement,
+                Judgement = LocalizeSeverity(result.Judgement, lang),
                 Comment = context.Humanize(result, verbose: false),
-                Issue = GetHumanReadableIssue(result, _languageResolver.CurrentLang),
+                IdentifierLabel = LocalizeCheckName(LegalizationService.GetCheckIdentifierToken(result.Identifier), lang),
+                Issue = GetHumanReadableIssue(result, lang),
                 CanFix = CanAutoFix(result),
-                FixAction = GetFixAction(result)
+                FixAction = fixAction,
+                FixActionLabel = fixLabel,
+                FixActionDesc = fixDesc
             });
         }
 
         return judgements;
+    }
+
+    /// <summary>
+    /// 将 PKHeX Severity 枚举映射为本地化标签（"有效"/"可疑"/"非法"）。
+    /// </summary>
+    private string LocalizeSeverity(Severity s, string? lang) => s switch
+    {
+        Severity.Valid => _messages.GetForLanguage(lang, "legalize.severity.valid"),
+        Severity.Fishy => _messages.GetForLanguage(lang, "legalize.severity.fishy"),
+        Severity.Invalid => _messages.GetForLanguage(lang, "legalize.severity.invalid"),
+        _ => s.ToString()
+    };
+
+    /// <summary>
+    /// 将 FixAction token 映射为 (本地化按钮文案, 本地化修复说明)。
+    /// </summary>
+    private (string? label, string? desc) LocalizeFixAction(string? action, string? lang)
+    {
+        if (string.IsNullOrEmpty(action))
+            return (null, null);
+
+        var key = action switch
+        {
+            "FixBall" => "legalize.fixAction.fixBall",
+            "FixMetLocation" => "legalize.fixAction.fixMetLocation",
+            "FixMoves" => "legalize.fixAction.fixMoves",
+            "FixRelearnMoves" => "legalize.fixAction.fixRelearnMoves",
+            "FixAbility" => "legalize.fixAction.fixAbility",
+            "FixNature" => "legalize.fixAction.fixNature",
+            "FixShiny" => "legalize.fixAction.fixShiny",
+            _ => null
+        };
+
+        if (key == null)
+            return (action, null);
+
+        var descKey = "legalize.fixActionDesc." + key.Substring("legalize.fixAction.".Length);
+        return (_messages.GetForLanguage(lang, key), _messages.GetForLanguage(lang, descKey));
     }
 
     private static void ApplyMarkings(PKM pkm, int[] markings)
@@ -796,6 +841,15 @@ public class PokemonEditService
             "__LEGALIZE_CHECK_NAME_HELD_ITEM__" => "legalize.checkName.heldItem",
             "__LEGALIZE_CHECK_NAME_RIBBON_MARK__" => "legalize.checkName.ribbonMark",
             "__LEGALIZE_CHECK_NAME_MARKING__" => "legalize.checkName.marking",
+            "__LEGALIZE_CHECK_NAME_EC__" => "legalize.checkName.ec",
+            "__LEGALIZE_CHECK_NAME_PID__" => "legalize.checkName.pid",
+            "__LEGALIZE_CHECK_NAME_EVS__" => "legalize.checkName.evs",
+            "__LEGALIZE_CHECK_NAME_IVS__" => "legalize.checkName.ivs",
+            "__LEGALIZE_CHECK_NAME_GVS__" => "legalize.checkName.gvs",
+            "__LEGALIZE_CHECK_NAME_AVS__" => "legalize.checkName.avs",
+            "__LEGALIZE_CHECK_NAME_TRASH_BYTES__" => "legalize.checkName.trashBytes",
+            "__LEGALIZE_CHECK_NAME_SLOT_TYPE__" => "legalize.checkName.slotType",
+            "__LEGALIZE_CHECK_NAME_HANDLER__" => "legalize.checkName.handler",
             _ => null
         };
 

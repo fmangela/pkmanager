@@ -730,6 +730,15 @@ public class LegalizationService
         CheckIdentifier.HeldItem => "__LEGALIZE_CHECK_NAME_HELD_ITEM__",
         CheckIdentifier.RibbonMark => "__LEGALIZE_CHECK_NAME_RIBBON_MARK__",
         CheckIdentifier.Marking => "__LEGALIZE_CHECK_NAME_MARKING__",
+        CheckIdentifier.EC => "__LEGALIZE_CHECK_NAME_EC__",
+        CheckIdentifier.PID => "__LEGALIZE_CHECK_NAME_PID__",
+        CheckIdentifier.EVs => "__LEGALIZE_CHECK_NAME_EVS__",
+        CheckIdentifier.IVs => "__LEGALIZE_CHECK_NAME_IVS__",
+        CheckIdentifier.GVs => "__LEGALIZE_CHECK_NAME_GVS__",
+        CheckIdentifier.AVs => "__LEGALIZE_CHECK_NAME_AVS__",
+        CheckIdentifier.TrashBytes => "__LEGALIZE_CHECK_NAME_TRASH_BYTES__",
+        CheckIdentifier.SlotType => "__LEGALIZE_CHECK_NAME_SLOT_TYPE__",
+        CheckIdentifier.Handler => "__LEGALIZE_CHECK_NAME_HANDLER__",
         _ => id.ToString()
     };
 
@@ -783,6 +792,15 @@ public class LegalizationService
             "__LEGALIZE_CHECK_NAME_HELD_ITEM__" => "legalize.checkName.heldItem",
             "__LEGALIZE_CHECK_NAME_RIBBON_MARK__" => "legalize.checkName.ribbonMark",
             "__LEGALIZE_CHECK_NAME_MARKING__" => "legalize.checkName.marking",
+            "__LEGALIZE_CHECK_NAME_EC__" => "legalize.checkName.ec",
+            "__LEGALIZE_CHECK_NAME_PID__" => "legalize.checkName.pid",
+            "__LEGALIZE_CHECK_NAME_EVS__" => "legalize.checkName.evs",
+            "__LEGALIZE_CHECK_NAME_IVS__" => "legalize.checkName.ivs",
+            "__LEGALIZE_CHECK_NAME_GVS__" => "legalize.checkName.gvs",
+            "__LEGALIZE_CHECK_NAME_AVS__" => "legalize.checkName.avs",
+            "__LEGALIZE_CHECK_NAME_TRASH_BYTES__" => "legalize.checkName.trashBytes",
+            "__LEGALIZE_CHECK_NAME_SLOT_TYPE__" => "legalize.checkName.slotType",
+            "__LEGALIZE_CHECK_NAME_HANDLER__" => "legalize.checkName.handler",
             _ => null
         };
 
