@@ -860,7 +860,7 @@ public class PokemonEditService
     {
         "zh-Hans" => "zh-Hans",
         "zh-Hant" => "zh-Hant",
-        "es-419" => "es",
+        "es-419" => "es-419",
         _ when string.IsNullOrWhiteSpace(lang) => "zh-Hans",
         _ => lang!
     };
