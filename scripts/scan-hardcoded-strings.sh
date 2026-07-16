@@ -48,7 +48,35 @@ done
 
 for cmd in rg node; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "$cmd is required" >&2
+    cat >&2 <<EOF
+ERROR: required command "$cmd" not found in PATH.
+
+Current PATH: ${PATH:-<empty>}
+
+EOF
+    case "$cmd" in
+      rg)
+        cat >&2 <<'EOF'
+ripgrep (rg) is required for scanning. Install it via:
+  - Debian/Ubuntu:  sudo apt-get install ripgrep
+  - macOS (brew):   brew install ripgrep
+  - Arch:           sudo pacman -S ripgrep
+  - From source:    https://github.com/BurntSushi/ripgrep#installation
+
+If rg is already installed but not on PATH (e.g. installed to ~/.local/bin),
+prefix your command or export PATH:
+  PATH="$HOME/.local/bin:$PATH" bash scripts/scan-hardcoded-strings.sh
+EOF
+        ;;
+      node)
+        cat >&2 <<'EOF'
+Node.js is required for post-filtering the rg output. Install it via:
+  - Debian/Ubuntu:  sudo apt-get install nodejs
+  - macOS (brew):   brew install node
+  - nvm:            https://github.com/nvm-sh/nvm
+EOF
+        ;;
+    esac
     exit 1
   fi
 done

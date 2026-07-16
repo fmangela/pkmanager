@@ -250,7 +250,9 @@ function validateBackendMessageUsage(canonicalKeys) {
     /OkMessage(?:Fallback)?\([^,]+,\s*"([^"]+)"/g,
     /ErrorMessage(?:Fallback)?(?:<[^>]+>)?\([^,]+,\s*"([^"]+)"/g,
     /_messages\.Get\("([^"]+)"/g,
-    /ApiResponse<[^>]+>\.(?:Ok|Error)\([^,\n]+,\s*_messages\.Get\("([^"]+)"/g
+    /ApiResponse<[^>]+>\.(?:Ok|Error)\([^,\n]+,\s*_messages\.Get\("([^"]+)"/g,
+    /Messages\.Get\("([^"]+)"/g,
+    /\bText\(\s*"((?:[a-zA-Z0-9_-]+\.)+[a-zA-Z0-9_-]+)"/g
   ];
 
   const usedKeys = new Set();
