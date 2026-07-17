@@ -15,6 +15,9 @@ const DESMUME_SAVE = 'desmume.save_dir';
 const AZAHAR_EXE = 'azahar.exe_path';
 const AZAHAR_DATA = 'azahar.data_dir';
 
+const isWindows = typeof navigator !== 'undefined'
+  && (navigator.platform?.toLowerCase().includes('win') ?? false);
+
 const SettingsPage: React.FC = () => {
   const { fetch, save } = useSettingsStore();
   const { message } = App.useApp();
@@ -72,14 +75,14 @@ const SettingsPage: React.FC = () => {
             label={t('settings.executablePath', { ns: 'pages', defaultValue: '可执行文件路径' })}
             extra={t('settings.desmumeExeExtra', { ns: 'pages', defaultValue: 'Linux: /usr/bin/desmume | Windows: C:\\Program Files\\DeSmuME\\DeSmuME.exe' })}
           >
-            <Input placeholder={navigator.platform.includes('Win') ? 'C:\\Program Files\\DeSmuME\\DeSmuME.exe' : '/usr/bin/desmume'} />
+            <Input placeholder={isWindows ? 'C:\\Program Files\\DeSmuME\\DeSmuME.exe' : '/usr/bin/desmume'} />
           </Form.Item>
           <Form.Item
             name={DESMUME_SAVE}
             label={t('settings.saveDirectory', { ns: 'pages', defaultValue: '存档目录' })}
             extra={t('settings.desmumeSaveExtra', { ns: 'pages', defaultValue: 'Linux: ~/.config/desmume/ | Windows: %APPDATA%\\DeSmuME' })}
           >
-            <Input placeholder={navigator.platform.includes('Win') ? 'C:\\Users\\...\\AppData\\Roaming\\DeSmuME' : '~/.config/desmume'} />
+            <Input placeholder={isWindows ? 'C:\\Users\\...\\AppData\\Roaming\\DeSmuME' : '~/.config/desmume'} />
           </Form.Item>
         </Card>
 
@@ -99,14 +102,14 @@ const SettingsPage: React.FC = () => {
             label={t('settings.executablePath', { ns: 'pages', defaultValue: '可执行文件路径' })}
             extra={t('settings.azaharExeExtra', { ns: 'pages', defaultValue: 'Linux: /usr/bin/azahar | Windows: C:\\Program Files\\Azahar\\azahar.exe' })}
           >
-            <Input placeholder={navigator.platform.includes('Win') ? 'C:\\Program Files\\Azahar\\azahar.exe' : '/usr/bin/azahar'} />
+            <Input placeholder={isWindows ? 'C:\\Program Files\\Azahar\\azahar.exe' : '/usr/bin/azahar'} />
           </Form.Item>
           <Form.Item
             name={AZAHAR_DATA}
             label={t('settings.userDataDirectory', { ns: 'pages', defaultValue: '用户数据目录' })}
             extra={t('settings.azaharDataExtra', { ns: 'pages', defaultValue: '包含 sdmc/ 的目录（Linux: ~/.local/share/azahar-emu/ | Windows: %APPDATA%\\azahar-emu）' })}
           >
-            <Input placeholder={navigator.platform.includes('Win') ? 'C:\\Users\\...\\AppData\\Roaming\\azahar-emu' : '~/.local/share/azahar-emu'} />
+            <Input placeholder={isWindows ? 'C:\\Users\\...\\AppData\\Roaming\\azahar-emu' : '~/.local/share/azahar-emu'} />
           </Form.Item>
         </Card>
 
@@ -124,18 +127,40 @@ const SettingsPage: React.FC = () => {
           <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
             {t('settings.protocolDescription', { ns: 'pages', defaultValue: '安装后，在存档管理页点击「本机」即可直接启动本地模拟器，无需手动下载脚本。只需安装一次。' })}
           </Text>
-          <Button
-            type="primary"
-            ghost
-            icon={<DownloadOutlined />}
-            href="/scripts/install-pkmanager-protocol.bat"
-            download
-          >
-            {t('settings.protocolInstallButton', { ns: 'pages', defaultValue: '下载安装工具 (.bat)' })}
-          </Button>
-          <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
-            {t('settings.protocolInstallHint', { ns: 'pages', defaultValue: '下载后双击运行（会自动提权），安装完成后回到存档管理页点「本机」即可。' })}
-          </Text>
+          {isWindows ? (
+            <>
+              <Button
+                type="primary"
+                ghost
+                icon={<DownloadOutlined />}
+                href="/scripts/install-pkmanager-protocol.bat"
+                download
+              >
+                {t('settings.protocolInstallButton', { ns: 'pages', defaultValue: '下载安装工具 (.bat)' })}
+              </Button>
+              <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
+                {t('settings.protocolInstallHint', { ns: 'pages', defaultValue: '下载后双击运行（会自动提权），安装完成后回到存档管理页点「本机」即可。' })}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Button
+                type="primary"
+                ghost
+                icon={<DownloadOutlined />}
+                href="/scripts/install-pkmanager-protocol.sh"
+                download
+              >
+                {t('settings.protocolInstallButtonLinux', { ns: 'pages', defaultValue: '下载安装工具 (.sh)' })}
+              </Button>
+              <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
+                {t('settings.protocolInstallHintLinux', { ns: 'pages', defaultValue: '下载后赋予执行权限并运行（bash install-pkmanager-protocol.sh），安装完成后回到存档管理页点「本机」即可。需要 xdg-utils 已安装。' })}
+              </Text>
+              <Text type="warning" style={{ display: 'block', marginTop: 4, fontSize: 12 }}>
+                {t('settings.protocolInstallSteamDeckHint', { ns: 'pages', defaultValue: 'Steam Deck 请在桌面模式 (Desktop Mode) 下使用，不支持游戏模式 (Gaming Mode)。' })}
+              </Text>
+            </>
+          )}
         </Card>
 
         <Space>
