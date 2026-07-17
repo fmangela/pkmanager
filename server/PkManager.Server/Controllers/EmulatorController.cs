@@ -1060,13 +1060,26 @@ public class EmulatorController : LocalizedControllerBase
     /// <summary>检测当前操作系统是否为 Windows</summary>
     private static bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
-    /// <summary>获取 Azahar 默认用户数据目录（按 OS 适配）</summary>
+    /// <summary>
+    /// 获取 Azahar 默认用户数据目录（按 OS 适配）。
+    /// 注意：此默认值仅在"后端与浏览器/模拟器同机"场景下准确——pkmanager 为 B/S 架构，
+    /// 跨设备访问时此默认值可能不指向用户机器上的真实路径，需用户在 Settings 中显式配置 azahar.data_dir。
+    /// Linux 上优先探测 Flatpak 沙箱路径（org.azahar_emu.Azahar），找不到再退回 native 安装路径。
+    /// </summary>
     private static string GetDefaultAzaharDataDir()
     {
         if (IsWindows)
             return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "azahar-emu");
-        else
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share", "azahar-emu");
+
+        var home = Environment.GetEnvironmentVariable("HOME")
+                   ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrEmpty(home))
+        {
+            var flatpakPath = Path.Combine(home, ".var", "app", "org.azahar_emu.Azahar", "data", "azahar-emu");
+            if (Directory.Exists(flatpakPath))
+                return flatpakPath;
+        }
+        return Path.Combine(home, ".local", "share", "azahar-emu");
     }
 
     /// <summary>获取 DeSmuME 默认存档目录（按 OS 适配）</summary>

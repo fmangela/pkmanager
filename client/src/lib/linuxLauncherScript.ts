@@ -305,7 +305,7 @@ EOF
         done < <(find "$root" -maxdepth 5 -type f -iname '*.nds' 2>/dev/null | sort)
 
         if [ -n "$found" ]; then
-            ok "Resolved local DeSmuME ROM: $found"
+            ok "Resolved local DeSmuME ROM: $found" >&2
             echo "$found"
             return 0
         fi

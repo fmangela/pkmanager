@@ -114,33 +114,90 @@ resolve_azahar_content_path() {
             echo "$fallback_path"
             return 0
         fi
-        err "Missing title id for Azahar content path resolution."
+        err "Missing title id for Azahar content path resolution." >&2
+        info "  titleIdLow: ${title_id_low:-<empty>}" >&2
+        info "  romPath   : ${fallback_path:-<empty>}" >&2
         return 1
     fi
 
-    local sdmc
-    sdmc=$(resolve_azahar_sdmc_path "$data_dir")
-    local content_dir="${sdmc}/Nintendo 3DS/00000000000000000000000000000000/00000000000000000000000000000000/title/00040000/${resolved_tid}/content"
+    # Candidate data directories to try. The user-configured data_dir takes
+    # priority; if that doesn't contain the title, fall back to the Flatpak
+    # sandbox path (org.azahar_emu.Azahar) before giving up.
+    local home_dir="${HOME:-$(eval echo ~ 2>/dev/null)}"
+    local flatpak_base="$home_dir/.var/app/org.azahar_emu.Azahar/data/azahar-emu"
 
-    if [ ! -d "$content_dir" ]; then
+    local candidates=()
+    if [ -n "$data_dir" ]; then
+        candidates+=("$data_dir")
+    fi
+    if [ -n "$flatpak_base" ] && [ "$flatpak_base" != "$data_dir" ]; then
+        candidates+=("$flatpak_base")
+    fi
+
+    # Title id directory name case variants. Azahar on Linux writes LOWERCASE
+    # title ids (e.g. "001b5100") to the filesystem. Although the 3DS itself
+    # stores title ids as uppercase hex, Linux filesystems are case-sensitive,
+    # and Azahar's Flatpak build normalizes to lowercase. Try lowercase first
+    # to match Azahar's real install location; fall back to uppercase only if
+    # the lowercase dir does not exist.
+    local tid_upper tid_lower
+    tid_upper=$(printf '%s' "$resolved_tid" | tr 'a-z' 'A-Z')
+    tid_lower=$(printf '%s' "$resolved_tid" | tr 'A-Z' 'a-z')
+    local tid_variants=("$tid_lower")
+    if [ "$tid_upper" != "$tid_lower" ]; then
+        tid_variants+=("$tid_upper")
+    fi
+
+    local content_dir=""
+    local tried_paths=""
+    local matched_candidate=""
+    for cand in "${candidates[@]}"; do
+        local sdmc
+        sdmc=$(resolve_azahar_sdmc_path "$cand")
+        for tid in "${tid_variants[@]}"; do
+            local dir="$sdmc/Nintendo 3DS/00000000000000000000000000000000/00000000000000000000000000000000/title/00040000/${tid}/content"
+            tried_paths="${tried_paths}  $dir"$'\n'
+            if [ -d "$dir" ]; then
+                content_dir="$dir"
+                matched_candidate="$cand"
+                break
+            fi
+        done
+        if [ -n "$content_dir" ]; then
+            break
+        fi
+    done
+
+    if [ -z "$content_dir" ]; then
         if [ -n "$fallback_path" ] && [ -e "$fallback_path" ]; then
-            warn "Azahar content directory is not accessible, using backend fallback path."
+            warn "Azahar content directory is not accessible, using backend fallback path." >&2
             echo "$fallback_path"
             return 0
         fi
-        err "Azahar content directory is not accessible: $content_dir"
+        err "Azahar content directory was not found." >&2
+        info "  Title id low: $resolved_tid" >&2
+        info "  Tried content directories:" >&2
+        printf '%s' "$tried_paths" | sed 's/^/    /' >&2
+        info "  Backend fallback: ${fallback_path:-<empty>}" >&2
+        info "  Hint: Configure azahar.data_dir in Settings, or install Azahar (Flatpak: org.azahar_emu.Azahar)." >&2
         return 1
+    fi
+
+    if [ "$matched_candidate" = "$flatpak_base" ] && [ "$matched_candidate" != "$data_dir" ]; then
+        warn "Azahar data_dir resolved to Flatpak sandbox: $flatpak_base" >&2
     fi
 
     local tmd_file
     tmd_file=$(find "$content_dir" -maxdepth 1 -type f -name '*.tmd' 2>/dev/null | sort | head -n 1)
     if [ -z "$tmd_file" ]; then
         if [ -n "$fallback_path" ] && [ -e "$fallback_path" ]; then
-            warn "No TMD file found, using backend fallback path."
+            warn "No TMD file found, using backend fallback path." >&2
             echo "$fallback_path"
             return 0
         fi
-        err "No TMD file was found in $content_dir"
+        err "No TMD file was found in $content_dir" >&2
+        info "  Content dir: $content_dir" >&2
+        info "  Hint: The game may not be fully installed in Azahar. Reinstall via CIA or eShop title." >&2
         return 1
     fi
 
@@ -148,28 +205,31 @@ resolve_azahar_content_path() {
     file_size=$(stat -c '%s' "$tmd_file" 2>/dev/null || stat -f '%z' "$tmd_file" 2>/dev/null)
     if [ -z "$file_size" ] || [ "$file_size" -lt 4 ]; then
         if [ -n "$fallback_path" ] && [ -e "$fallback_path" ]; then
-            warn "TMD file is too small, using backend fallback path: $tmd_file"
+            warn "TMD file is too small, using backend fallback path: $tmd_file" >&2
             echo "$fallback_path"
             return 0
         fi
-        err "TMD file is too small: $tmd_file"
+        err "TMD file is too small: $tmd_file" >&2
         return 1
     fi
 
     local sig_type
     sig_type=$(read_be_u32 "$tmd_file" 0)
     if [ -z "$sig_type" ]; then
-        err "Failed to read TMD signature type."
+        err "Failed to read TMD signature type." >&2
+        info "  TMD file: $tmd_file" >&2
         return 1
     fi
 
     local sig_size
     sig_size=$(get_tmd_signature_size "$sig_type") || {
         if [ -n "$fallback_path" ] && [ -e "$fallback_path" ]; then
-            warn "Unknown TMD signature, using backend fallback path."
+            warn "Unknown TMD signature (type=$sig_type), using backend fallback path." >&2
             echo "$fallback_path"
             return 0
         fi
+        err "Unknown TMD signature type: $sig_type" >&2
+        info "  TMD file: $tmd_file" >&2
         return 1
     }
 
@@ -180,18 +240,20 @@ resolve_azahar_content_path() {
 
     if [ "$file_size" -lt $((chunk_base + 4)) ]; then
         if [ -n "$fallback_path" ] && [ -e "$fallback_path" ]; then
-            warn "TMD file is truncated, using backend fallback path: $tmd_file"
+            warn "TMD file is truncated, using backend fallback path: $tmd_file" >&2
             echo "$fallback_path"
             return 0
         fi
-        err "TMD file is truncated: $tmd_file"
+        err "TMD file is truncated: $tmd_file" >&2
+        info "  File size: $file_size bytes (need at least $((chunk_base + 4)) bytes)" >&2
         return 1
     fi
 
     local content_count
     content_count=$(read_be_u16 "$tmd_file" $((body_start + 0x9E)))
     if [ -z "$content_count" ] || [ "$content_count" -lt 1 ]; then
-        err "TMD does not contain launchable content: $tmd_file"
+        err "TMD does not contain launchable content: $tmd_file" >&2
+        info "  Content count: ${content_count:-<empty>}" >&2
         return 1
     fi
 
@@ -210,12 +272,109 @@ resolve_azahar_content_path() {
     local content_id
     content_id=$(read_be_u32 "$tmd_file" "$chunk_base")
     if [ -z "$content_id" ]; then
-        err "Failed to read TMD content id."
+        err "Failed to read TMD content id." >&2
+        info "  TMD file: $tmd_file" >&2
         return 1
     fi
 
     # Format as 8-digit lowercase hex
     printf '%s/%08x.app\n' "$final_content_dir" "$content_id"
+}
+
+# Resolve the Azahar save file path (data/00000001/main) for a given title id.
+# The backend constructs this path server-side using GetTitleIdLow(gameVersion)
+# which returns UPPERCASE hex, but on Linux Azahar writes lowercase title id
+# directories (the filesystem is case-sensitive). Without this resolver, the
+# launcher would inject the save into a non-existent uppercase directory and
+# Azahar would silently fall back to loading the user's existing local save
+# from the lowercase directory, defeating the entire save-injection flow.
+#
+# Args:
+#   $1 data_dir     — user-configured Azahar data dir (or empty for Flatpak fallback)
+#   $2 title_id_low — title id low (any case) from backend
+#   $3 fallback     — backend-provided emuSavePath (used as last-resort fallback)
+#
+# Prints the resolved save path on stdout, diagnostics on stderr.
+resolve_azahar_save_path() {
+    local data_dir="$1"
+    local title_id_low="$2"
+    local fallback="$3"
+
+    local resolved_tid
+    resolved_tid=$(resolve_azahar_title_id_low "$title_id_low" "")
+    if [ -z "$resolved_tid" ]; then
+        if [ -n "$fallback" ]; then
+            echo "$fallback"
+            return 0
+        fi
+        err "Missing title id for Azahar save path resolution." >&2
+        return 1
+    fi
+
+    local home_dir="${HOME:-$(eval echo ~ 2>/dev/null)}"
+    local flatpak_base="$home_dir/.var/app/org.azahar_emu.Azahar/data/azahar-emu"
+
+    local candidates=()
+    if [ -n "$data_dir" ]; then
+        candidates+=("$data_dir")
+    fi
+    if [ -n "$flatpak_base" ] && [ "$flatpak_base" != "$data_dir" ]; then
+        candidates+=("$flatpak_base")
+    fi
+
+    local tid_upper tid_lower
+    tid_upper=$(printf '%s' "$resolved_tid" | tr 'a-z' 'A-Z')
+    tid_lower=$(printf '%s' "$resolved_tid" | tr 'A-Z' 'a-z')
+    # Lowercase first (matches Azahar's Linux default); see resolve_azahar_content_path
+    # for the rationale on case ordering.
+    local tid_variants=("$tid_lower")
+    if [ "$tid_upper" != "$tid_lower" ]; then
+        tid_variants+=("$tid_upper")
+    fi
+
+    local save_dir_found=""
+    local tried_paths=""
+    for cand in "${candidates[@]}"; do
+        local sdmc
+        sdmc=$(resolve_azahar_sdmc_path "$cand")
+        for tid in "${tid_variants[@]}"; do
+            local dir="$sdmc/Nintendo 3DS/00000000000000000000000000000000/00000000000000000000000000000000/title/00040000/${tid}/data/00000001"
+            tried_paths="${tried_paths}  $dir"$'\n'
+            if [ -d "$dir" ]; then
+                save_dir_found="$dir"
+                break
+            fi
+        done
+        if [ -n "$save_dir_found" ]; then
+            break
+        fi
+    done
+
+    if [ -z "$save_dir_found" ]; then
+        # No existing save dir for either case variant. Use the lowercase variant
+        # of the first candidate (matches Azahar's default on Linux), so that
+        # injection creates the directory under the same case Azahar expects.
+        if [ -n "$fallback" ]; then
+            warn "No existing Azahar save dir found; using backend fallback path." >&2
+            info "  Backend fallback: $fallback" >&2
+            echo "$fallback"
+            return 0
+        fi
+        # Construct path using lowercase tid on first candidate's sdmc
+        local first_sdmc
+        if [ -n "${candidates[0]:-}" ]; then
+            first_sdmc=$(resolve_azahar_sdmc_path "${candidates[0]}")
+        else
+            first_sdmc=$(resolve_azahar_sdmc_path "$flatpak_base")
+        fi
+        local constructed="$first_sdmc/Nintendo 3DS/00000000000000000000000000000000/00000000000000000000000000000000/title/00040000/${tid_lower}/data/00000001/main"
+        warn "No existing Azahar save dir found; constructed new path (lowercase)." >&2
+        info "  Constructed: $constructed" >&2
+        echo "$constructed"
+        return 0
+    fi
+
+    printf '%s/main\n' "$save_dir_found"
 }
 
 get_desmume_rom_search_terms() {
@@ -263,7 +422,7 @@ resolve_desmume_rom_path() {
             echo "$fallback_path"
             return 0
         fi
-        err "Unable to resolve a local NDS ROM path for gameVersion=$game_version"
+        err "Unable to resolve a local NDS ROM path for gameVersion=$game_version" >&2
         return 1
     fi
 
@@ -306,7 +465,7 @@ EOF
         done < <(find "$root" -maxdepth 5 -type f -iname '*.nds' 2>/dev/null | sort)
 
         if [ -n "$found" ]; then
-            ok "Resolved local DeSmuME ROM: $found"
+            ok "Resolved local DeSmuME ROM: $found" >&2
             echo "$found"
             return 0
         fi
@@ -316,7 +475,7 @@ EOF
         echo "$fallback_path"
         return 0
     fi
-    err "Unable to resolve a local NDS ROM path for gameVersion=$game_version"
+    err "Unable to resolve a local NDS ROM path for gameVersion=$game_version" >&2
     return 1
 }
 
@@ -385,46 +544,142 @@ fi
 # Parse JSON response — we expect { code: 0, message, data: {...} }
 # Use python3 if available, otherwise fall back to grep/sed parsing.
 json_get_field() {
-    local json="$1"
-    local key="$2"
+    local key="$1"
     if command -v python3 >/dev/null 2>&1; then
         python3 -c "
 import json, sys
 try:
-    obj = json.loads(sys.argv[1])
-    val = obj.get('data', {}).get(sys.argv[2]) if isinstance(obj.get('data'), dict) else None
+    obj = json.load(sys.stdin)
+    key = sys.argv[1]
+    val = obj.get('data', {}).get(key) if isinstance(obj.get('data'), dict) else None
     if val is None:
-        val = obj.get(sys.argv[2])
+        val = obj.get(key)
     if val is not None:
         print(val if not isinstance(val, bool) else ('true' if val else 'false'))
 except Exception:
     pass
-" "$json" "$key"
+" "$key"
     else
         # Fallback: naive regex
-        printf '%s' "$json" | sed -n "s|.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*|\\1|p" | head -n 1
+        sed -n "s|.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*|\\1|p; s|.*\"$key\"[[:space:]]*:[[:space:]]*\\([^,}][^,}]*\\).*|\\1|p" | head -n 1
     fi
 }
 
-response_code=$(json_get_field "$raw_response" "code")
+# Launch the emulator executable, handling .desktop files (XDG desktop entries)
+# used by Flatpak applications such as Azahar. Direct execution of a .desktop file
+# as a shell script causes bash syntax errors because .desktop files are INI-style
+# config files, not scripts.
+#
+# Strategy:
+#   1. If $exe_path ends with ".desktop" and is a regular file → parse the Exec=
+#      line, substitute %f/%F/%u/%U placeholders with the ROM path, append the
+#      ROM path if no placeholder exists, then eval the resulting command line.
+#   2. Otherwise → exec directly.
+#
+# Returns the emulator's exit code via stdout (captured by caller).
+launch_emulator() {
+    local exe_path="$1"
+    shift
+    local args=("$@")
+
+    # Detect .desktop file by extension AND content (must start with [Desktop Entry])
+    local is_desktop=0
+    case "$exe_path" in
+        *.desktop)
+            if [ -f "$exe_path" ]; then
+                is_desktop=1
+            fi
+            ;;
+    esac
+
+    if [ "$is_desktop" = "1" ]; then
+        # Extract the first Exec= line from the [Desktop Entry] section.
+        # Use awk to stop at the first blank line / next section to avoid
+        # picking up Exec= lines from other sections (e.g. [Desktop Action ...]).
+        local exec_line
+        exec_line=$(awk '
+            /^\[Desktop Entry\]/ { in_entry=1; next }
+            /^\[/ { in_entry=0 }
+            in_entry && /^Exec=/ { sub(/^Exec=/, ""); print; exit }
+        ' "$exe_path" 2>/dev/null)
+
+        if [ -z "$exec_line" ]; then
+            err "No Exec= line found in .desktop file: $exe_path" >&2
+            return 1
+        fi
+
+        # Unescape desktop file escape sequences (backslash-escaped chars)
+        exec_line=$(printf '%s' "$exec_line" | sed 's/\\\\/\\/g; s/\\s/ /g; s/\\t/\t/g; s/\\n/\n/g; s/\\%/%/g')
+
+        # Substitute %f / %F / %u / %U placeholders with the first arg (ROM path)
+        # Per Desktop Entry Spec: %f/%F = file paths, %u/%U = URLs.
+        # If multiple args, %F/%U should receive all of them; %f/%u only the first.
+        local placeholder_found=0
+        if printf '%s' "$exec_line" | grep -qE '%[fFuU]'; then
+            placeholder_found=1
+            # %F or %U → all args (space-separated, properly quoted via eval)
+            if printf '%s' "$exec_line" | grep -qE '%[FU]'; then
+                local all_args_quoted=""
+                local a
+                for a in "${args[@]}"; do
+                    # shellcheck disable=SC1003
+                    all_args_quoted="${all_args_quoted} \"$(printf '%s' "$a" | sed 's/\\/\\\\/g; s/"/\\"/g')\""
+                done
+                exec_line=$(printf '%s' "$exec_line" | sed "s|%F|${all_args_quoted}|g; s|%U|${all_args_quoted}|g")
+            fi
+            # %f or %u → first arg only
+            if printf '%s' "$exec_line" | grep -qE '%[fu]'; then
+                local first_arg_quoted
+                first_arg_quoted="\"$(printf '%s' "${args[0]:-}" | sed 's/\\/\\\\/g; s/"/\\"/g')\""
+                exec_line=$(printf '%s' "$exec_line" | sed "s|%f|${first_arg_quoted}|g; s|%u|${first_arg_quoted}|g")
+            fi
+        fi
+
+        # If no placeholder was substituted, append args to the end of Exec line
+        if [ "$placeholder_found" = "0" ] && [ "${#args[@]}" -gt 0 ]; then
+            local a
+            for a in "${args[@]}"; do
+                exec_line="${exec_line} \"$(printf '%s' "$a" | sed 's/\\/\\\\/g; s/"/\\"/g')\""
+            done
+        fi
+
+        # Strip any remaining placeholder codes that we didn't substitute
+        # (e.g. %d, %D, %n, %N, %k, %v, %m — these are deprecated/unused)
+        exec_line=$(printf '%s' "$exec_line" | sed 's/%[a-zA-Z]//g')
+
+        info "Parsed .desktop Exec: $exec_line" >&2
+        # Execute the parsed command line as a CHILD process (NOT exec), so that
+        # this shell stays alive and can run the post-emulator save sync step
+        # after the emulator exits. Using `exec` here would replace the shell
+        # process with flatpak/Azahar, causing the sync code path to never run.
+        eval "$exec_line"
+        return $?
+    fi
+
+    # Direct execution path
+    "$exe_path" "${args[@]}"
+    return $?
+}
+
+response_code=$(printf '%s' "$raw_response" | json_get_field "code")
 if [ "$response_code" != "0" ]; then
-    response_message=$(json_get_field "$raw_response" "message")
+    response_message=$(printf '%s' "$raw_response" | json_get_field "message")
     err "Backend returned: $response_message"
     pause_exit 1
 fi
 
-pkg_type=$(json_get_field "$raw_response" "type")
-pkg_generation=$(json_get_field "$raw_response" "generation")
-pkg_game_version=$(json_get_field "$raw_response" "gameVersion")
-pkg_title_id_low=$(json_get_field "$raw_response" "titleIdLow")
-pkg_exe_path=$(json_get_field "$raw_response" "exePath")
-pkg_save_dir=$(json_get_field "$raw_response" "saveDir")
-pkg_emu_save_path=$(json_get_field "$raw_response" "emuSavePath")
-pkg_rom_path=$(json_get_field "$raw_response" "romPath")
-pkg_save_data_b64=$(json_get_field "$raw_response" "saveDataBase64")
-pkg_save_file_id=$(json_get_field "$raw_response" "saveFileId")
-pkg_sync_token=$(json_get_field "$raw_response" "syncToken")
-pkg_file_name=$(json_get_field "$raw_response" "fileName")
+pkg_type=$(printf '%s' "$raw_response" | json_get_field "type")
+pkg_generation=$(printf '%s' "$raw_response" | json_get_field "generation")
+pkg_game_version=$(printf '%s' "$raw_response" | json_get_field "gameVersion")
+pkg_title_id_low=$(printf '%s' "$raw_response" | json_get_field "titleIdLow")
+pkg_exe_path=$(printf '%s' "$raw_response" | json_get_field "exePath")
+pkg_save_dir=$(printf '%s' "$raw_response" | json_get_field "saveDir")
+pkg_emu_save_path=$(printf '%s' "$raw_response" | json_get_field "emuSavePath")
+pkg_rom_path=$(printf '%s' "$raw_response" | json_get_field "romPath")
+pkg_save_data_b64=$(printf '%s' "$raw_response" | json_get_field "saveDataBase64")
+pkg_save_file_id=$(printf '%s' "$raw_response" | json_get_field "saveFileId")
+pkg_sync_token=$(printf '%s' "$raw_response" | json_get_field "syncToken")
+pkg_file_name=$(printf '%s' "$raw_response" | json_get_field "fileName")
 
 if [ -z "$pkg_type" ] || [ -z "$pkg_exe_path" ] || [ -z "$pkg_save_dir" ]; then
     err "Launch package is missing required fields."
@@ -447,7 +702,7 @@ if [ "$pkg_type" = "desmume" ]; then
     rom_file_name="${rom_file_name%.*}"
     emu_save_path="${pkg_save_dir}/${rom_file_name}.dsv"
 else
-    emu_save_path="$pkg_emu_save_path"
+    emu_save_path=$(resolve_azahar_save_path "$pkg_save_dir" "$resolved_title_id_low" "$pkg_emu_save_path")
 fi
 
 ok "Launch package received"
@@ -556,7 +811,7 @@ fi
 
 info "Launching: $pkg_exe_path ${launch_args[*]}"
 # Run emulator (foreground, wait for exit)
-"$pkg_exe_path" "${launch_args[@]}"
+launch_emulator "$pkg_exe_path" "${launch_args[@]}"
 emulator_exit=$?
 info "Emulator exited with code $emulator_exit"
 
@@ -581,7 +836,7 @@ else
         pause_exit 0
     }
 
-    sync_code=$(json_get_field "$sync_response" "code")
+    sync_code=$(printf '%s' "$sync_response" | json_get_field "code")
     if [ "$sync_code" = "0" ]; then
         ok "Save synced successfully."
         if [ "$backup_ready" = "1" ] && [ -f "$backup_file" ]; then
@@ -600,7 +855,7 @@ else
             warn "No previous local save to restore."
         fi
     else
-        sync_message=$(json_get_field "$sync_response" "message")
+        sync_message=$(printf '%s' "$sync_response" | json_get_field "message")
         warn "Backend sync returned non-zero code: $sync_message"
     fi
 fi
