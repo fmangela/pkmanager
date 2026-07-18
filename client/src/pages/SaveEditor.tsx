@@ -11,6 +11,7 @@ import {
   SafetyCertificateOutlined, AppstoreOutlined, LeftOutlined, RightOutlined,
   StarFilled, SortAscendingOutlined, SunOutlined, MoonOutlined, DesktopOutlined,
   InboxOutlined, ShoppingOutlined, IdcardOutlined, BookOutlined, SearchOutlined, ToolOutlined,
+  GiftOutlined,
 } from '@ant-design/icons';
 import {
   DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors,
@@ -28,6 +29,7 @@ import TrainerPanel from '../components/editor/TrainerPanel';
 import PokedexPanel from '../components/editor/PokedexPanel';
 import GenToolsPanel from '../components/editor/GenToolsPanel';
 import SearchPanel from '../components/editor/SearchPanel';
+import MysteryGiftPanel from '../components/editor/MysteryGiftPanel';
 import AllBoxesModal from '../components/AllBoxesModal';
 import { useAuthStore } from '../stores/authStore';
 import GameCover from '../components/GameCover';
@@ -553,13 +555,23 @@ const SaveEditor: React.FC = () => {
     if (saveData?.generation === 3 || saveData?.generation === 6 || isGen7SMUSUM) {
       items.push({ key: 'gen-tools', label: tabLabel(<ToolOutlined />, t('saveEditor.genToolsTab', { ns: 'pages', defaultValue: '专用工具' })) });
     }
+    // L.7 配信功能 — 仅 Gen6 (XY/ORAS) 与 Gen7 (SM/USUM) 存档支持 wonder card 注入
+    if (saveData?.generation === 6 || isGen7SMUSUM) {
+      items.push({ key: 'mystery-gift', label: tabLabel(<GiftOutlined />, t('saveEditor.mysteryGiftTab', { ns: 'pages', defaultValue: '配信' })) });
+    }
     return items;
   }, [saveData?.generation, saveData?.gameVersion, t]);
 
   const isGenToolsTab = activeTab === 'gen-tools';
   const isGenToolsSupported = saveData?.generation === 3 || saveData?.generation === 6
     || (saveData?.gameVersion != null && [30, 31, 32, 33, 71, 72].includes(saveData.gameVersion));
-  const visibleActiveTab = isGenToolsTab && !isGenToolsSupported ? 'boxes' : activeTab;
+  const isMysteryGiftTab = activeTab === 'mystery-gift';
+  const isMysteryGiftSupported = saveData?.generation === 6
+    || (saveData?.gameVersion != null && [30, 31, 32, 33, 71, 72].includes(saveData.gameVersion));
+  const visibleActiveTab =
+    (isGenToolsTab && !isGenToolsSupported) || (isMysteryGiftTab && !isMysteryGiftSupported)
+      ? 'boxes'
+      : activeTab;
 
   if (!isAuthenticated) return <div className="save-editor-fallback">{t('saveEditor.loginRequired', { ns: 'pages', defaultValue: '请先登录' })}</div>;
   if (loading) return <div className="save-editor-fallback"><Spin size="large" /></div>;
@@ -930,6 +942,12 @@ const SaveEditor: React.FC = () => {
           {visibleActiveTab === 'gen-tools' && (
             <div className="save-editor-gen-tools">
               <GenToolsPanel key={id} saveFileId={id!} />
+            </div>
+          )}
+
+          {visibleActiveTab === 'mystery-gift' && (
+            <div className="app-panel save-editor-tab-surface">
+              <MysteryGiftPanel saveFileId={id!} />
             </div>
           )}
 

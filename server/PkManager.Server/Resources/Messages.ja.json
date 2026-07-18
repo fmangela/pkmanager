@@ -438,5 +438,15 @@
   "save.badge.galar.4": "Fairy Badge",
   "save.badge.galar.5": "Rock Badge",
   "save.badge.galar.6": "Dark Badge",
-  "save.badge.galar.7": "Dragon Badge"
+  "save.badge.galar.7": "Dragon Badge",
+  "mysteryGift.unsupportedVersion": "このセーブバージョンでは wonder card 注入に対応していません（Gen6/7 X/Y/OR/AS/S/M/US/UM のみ対応）",
+  "mysteryGift.cardNotFound": "指定された wonder card が見つかりません",
+  "mysteryGift.incompatibleGameVersion": "この wonder card は現在のセーブバージョン（{{0}}）と互換性がありません",
+  "mysteryGift.fileMissing": "wonder card ファイルが欠落しています。再インポートしてください",
+  "mysteryGift.parseFailed": "wonder card ファイルの解析に失敗しました",
+  "mysteryGift.noEmptySlot": "セーブ内の wonder card スロットが満杯です（24/24）",
+  "mysteryGift.invalidSlot": "無効なスロット番号です（0-23）",
+  "mysteryGift.injectSuccess": "wonder card を注入しました",
+  "mysteryGift.removeSuccess": "wonder card を削除しました",
+  "mysteryGift.clearSuccess": "すべての wonder card を削除しました"
 }

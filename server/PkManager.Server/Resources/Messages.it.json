@@ -438,5 +438,15 @@
   "save.badge.galar.4": "Fairy Badge",
   "save.badge.galar.5": "Rock Badge",
   "save.badge.galar.6": "Dark Badge",
-  "save.badge.galar.7": "Dragon Badge"
+  "save.badge.galar.7": "Dragon Badge",
+  "mysteryGift.unsupportedVersion": "Questa versione di salvataggio non supporta l'iniezione di wonder card (solo Gen6/7 X/Y/OR/AS/S/M/US/UM supportati)",
+  "mysteryGift.cardNotFound": "La wonder card specificata non è stata trovata",
+  "mysteryGift.incompatibleGameVersion": "Questa wonder card non è compatibile con la versione di salvataggio attuale ({{0}})",
+  "mysteryGift.fileMissing": "Il file della wonder card è mancante, reimportarlo",
+  "mysteryGift.parseFailed": "Analisi del file della wonder card non riuscita",
+  "mysteryGift.noEmptySlot": "Tutti gli slot wonder card sono pieni (24/24)",
+  "mysteryGift.invalidSlot": "Numero di slot non valido (0-23)",
+  "mysteryGift.injectSuccess": "Wonder card iniettata",
+  "mysteryGift.removeSuccess": "Wonder card rimossa",
+  "mysteryGift.clearSuccess": "Tutte le wonder card sono state cancellate"
 }

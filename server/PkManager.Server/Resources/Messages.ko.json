@@ -438,5 +438,15 @@
   "save.badge.galar.4": "Fairy Badge",
   "save.badge.galar.5": "Rock Badge",
   "save.badge.galar.6": "Dark Badge",
-  "save.badge.galar.7": "Dragon Badge"
+  "save.badge.galar.7": "Dragon Badge",
+  "mysteryGift.unsupportedVersion": "이 세이브 버전은 wonder card 주입을 지원하지 않습니다 (Gen6/7 X/Y/OR/AS/S/M/US/UM만 지원)",
+  "mysteryGift.cardNotFound": "지정한 wonder card를 찾을 수 없습니다",
+  "mysteryGift.incompatibleGameVersion": "이 wonder card는 현재 세이브 버전({{0}})과 호환되지 않습니다",
+  "mysteryGift.fileMissing": "wonder card 파일이 없습니다. 다시 가져오세요",
+  "mysteryGift.parseFailed": "wonder card 파일 분석에 실패했습니다",
+  "mysteryGift.noEmptySlot": "세이브 내 wonder card 슬롯이 모두 찼습니다 (24/24)",
+  "mysteryGift.invalidSlot": "잘못된 슬롯 번호입니다 (0-23)",
+  "mysteryGift.injectSuccess": "wonder card가 주입되었습니다",
+  "mysteryGift.removeSuccess": "wonder card가 제거되었습니다",
+  "mysteryGift.clearSuccess": "모든 wonder card가 삭제되었습니다"
 }

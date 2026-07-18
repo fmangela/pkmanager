@@ -438,5 +438,15 @@
   "save.badge.galar.4": "妖精徽章",
   "save.badge.galar.5": "岩石徽章",
   "save.badge.galar.6": "恶之徽章",
-  "save.badge.galar.7": "龙之徽章"
+  "save.badge.galar.7": "龙之徽章",
+  "mysteryGift.unsupportedVersion": "目前存檔版本不支援 wonder card 注入（僅支援 Gen6/7 X/Y/OR/AS/S/M/US/UM）",
+  "mysteryGift.cardNotFound": "找不到指定的 wonder card",
+  "mysteryGift.incompatibleGameVersion": "該 wonder card 與目前存檔版本不相容（{{0}}）",
+  "mysteryGift.fileMissing": "wonder card 檔案缺失，請重新匯入",
+  "mysteryGift.parseFailed": "wonder card 檔案解析失敗",
+  "mysteryGift.noEmptySlot": "存檔內 wonder card 槽位已滿（24/24）",
+  "mysteryGift.invalidSlot": "槽位編號無效（0-23）",
+  "mysteryGift.injectSuccess": "wonder card 已注入",
+  "mysteryGift.removeSuccess": "wonder card 已移除",
+  "mysteryGift.clearSuccess": "已清空全部 wonder card"
 }

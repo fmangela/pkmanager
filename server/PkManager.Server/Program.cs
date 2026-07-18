@@ -139,6 +139,12 @@ builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<LegalizationService>();
 builder.Services.AddSingleton<LegalityCacheService>();
 
+// L.7 配信功能 — Wonder Card 种子导入器（CLI --seed-wonder-cards 触发）
+builder.Services.AddScoped<WonderCardImporter>();
+
+// L.7 配信功能 — Wonder Card 注入服务
+builder.Services.AddScoped<MysteryGiftService>();
+
 // ── 控制器 & Swagger ────────────────────────────────────
 builder.Services.AddControllers(options =>
     {
@@ -192,6 +198,21 @@ builder.Services.AddCors(options =>
     });
 });
 
+// ── CLI: --seed-wonder-cards 触发 wonder card 种子导入并退出 ──
+// 由 scripts/seed-wonder-cards.sh 调用：dotnet run -- --seed-wonder-cards
+if (args.Contains("--seed-wonder-cards"))
+{
+    var seedLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
+    var seedLogger = seedLoggerFactory.CreateLogger<WonderCardImporter>();
+    using var seedConnection = new Npgsql.NpgsqlConnection(connectionString);
+    await seedConnection.OpenAsync();
+    var seedEnv = builder.Environment;
+    var seedImporter = new WonderCardImporter(seedConnection, seedLogger, seedEnv);
+    var seedResult = await seedImporter.ImportAllAsync();
+    Console.WriteLine($"[Wonder] 导入完成 — 成功 {seedResult.Ok}，跳过 {seedResult.Skipped}，失败 {seedResult.Failed}");
+    return;
+}
+
 var app = builder.Build();
 
 // ── 一次性启动迁移：将 DB 中过期的绝对 save_path 重写为当前规范路径 ──
@@ -204,6 +225,28 @@ try
         ADD COLUMN IF NOT EXISTS preferred_lang VARCHAR(10) NOT NULL DEFAULT 'zh-Hans';
 
         COMMENT ON COLUMN users.preferred_lang IS 'Account-level UI language preference';
+        """);
+
+    // L.7 配信功能 — wonder_cards 索引表（详见 docs/配信功能-技术文档.md）
+    await db.ExecuteAsync("""
+        CREATE TABLE IF NOT EXISTS wonder_cards (
+            id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            card_id         INT           NOT NULL,
+            game_version    VARCHAR(20)   NOT NULL,
+            title           TEXT          NOT NULL,
+            description     TEXT,
+            species_id      INT,
+            item_id         INT,
+            language        VARCHAR(10)  NOT NULL,
+            card_type       VARCHAR(10)  NOT NULL,
+            file_path       TEXT          NOT NULL,
+            release_date    DATE,
+            created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+            UNIQUE (card_id, game_version, language, card_type)
+        );
+        CREATE INDEX IF NOT EXISTS idx_wonder_cards_game_version ON wonder_cards (game_version);
+        CREATE INDEX IF NOT EXISTS idx_wonder_cards_language     ON wonder_cards (language);
+        CREATE INDEX IF NOT EXISTS idx_wonder_cards_species      ON wonder_cards (species_id) WHERE species_id IS NOT NULL;
         """);
 
     var saveFileService = scope.ServiceProvider.GetRequiredService<SaveFileService>();

@@ -200,3 +200,36 @@ CREATE TABLE IF NOT EXISTS res_items (
     name VARCHAR(128) NOT NULL,
     PRIMARY KEY (id, lang)
 );
+
+-- ============================================================
+-- L.7 配信 Wonder Card 索引表
+-- 数据源: sdk/EventsGallery/Released/Gen {6,7}/...
+-- 文件本体: data/wondercards/{gen6,gen7}/{filename}
+-- 种子导入: scripts/seed-wonder-cards.sh
+-- 详见: docs/配信功能-技术文档.md
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS wonder_cards (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    card_id         INT           NOT NULL,                -- 卡片内部 ID (0-2047)
+    game_version    VARCHAR(20)   NOT NULL,                -- 文件名 gameTag: 'X'/'Y'/'XY'/'ORAS'/'XYORAS'/'SM'/'USUM'/'SMUSUM'
+    title           TEXT          NOT NULL,                -- 卡片标题（PKHeX 从 Wonder Card 解析）
+    description     TEXT,                                    -- 文件名解析出的描述
+    species_id      INT,                                     -- 涉及物种（用于图标展示）
+    item_id         INT,                                     -- 涉及道具
+    language        VARCHAR(10)  NOT NULL,                   -- 'ENG'/'JPN'/'FRE'/'GER'/'ITA'/'SPA'/'KOR'/'CHS'/'CHT'
+    card_type       VARCHAR(10)  NOT NULL,                   -- 'wc6'/'wc6full'/'wc7'/'wc7full'
+    file_path       TEXT          NOT NULL,                  -- data/wondercards/{gen}/{filename}
+    release_date    DATE,                                    -- 卡片发布日期（PKHeX 解析）
+    created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    UNIQUE (card_id, game_version, language, card_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wonder_cards_game_version ON wonder_cards (game_version);
+CREATE INDEX IF NOT EXISTS idx_wonder_cards_language     ON wonder_cards (language);
+CREATE INDEX IF NOT EXISTS idx_wonder_cards_species      ON wonder_cards (species_id) WHERE species_id IS NOT NULL;
+
+COMMENT ON TABLE wonder_cards IS '配信 Wonder Card 索引表 — 文件本体在 data/wondercards/{gen6,gen7}/';
+COMMENT ON COLUMN wonder_cards.card_id IS 'Wonder Card 内部 ID (0-2047)';
+COMMENT ON COLUMN wonder_cards.game_version IS '文件名 gameTag，前端按存档版本过滤时映射';
+COMMENT ON COLUMN wonder_cards.card_type IS 'wc6/wc6full (Gen6) | wc7/wc7full (Gen7)';
