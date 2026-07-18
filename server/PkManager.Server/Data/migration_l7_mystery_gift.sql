@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS wonder_cards (
     UNIQUE (card_id, game_version, language, card_type)
 );
 
+ALTER TABLE wonder_cards
+ADD COLUMN IF NOT EXISTS raw_data BYTEA;
+
 CREATE INDEX IF NOT EXISTS idx_wonder_cards_game_version ON wonder_cards (game_version);
 CREATE INDEX IF NOT EXISTS idx_wonder_cards_language     ON wonder_cards (language);
 CREATE INDEX IF NOT EXISTS idx_wonder_cards_species      ON wonder_cards (species_id) WHERE species_id IS NOT NULL;
@@ -32,19 +35,3 @@ COMMENT ON COLUMN wonder_cards.game_version IS '文件名 gameTag，前端按存
 COMMENT ON COLUMN wonder_cards.card_type IS 'wc6/wc6full (Gen6) | wc7/wc7full (Gen7)';
 COMMENT ON COLUMN wonder_cards.raw_data IS 'Wonder Card 二进制本体（.wc6/.wc6full/.wc7/.wc7full 完整字节），注入时直接传给 PKHeX MysteryGift.GetMysteryGift';
 COMMENT ON COLUMN wonder_cards.file_path IS '素材文件相对仓库根的路径（assets/wondercards/{gen}/{filename}），仅用于调试/审计';
-
--- 迁移：旧表无 raw_data 列时补列
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'wonder_cards' AND column_name = 'file_path'
-          AND NOT EXISTS (
-              SELECT 1 FROM information_schema.columns
-              WHERE table_name = 'wonder_cards' AND column_name = 'raw_data'
-          )
-    ) THEN
-        ALTER TABLE wonder_cards ADD COLUMN raw_data BYTEA;
-        COMMENT ON COLUMN wonder_cards.raw_data IS 'Wonder Card 二进制本体（.wc6/.wc6full/.wc7/.wc7full 完整字节），注入时直接传给 PKHeX MysteryGift.GetMysteryGift';
-    END IF;
-END $$;

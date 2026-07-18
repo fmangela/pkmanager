@@ -66,9 +66,20 @@ public class MysteryGiftService
 
     /// <summary>
     /// 列出可注入的 wonder card（按 gameVersion + language 过滤），从 wonder_cards 索引表查询。
+    /// 分页：limit 默认 200（单存档可注入卡数远低于此，但保留上限避免一次性返回过大），
+    ///       offset 默认 0；前端可基于此实现翻页。
     /// </summary>
-    public async Task<List<WonderCardDto>> ListAvailableAsync(Guid userId, Guid saveFileId, string? language = null)
+    public async Task<List<WonderCardDto>> ListAvailableAsync(
+        Guid userId,
+        Guid saveFileId,
+        string? language = null,
+        int limit = 200,
+        int offset = 0)
     {
+        // 上限硬约束 — 防止客户端传入超大 limit 拖垮 DB
+        if (limit is <= 0 or > 500) limit = 200;
+        if (offset < 0) offset = 0;
+
         var (sf, sav) = await _saveFileService.LoadSave(saveFileId, userId);
         if (sav is not IMysteryGiftStorageProvider)
             throw BusinessException.FromKey("mysteryGift.unsupportedVersion", 400);
@@ -98,8 +109,9 @@ public class MysteryGiftService
             WHERE game_version = ANY(@GameTags)
               AND language = ANY(@Langs)
             ORDER BY release_date DESC NULLS LAST, card_id
+            LIMIT @Limit OFFSET @Offset
             """;
-        var rows = await _db.QueryAsync<WonderCardDto>(sql, new { GameTags = gameTags, Langs = langs });
+        var rows = await _db.QueryAsync<WonderCardDto>(sql, new { GameTags = gameTags, Langs = langs, Limit = limit, Offset = offset });
         return rows.ToList();
     }
 
@@ -138,6 +150,11 @@ public class MysteryGiftService
             throw BusinessException.FromKey("mysteryGift.noEmptySlot", 400);
 
         storage.SetMysteryGift(targetSlot, gift);
+
+        // 标记"已接收"标志位 — 防止游戏内重复领取或卡片不显示
+        // MysteryBlock6/7 同时实现 IMysteryGiftStorage 和 IMysteryGiftFlags
+        if (sav is IMysteryGiftFlags flags)
+            flags.SetMysteryGiftReceivedFlag(gift.CardID, true);
 
         await _saveFileService.WriteBackSave(sf, userId, sav);
 
@@ -231,7 +248,7 @@ public class MysteryGiftService
             SpeciesId = gift.Species > 0 ? (int)gift.Species : null,
             SpeciesName = speciesName,
             ItemId = gift.ItemID > 0 ? gift.ItemID : null,
-            CardType = gift.Extension,
+            CardType = gift.Extension?.TrimStart('.').ToLowerInvariant() ?? string.Empty,
             IsItem = gift.IsItem,
             IsEntity = gift.IsEntity,
         };
@@ -239,7 +256,15 @@ public class MysteryGiftService
 
     private async Task<WonderCard?> LoadCardAsync(Guid cardId)
     {
-        const string sql = "SELECT * FROM wonder_cards WHERE id = @Id";
+        // 显式列名 — 避免 SELECT * 在 schema 变更时返回未预期字段
+        const string sql = """
+            SELECT id AS Id, card_id AS CardId, game_version AS GameVersion, title AS Title,
+                   description AS Description, species_id AS SpeciesId, item_id AS ItemId,
+                   language AS Language, card_type AS CardType, raw_data AS RawData,
+                   file_path AS FilePath, release_date AS ReleaseDate, created_at AS CreatedAt
+            FROM wonder_cards
+            WHERE id = @Id
+            """;
         return await _db.QueryFirstOrDefaultAsync<WonderCard>(sql, new { Id = cardId });
     }
 

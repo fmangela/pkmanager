@@ -33,8 +33,10 @@ public class WonderCardImporter
     // 例：0043 X - XY Charizard with Charizardite Y (ENG).wc6
     //     0000 SMUSUM - (Trainer) Decidueye (CHS).wc7
     //     0011 XY - XY Garchomp (ENG) (P).wc6full
+    //     0001 ORAS - (Infinite/Single Redeem) (CHS) (C).wc7
+    // flags: P=Pokemon, F=Item(Full), M=Item, C=Infinite/Single Redeem
     private static readonly Regex FileNameRegex = new(
-        @"^(?<cardId>\d+)\s+(?<gameTag>[A-Za-z]+)\s+-\s+(?<description>.+?)\s+\((?<lang>[A-Za-z0-9]+)\)(?:\s+\((?<flags>[PFM]+)\))?\.(?<ext>wc[67](?:full)?)$",
+        @"^(?<cardId>\d+)\s+(?<gameTag>[A-Za-z]+)\s+-\s+(?<description>.+?)\s+\((?<lang>[A-Za-z0-9]+)\)(?:\s+\((?<flags>[PFMC]+)\))?\.(?<ext>wc[67](?:full)?)$",
         RegexOptions.Compiled);
 
     /// <summary>

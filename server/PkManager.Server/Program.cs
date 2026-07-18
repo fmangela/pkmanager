@@ -85,6 +85,11 @@ builder.WebHost.ConfigureKestrel(options =>
 // ── Dapper 配置：自动映射 snake_case 列名到 PascalCase 属性 ──
 Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
 
+// ── Dapper DateOnly TypeHandler — Dapper 默认不支持 DateOnly（.NET 6+ 引入）──
+// WonderCard.ReleaseDate / MysteryGiftDto.ReleaseDate 均为 DateOnly?，未注册会抛 NotSupportedException
+Dapper.SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
+Dapper.SqlMapper.AddTypeHandler(typeof(DateOnly?), new NullableDateOnlyTypeHandler());
+
 // ── 数据库连接 ──────────────────────────────────────────
 var connectionString = builder.Configuration.GetConnectionString("Default")!;
 
@@ -198,37 +203,13 @@ builder.Services.AddCors(options =>
     });
 });
 
-// ── CLI: --seed-wonder-cards 触发 wonder card 种子导入并退出 ──
-// 由 scripts/seed-wonder-cards.sh 调用：dotnet run -- --seed-wonder-cards
-if (args.Contains("--seed-wonder-cards"))
+// ── wonder_cards 表 schema 初始化（启动迁移 + CLI 导入共用） ──
+async Task EnsureWonderCardSchemaAsync(Npgsql.NpgsqlConnection db)
 {
-    var seedLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
-    var seedLogger = seedLoggerFactory.CreateLogger<WonderCardImporter>();
-    using var seedConnection = new Npgsql.NpgsqlConnection(connectionString);
-    await seedConnection.OpenAsync();
-    var seedEnv = builder.Environment;
-    var seedImporter = new WonderCardImporter(seedConnection, seedLogger, seedEnv);
-    var seedResult = await seedImporter.ImportAllAsync();
-    Console.WriteLine($"[Wonder] 导入完成 — 成功 {seedResult.Ok}，跳过 {seedResult.Skipped}，失败 {seedResult.Failed}");
-    return;
-}
-
-var app = builder.Build();
-
-// ── 一次性启动迁移：将 DB 中过期的绝对 save_path 重写为当前规范路径 ──
-try
-{
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<Npgsql.NpgsqlConnection>();
     await db.ExecuteAsync("""
         ALTER TABLE users
         ADD COLUMN IF NOT EXISTS preferred_lang VARCHAR(10) NOT NULL DEFAULT 'zh-Hans';
 
-        COMMENT ON COLUMN users.preferred_lang IS 'Account-level UI language preference';
-        """);
-
-    // L.7 配信功能 — wonder_cards 表（含二进制本体 raw_data）（详见 docs/配信功能-技术文档.md）
-    await db.ExecuteAsync("""
         CREATE TABLE IF NOT EXISTS wonder_cards (
             id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             card_id         INT           NOT NULL,
@@ -245,27 +226,48 @@ try
             created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
             UNIQUE (card_id, game_version, language, card_type)
         );
+
+        ALTER TABLE wonder_cards
+        ADD COLUMN IF NOT EXISTS raw_data BYTEA;
+
         CREATE INDEX IF NOT EXISTS idx_wonder_cards_game_version ON wonder_cards (game_version);
         CREATE INDEX IF NOT EXISTS idx_wonder_cards_language     ON wonder_cards (language);
         CREATE INDEX IF NOT EXISTS idx_wonder_cards_species      ON wonder_cards (species_id) WHERE species_id IS NOT NULL;
-        """);
 
-    // 迁移：旧版本 wonder_cards 表无 raw_data 列时补列（数据需要重新 seed）
-    await db.ExecuteAsync("""
-        DO $$
-        BEGIN
-            IF EXISTS (
-                SELECT 1 FROM information_schema.columns
-                WHERE table_name = 'wonder_cards' AND column_name = 'file_path'
-                  AND NOT EXISTS (
-                      SELECT 1 FROM information_schema.columns
-                      WHERE table_name = 'wonder_cards' AND column_name = 'raw_data'
-                  )
-            ) THEN
-                ALTER TABLE wonder_cards ADD COLUMN raw_data BYTEA;
-            END IF;
-        END $$;
+        COMMENT ON COLUMN users.preferred_lang IS 'Account-level UI language preference';
+        COMMENT ON TABLE wonder_cards IS '配信 Wonder Card 完整数据表 — 二进制本体在 raw_data 列，文件镜像在 client/public/assets/wondercards/{gen6,gen7}/';
+        COMMENT ON COLUMN wonder_cards.card_id IS 'Wonder Card 内部 ID (0-2047)';
+        COMMENT ON COLUMN wonder_cards.game_version IS '文件名 gameTag，前端按存档版本过滤时映射';
+        COMMENT ON COLUMN wonder_cards.card_type IS 'wc6/wc6full (Gen6) | wc7/wc7full (Gen7)';
+        COMMENT ON COLUMN wonder_cards.raw_data IS 'Wonder Card 二进制本体（.wc6/.wc6full/.wc7/.wc7full 完整字节），注入时直接传给 PKHeX MysteryGift.GetMysteryGift';
+        COMMENT ON COLUMN wonder_cards.file_path IS '素材文件相对仓库根的路径（assets/wondercards/{gen}/{filename}），仅用于调试/审计';
         """);
+}
+
+// ── CLI: --seed-wonder-cards 触发 wonder card 种子导入并退出 ──
+// 由 scripts/seed-wonder-cards.sh 调用：dotnet run -- --seed-wonder-cards
+if (args.Contains("--seed-wonder-cards"))
+{
+    var seedLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
+    var seedLogger = seedLoggerFactory.CreateLogger<WonderCardImporter>();
+    using var seedConnection = new Npgsql.NpgsqlConnection(connectionString);
+    await seedConnection.OpenAsync();
+    await EnsureWonderCardSchemaAsync(seedConnection);
+    var seedEnv = builder.Environment;
+    var seedImporter = new WonderCardImporter(seedConnection, seedLogger, seedEnv);
+    var seedResult = await seedImporter.ImportAllAsync();
+    Console.WriteLine($"[Wonder] 导入完成 — 成功 {seedResult.Ok}，跳过 {seedResult.Skipped}，失败 {seedResult.Failed}");
+    return;
+}
+
+var app = builder.Build();
+
+// ── 一次性启动迁移：将 DB 中过期的绝对 save_path 重写为当前规范路径 ──
+try
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<Npgsql.NpgsqlConnection>();
+    await EnsureWonderCardSchemaAsync(db);
 
     var saveFileService = scope.ServiceProvider.GetRequiredService<SaveFileService>();
     await saveFileService.MigrateSavePaths();

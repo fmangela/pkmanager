@@ -9,6 +9,9 @@ namespace PkManager.Server.Controllers;
 /// L.7 配信功能 — Wonder Card 注入/查询/移除
 /// 路由前缀: /api/SaveFile/{saveFileId}/wonder-cards
 /// 详见 docs/配信功能-技术文档.md
+///
+/// 异常处理：BusinessException 由全局 BusinessExceptionFilter 统一捕获并按 ErrorCode 映射 HTTP 状态码，
+/// Controller 不再写 try/catch — 状态码映射由 Filter 接管（404/400/500 各得其所）。
 /// </summary>
 [ApiController]
 [Route("api/SaveFile/{saveFileId:guid}/wonder-cards")]
@@ -27,43 +30,31 @@ public class MysteryGiftController : LocalizedControllerBase
     /// 列出当前存档已注入的 wonder card（按槽位顺序）
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<MysteryGiftSlotDto>>>> ListInjected(
-        Guid saveFileId)
+    public async Task<ActionResult<ApiResponse<List<MysteryGiftSlotDto>>>> ListInjected(Guid saveFileId)
     {
         var userId = _userContext.UserId;
         if (userId == null) return UnauthorizedMessage<List<MysteryGiftSlotDto>>();
 
-        try
-        {
-            var slots = await _mysteryGiftService.ListInjectedAsync(userId.Value, saveFileId);
-            return Ok(ApiResponse<List<MysteryGiftSlotDto>>.Ok(slots));
-        }
-        catch (BusinessException ex)
-        {
-            return BadRequest(FromBusinessException<List<MysteryGiftSlotDto>>(ex));
-        }
+        var slots = await _mysteryGiftService.ListInjectedAsync(userId.Value, saveFileId);
+        return Ok(ApiResponse<List<MysteryGiftSlotDto>>.Ok(slots));
     }
 
     /// <summary>
-    /// 列出可注入的 wonder card（按 gameVersion + language 过滤）
+    /// 列出可注入的 wonder card（按 gameVersion + language 过滤，支持分页）
     /// </summary>
     [HttpGet("available")]
     public async Task<ActionResult<ApiResponse<List<WonderCardDto>>>> ListAvailable(
         Guid saveFileId,
-        [FromQuery] string? language = null)
+        [FromQuery] string? language = null,
+        [FromQuery] int? limit = null,
+        [FromQuery] int? offset = null)
     {
         var userId = _userContext.UserId;
         if (userId == null) return UnauthorizedMessage<List<WonderCardDto>>();
 
-        try
-        {
-            var cards = await _mysteryGiftService.ListAvailableAsync(userId.Value, saveFileId, language);
-            return Ok(ApiResponse<List<WonderCardDto>>.Ok(cards));
-        }
-        catch (BusinessException ex)
-        {
-            return BadRequest(FromBusinessException<List<WonderCardDto>>(ex));
-        }
+        var cards = await _mysteryGiftService.ListAvailableAsync(
+            userId.Value, saveFileId, language, limit ?? 200, offset ?? 0);
+        return Ok(ApiResponse<List<WonderCardDto>>.Ok(cards));
     }
 
     /// <summary>
@@ -78,16 +69,9 @@ public class MysteryGiftController : LocalizedControllerBase
         var userId = _userContext.UserId;
         if (userId == null) return UnauthorizedMessage<MysteryGiftInjectResultDto>();
 
-        try
-        {
-            var result = await _mysteryGiftService.InjectAsync(userId.Value, saveFileId, cardId, slot);
-            var dto = new MysteryGiftInjectResultDto { Slot = result, CardId = cardId };
-            return Ok(OkMessage(dto, "mysteryGift.injectSuccess"));
-        }
-        catch (BusinessException ex)
-        {
-            return BadRequest(FromBusinessException<MysteryGiftInjectResultDto>(ex));
-        }
+        var result = await _mysteryGiftService.InjectAsync(userId.Value, saveFileId, cardId, slot);
+        var dto = new MysteryGiftInjectResultDto { Slot = result, CardId = cardId };
+        return Ok(OkMessage(dto, "mysteryGift.injectSuccess"));
     }
 
     /// <summary>
@@ -99,15 +83,8 @@ public class MysteryGiftController : LocalizedControllerBase
         var userId = _userContext.UserId;
         if (userId == null) return UnauthorizedMessage<object>();
 
-        try
-        {
-            await _mysteryGiftService.RemoveAsync(userId.Value, saveFileId, slot);
-            return Ok(OkMessage(new { }, "mysteryGift.removeSuccess"));
-        }
-        catch (BusinessException ex)
-        {
-            return BadRequest(FromBusinessException<object>(ex));
-        }
+        await _mysteryGiftService.RemoveAsync(userId.Value, saveFileId, slot);
+        return Ok(OkMessage(new { }, "mysteryGift.removeSuccess"));
     }
 
     /// <summary>
@@ -119,14 +96,7 @@ public class MysteryGiftController : LocalizedControllerBase
         var userId = _userContext.UserId;
         if (userId == null) return UnauthorizedMessage<object>();
 
-        try
-        {
-            await _mysteryGiftService.ClearAllAsync(userId.Value, saveFileId);
-            return Ok(OkMessage(new { }, "mysteryGift.clearSuccess"));
-        }
-        catch (BusinessException ex)
-        {
-            return BadRequest(FromBusinessException<object>(ex));
-        }
+        await _mysteryGiftService.ClearAllAsync(userId.Value, saveFileId);
+        return Ok(OkMessage(new { }, "mysteryGift.clearSuccess"));
     }
 }

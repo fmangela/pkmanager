@@ -21,6 +21,23 @@ EVENTS_DIR="$PROJECT_DIR/sdk/EventsGallery/Released"
 DEST_DIR="$PROJECT_DIR/client/public/assets/wondercards"
 SERVER_DIR="$PROJECT_DIR/server/PkManager.Server"
 
+# ── 加载根目录 config 文件 ────────────────────────────
+# 与 start-dev.sh 一致：source config 把 DB_* 导入为环境变量，
+# 供 Program.cs 的 builder.Configuration 通过环境变量读取（DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD）
+CONFIG_FILE="$PROJECT_DIR/config"
+if [[ -f "$CONFIG_FILE" ]]; then
+    set -a
+    source "$CONFIG_FILE"
+    set +a
+else
+    echo "[WARN] config 文件不存在，使用默认值（cp config.dst config 创建）"
+    DB_HOST="${DB_HOST:-localhost}"
+    DB_PORT="${DB_PORT:-5432}"
+    DB_NAME="${DB_NAME:-pkmanager}"
+    DB_USER="${DB_USER:-pkadmin}"
+    DB_PASSWORD="${DB_PASSWORD:-pkadmin123}"
+fi
+
 # PostgreSQL 连接参数 — 环境变量优先，回退到本地 Unix socket
 DATA_DIR="$PROJECT_DIR/data/pgdata"
 PGHOST="${PGHOST:-$DATA_DIR/run}"
