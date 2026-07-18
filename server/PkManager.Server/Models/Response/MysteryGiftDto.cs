@@ -14,7 +14,6 @@ public class WonderCardDto
     public int? ItemId { get; set; }
     public string Language { get; set; } = string.Empty;
     public string CardType { get; set; } = string.Empty;
-    public string FilePath { get; set; } = string.Empty;
     public DateOnly? ReleaseDate { get; set; }
 }
 

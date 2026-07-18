@@ -202,9 +202,10 @@ CREATE TABLE IF NOT EXISTS res_items (
 );
 
 -- ============================================================
--- L.7 配信 Wonder Card 索引表
--- 数据源: sdk/EventsGallery/Released/Gen {6,7}/...
--- 文件本体: data/wondercards/{gen6,gen7}/{filename}
+-- L.7 配信 Wonder Card 表（含二进制本体）
+-- 数据源: sdk/EventsGallery/Released/Gen {6,7}/...（首次 seed 时复制到 assets/wondercards/）
+-- 素材文件: client/public/assets/wondercards/{gen6,gen7}/{filename}
+-- 二进制本体: raw_data BYTEA 列直接入库，注入时从 DB 读取，不依赖文件系统
 -- 种子导入: scripts/seed-wonder-cards.sh
 -- 详见: docs/配信功能-技术文档.md
 -- ============================================================
@@ -219,7 +220,8 @@ CREATE TABLE IF NOT EXISTS wonder_cards (
     item_id         INT,                                     -- 涉及道具
     language        VARCHAR(10)  NOT NULL,                   -- 'ENG'/'JPN'/'FRE'/'GER'/'ITA'/'SPA'/'KOR'/'CHS'/'CHT'
     card_type       VARCHAR(10)  NOT NULL,                   -- 'wc6'/'wc6full'/'wc7'/'wc7full'
-    file_path       TEXT          NOT NULL,                  -- data/wondercards/{gen}/{filename}
+    raw_data        BYTEA         NOT NULL,                   -- Wonder Card 二进制本体，注入时直接传给 PKHeX
+    file_path       TEXT,                                     -- 素材文件路径（assets/wondercards/{gen}/{filename}），仅调试/审计
     release_date    DATE,                                    -- 卡片发布日期（PKHeX 解析）
     created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     UNIQUE (card_id, game_version, language, card_type)
@@ -229,7 +231,10 @@ CREATE INDEX IF NOT EXISTS idx_wonder_cards_game_version ON wonder_cards (game_v
 CREATE INDEX IF NOT EXISTS idx_wonder_cards_language     ON wonder_cards (language);
 CREATE INDEX IF NOT EXISTS idx_wonder_cards_species      ON wonder_cards (species_id) WHERE species_id IS NOT NULL;
 
-COMMENT ON TABLE wonder_cards IS '配信 Wonder Card 索引表 — 文件本体在 data/wondercards/{gen6,gen7}/';
+COMMENT ON TABLE wonder_cards IS '配信 Wonder Card 完整数据表 — 二进制本体在 raw_data 列，文件镜像在 client/public/assets/wondercards/{gen6,gen7}/';
 COMMENT ON COLUMN wonder_cards.card_id IS 'Wonder Card 内部 ID (0-2047)';
 COMMENT ON COLUMN wonder_cards.game_version IS '文件名 gameTag，前端按存档版本过滤时映射';
+COMMENT ON COLUMN wonder_cards.card_type IS 'wc6/wc6full (Gen6) | wc7/wc7full (Gen7)';
+COMMENT ON COLUMN wonder_cards.raw_data IS 'Wonder Card 二进制本体（.wc6/.wc6full/.wc7/.wc7full 完整字节），注入时直接传给 PKHeX MysteryGift.GetMysteryGift';
+COMMENT ON COLUMN wonder_cards.file_path IS '素材文件相对仓库根的路径（assets/wondercards/{gen}/{filename}），仅用于调试/审计';
 COMMENT ON COLUMN wonder_cards.card_type IS 'wc6/wc6full (Gen6) | wc7/wc7full (Gen7)';

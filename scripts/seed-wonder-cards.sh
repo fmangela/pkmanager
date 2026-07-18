@@ -2,8 +2,10 @@
 # ============================================================
 # L.7 配信 Wonder Card 种子导入脚本
 # 用途: 从 sdk/EventsGallery/Released/Gen {6,7} 复制 .wc6/.wc7 文件到
-#       data/wondercards/{gen6,gen7}/，并触发后端解析元数据写入 DB
-# 数据源: sdk/EventsGallery (Project Pokémon Events Gallery)
+#       client/public/assets/wondercards/{gen6,gen7}/（素材库，提交仓库），
+#       并触发后端解析元数据 + 二进制本体写入 DB
+# 数据源: sdk/EventsGallery (Project Pokémon Events Gallery) — gitignored，仅首次复制用
+# 素材库: client/public/assets/wondercards/（committed）— 二进制本体也写入 wonder_cards.raw_data 列
 # 详见: docs/配信功能-技术文档.md
 # 用法:
 #   ./scripts/seed-wonder-cards.sh             # 复制文件 + 解析写入 DB
@@ -16,7 +18,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 EVENTS_DIR="$PROJECT_DIR/sdk/EventsGallery/Released"
-DEST_DIR="$PROJECT_DIR/data/wondercards"
+DEST_DIR="$PROJECT_DIR/client/public/assets/wondercards"
 SERVER_DIR="$PROJECT_DIR/server/PkManager.Server"
 
 # PostgreSQL 连接参数 — 环境变量优先，回退到本地 Unix socket
@@ -75,7 +77,7 @@ copy_files() {
 }
 
 if [[ "$MODE" == "all" || "$MODE" == "files" ]]; then
-    log_info "=== 阶段 1: 复制 wonder card 文件到 data/wondercards/ ==="
+    log_info "=== 阶段 1: 复制 wonder card 文件到 client/public/assets/wondercards/ ==="
     log_info "Gen6 来源: $EVENTS_DIR/Gen 6/Wondercards/"
     GEN6_TOTAL=$(copy_files "$EVENTS_DIR/Gen 6/Wondercards" "gen6" "${GEN6_LANGS[@]}")
     log_info "Gen6 总计: $GEN6_TOTAL 个文件"

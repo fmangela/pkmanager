@@ -17,7 +17,6 @@ public class MysteryGiftService
 {
     private readonly NpgsqlConnection _db;
     private readonly SaveFileService _saveFileService;
-    private readonly IWebHostEnvironment _env;
     private readonly IBackendMessageLocalizer _messages;
     private readonly IPkhexStringProvider _pkhexStrings;
     private readonly ILanguageResolver _languageResolver;
@@ -26,7 +25,6 @@ public class MysteryGiftService
     public MysteryGiftService(
         NpgsqlConnection db,
         SaveFileService saveFileService,
-        IWebHostEnvironment env,
         IBackendMessageLocalizer messages,
         IPkhexStringProvider pkhexStrings,
         ILanguageResolver languageResolver,
@@ -34,7 +32,6 @@ public class MysteryGiftService
     {
         _db = db;
         _saveFileService = saveFileService;
-        _env = env;
         _messages = messages;
         _pkhexStrings = pkhexStrings;
         _languageResolver = languageResolver;
@@ -96,7 +93,7 @@ public class MysteryGiftService
         const string sql = """
             SELECT id, card_id AS CardId, game_version AS GameVersion, title, description,
                    species_id AS SpeciesId, item_id AS ItemId, language, card_type AS CardType,
-                   file_path AS FilePath, release_date AS ReleaseDate
+                   release_date AS ReleaseDate
             FROM wonder_cards
             WHERE game_version = ANY(@GameTags)
               AND language = ANY(@Langs)
@@ -127,13 +124,10 @@ public class MysteryGiftService
         if (!compatibleTags.Contains(card.GameVersion))
             throw BusinessException.FromKey("mysteryGift.incompatibleGameVersion", 400, card.GameVersion);
 
-        // 从磁盘读取 wonder card 文件本体
-        var absPath = Path.IsPathRooted(card.FilePath)
-            ? card.FilePath
-            : Path.Combine(_env.ContentRootPath, card.FilePath);
-        if (!File.Exists(absPath))
+        // 直接从 wonder_cards.raw_data 列读取二进制本体（导入时已写入）
+        var bytes = card.RawData;
+        if (bytes is null || bytes.Length == 0)
             throw BusinessException.FromKey("mysteryGift.fileMissing", 500);
-        var bytes = await File.ReadAllBytesAsync(absPath);
         var ext = "." + card.CardType.ToLowerInvariant();
         var gift = MysteryGift.GetMysteryGift(bytes, ext)
             ?? throw BusinessException.FromKey("mysteryGift.parseFailed", 500);

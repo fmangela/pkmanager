@@ -227,7 +227,7 @@ try
         COMMENT ON COLUMN users.preferred_lang IS 'Account-level UI language preference';
         """);
 
-    // L.7 配信功能 — wonder_cards 索引表（详见 docs/配信功能-技术文档.md）
+    // L.7 配信功能 — wonder_cards 表（含二进制本体 raw_data）（详见 docs/配信功能-技术文档.md）
     await db.ExecuteAsync("""
         CREATE TABLE IF NOT EXISTS wonder_cards (
             id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -239,7 +239,8 @@ try
             item_id         INT,
             language        VARCHAR(10)  NOT NULL,
             card_type       VARCHAR(10)  NOT NULL,
-            file_path       TEXT          NOT NULL,
+            raw_data        BYTEA         NOT NULL,
+            file_path       TEXT,
             release_date    DATE,
             created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
             UNIQUE (card_id, game_version, language, card_type)
@@ -247,6 +248,23 @@ try
         CREATE INDEX IF NOT EXISTS idx_wonder_cards_game_version ON wonder_cards (game_version);
         CREATE INDEX IF NOT EXISTS idx_wonder_cards_language     ON wonder_cards (language);
         CREATE INDEX IF NOT EXISTS idx_wonder_cards_species      ON wonder_cards (species_id) WHERE species_id IS NOT NULL;
+        """);
+
+    // 迁移：旧版本 wonder_cards 表无 raw_data 列时补列（数据需要重新 seed）
+    await db.ExecuteAsync("""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'wonder_cards' AND column_name = 'file_path'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM information_schema.columns
+                      WHERE table_name = 'wonder_cards' AND column_name = 'raw_data'
+                  )
+            ) THEN
+                ALTER TABLE wonder_cards ADD COLUMN raw_data BYTEA;
+            END IF;
+        END $$;
         """);
 
     var saveFileService = scope.ServiceProvider.GetRequiredService<SaveFileService>();

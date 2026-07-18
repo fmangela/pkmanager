@@ -9,8 +9,12 @@ namespace PkManager.Server.Services;
 
 /// <summary>
 /// L.7 配信功能 — Wonder Card 种子导入器
-/// 扫描 data/wondercards/{gen6,gen7}/，用 PKHeX.Core 解析 .wc6/.wc7 元数据，
+/// 扫描 client/public/assets/wondercards/{gen6,gen7}/，用 PKHeX.Core 解析 .wc6/.wc7 元数据 + 二进制本体，
 /// UPSERT 到 wonder_cards 表。详见 docs/配信功能-技术文档.md。
+///
+/// 素材文件已提交到仓库（client/public/assets/wondercards/），导入器只在 DB 初始化时跑一次，
+/// 把元数据 + 二进制写入 wonder_cards.raw_data 列。注入时 Service 直接从 DB 读取 raw_data，
+/// 不再依赖文件系统。
 /// </summary>
 public class WonderCardImporter
 {
@@ -33,14 +37,25 @@ public class WonderCardImporter
         @"^(?<cardId>\d+)\s+(?<gameTag>[A-Za-z]+)\s+-\s+(?<description>.+?)\s+\((?<lang>[A-Za-z0-9]+)\)(?:\s+\((?<flags>[PFM]+)\))?\.(?<ext>wc[67](?:full)?)$",
         RegexOptions.Compiled);
 
+    /// <summary>
+    /// 素材库根目录：client/public/assets/wondercards/
+    /// 从 ContentRootPath（server/PkManager.Server/）出发，../../ 到仓库根，再下到 client/public/assets/wondercards
+    /// </summary>
+    private string ResolveAssetsRoot()
+    {
+        var contentRoot = _env.ContentRootPath;
+        var repoRoot = Path.GetFullPath(Path.Combine(contentRoot, "..", ".."));
+        return Path.Combine(repoRoot, "client", "public", "assets", "wondercards");
+    }
+
     public async Task<WonderCardImportResult> ImportAllAsync(CancellationToken ct = default)
     {
-        var root = Path.Combine(_env.ContentRootPath, "data", "wondercards");
+        var root = ResolveAssetsRoot();
         var result = new WonderCardImportResult();
 
         if (!Directory.Exists(root))
         {
-            _logger.LogWarning("[Wonder] data/wondercards/ 不存在，跳过导入");
+            _logger.LogWarning("[Wonder] 素材目录不存在: {Root}。请先运行 scripts/seed-wonder-cards.sh --files-only 准备素材", root);
             return result;
         }
 
@@ -92,7 +107,7 @@ public class WonderCardImporter
             if (gift is null)
             {
                 _logger.LogWarning("[Wonder] PKHeX 无法识别为 wonder card: {File}", fileName);
-                result.Failed++;
+                result.Skipped++;
                 return;
             }
 
@@ -107,22 +122,23 @@ public class WonderCardImporter
             var description = match.Groups["description"].Value;
             var cardType = ext.TrimStart('.').ToLowerInvariant();
 
-            // 规范化 file_path 为相对路径（相对 ContentRootPath），避免机器相关绝对路径
-            var relPath = Path.GetRelativePath(_env.ContentRootPath, filePath)
-                .Replace('\\', '/');
+            // file_path 记录素材文件相对仓库根路径，仅调试/审计用
+            var repoRoot = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "..", ".."));
+            var relPath = Path.GetRelativePath(repoRoot, filePath).Replace('\\', '/');
 
             await _db.ExecuteAsync("""
                 INSERT INTO wonder_cards
                     (card_id, game_version, title, description, species_id, item_id,
-                     language, card_type, file_path, release_date)
+                     language, card_type, raw_data, file_path, release_date)
                 VALUES
                     (@CardId, @GameVersion, @Title, @Description, @SpeciesId, @ItemId,
-                     @Language, @CardType, @FilePath, @ReleaseDate)
+                     @Language, @CardType, @RawData, @FilePath, @ReleaseDate)
                 ON CONFLICT (card_id, game_version, language, card_type) DO UPDATE SET
                     title        = EXCLUDED.title,
                     description  = EXCLUDED.description,
                     species_id   = EXCLUDED.species_id,
                     item_id      = EXCLUDED.item_id,
+                    raw_data     = EXCLUDED.raw_data,
                     file_path    = EXCLUDED.file_path,
                     release_date = EXCLUDED.release_date
                 """,
@@ -136,6 +152,7 @@ public class WonderCardImporter
                     ItemId = itemId,
                     Language = language,
                     CardType = cardType,
+                    RawData = bytes,
                     FilePath = relPath,
                     ReleaseDate = releaseDate
                 });
