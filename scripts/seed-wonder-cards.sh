@@ -31,11 +31,14 @@ if [[ -f "$CONFIG_FILE" ]]; then
     set +a
 else
     echo "[WARN] config 文件不存在，使用默认值（cp config.dst config 创建）"
+    # set -a 让以下赋值导出为环境变量，dotnet run 子进程才能继承
+    set -a
     DB_HOST="${DB_HOST:-localhost}"
     DB_PORT="${DB_PORT:-5432}"
     DB_NAME="${DB_NAME:-pkmanager}"
     DB_USER="${DB_USER:-pkadmin}"
     DB_PASSWORD="${DB_PASSWORD:-pkadmin123}"
+    set +a
 fi
 
 # PostgreSQL 连接参数 — 环境变量优先，回退到本地 Unix socket

@@ -108,7 +108,7 @@ public class MysteryGiftService
             FROM wonder_cards
             WHERE game_version = ANY(@GameTags)
               AND language = ANY(@Langs)
-            ORDER BY release_date DESC NULLS LAST, card_id
+            ORDER BY release_date DESC NULLS LAST, card_id, card_type, id
             LIMIT @Limit OFFSET @Offset
             """;
         var rows = await _db.QueryAsync<WonderCardDto>(sql, new { GameTags = gameTags, Langs = langs, Limit = limit, Offset = offset });
@@ -186,6 +186,8 @@ public class MysteryGiftService
 
     /// <summary>
     /// 清空所有已注入的 wonder card（恢复存档至未接收状态）。
+    /// 同时清除 IMysteryGiftFlags 的"已接收"位图，否则游戏会把这些 CardID 视为已领取，
+    /// 即使槽位已空，玩家也无法再次接收同名配信。
     /// </summary>
     public async Task ClearAllAsync(Guid userId, Guid saveFileId)
     {
@@ -199,8 +201,12 @@ public class MysteryGiftService
             storage.SetMysteryGift(i, emptyGift);
         }
 
+        // 同步清空"已接收"位图 — 与 InjectAsync 中 SetMysteryGiftReceivedFlag(true) 对称
+        if (sav is IMysteryGiftFlags flags)
+            flags.ClearReceivedFlags();
+
         await _saveFileService.WriteBackSave(sf, userId, sav);
-        _logger.LogInformation("[Wonder] 清空存档 {SaveFileId} 全部 wonder card", saveFileId);
+        _logger.LogInformation("[Wonder] 清空存档 {SaveFileId} 全部 wonder card + received flags", saveFileId);
     }
 
     // ═══════════════════════════════════════════════════════════
