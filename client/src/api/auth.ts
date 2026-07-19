@@ -15,6 +15,7 @@ export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
   user: UserDto;
+  deviceId: string;
 }
 
 export interface UserDto {
@@ -24,8 +25,26 @@ export interface UserDto {
   preferredLang: string;
 }
 
+export interface DeviceDto {
+  deviceId: string;
+  deviceLabel: string | null;
+  userAgent: string | null;
+  lastUsedAt: string | null;
+  issuedAt: string;
+  expiresAt: string;
+  isCurrent: boolean;
+}
+
 export interface SetLanguageRequest {
   lang: string;
+}
+
+export interface LogoutRequest {
+  refreshToken?: string;
+}
+
+export interface RenameDeviceRequest {
+  label: string;
 }
 
 export const authApi = {
@@ -38,8 +57,19 @@ export const authApi = {
   refresh: (refreshToken: string) =>
     apiClient.post<AuthResponse>('/auth/refresh', { refreshToken }),
 
+  logout: (refreshToken?: string) =>
+    apiClient.post('/auth/logout', { refreshToken } satisfies LogoutRequest),
+
   me: () => apiClient.get<UserDto>('/auth/me'),
 
   setLanguage: (lang: string) =>
     apiClient.put<boolean>('/auth/language', { lang } satisfies SetLanguageRequest),
+
+  listDevices: () => apiClient.get<DeviceDto[]>('/auth/devices'),
+
+  revokeDevice: (deviceId: string) =>
+    apiClient.delete(`/auth/devices/${deviceId}`),
+
+  renameDevice: (deviceId: string, label: string) =>
+    apiClient.put(`/auth/devices/${deviceId}/label`, { label } satisfies RenameDeviceRequest),
 };

@@ -448,5 +448,10 @@
   "mysteryGift.invalidSlot": "Invalid slot number (0-23)",
   "mysteryGift.injectSuccess": "Wonder card injected",
   "mysteryGift.removeSuccess": "Wonder card removed",
-  "mysteryGift.clearSuccess": "All wonder cards cleared"
+  "mysteryGift.clearSuccess": "All wonder cards cleared",
+  "auth.logoutSuccess": "Logged out",
+  "auth.deviceRevoked": "Device kicked out",
+  "auth.deviceRenamed": "Device name updated",
+  "auth.deviceLabelEmpty": "Device name cannot be empty",
+  "auth.deviceLabelTooLong": "Device name must be at most 50 characters"
 }

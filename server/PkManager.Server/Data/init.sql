@@ -155,6 +155,30 @@ COMMENT ON COLUMN user_settings.device_id IS '前端生成的设备指纹 UUID';
 
 CREATE INDEX IF NOT EXISTS idx_user_settings_user_device ON user_settings (user_id, device_id);
 
+-- ── Refresh Token 表 (服务端化, 支持登出/设备管理/旋转) ──
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_id       UUID          NOT NULL,                    -- 与 user_settings.device_id 对齐
+    token_hash      TEXT          NOT NULL,                    -- SHA-256(明文 refresh token), 不存明文
+    jti             UUID          NOT NULL,                    -- JWT id, 与 token_hash 1:1
+    issued_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    expires_at      TIMESTAMPTZ   NOT NULL,
+    revoked_at      TIMESTAMPTZ,                               -- NULL = 有效, 非空 = 已撤销
+    last_used_at    TIMESTAMPTZ,                               -- 最近一次 refresh 时间
+    device_label    TEXT,                                      -- 用户可命名 (如 "我的电脑"/"iPhone")
+    user_agent      TEXT                                       -- 登录时的 UA, 用于设备列表显示
+);
+
+COMMENT ON TABLE refresh_tokens IS 'Refresh Token 服务端记录 — 支持多设备共存、登出撤销、设备管理';
+COMMENT ON COLUMN refresh_tokens.token_hash IS 'SHA-256(明文 refresh token), 防 DB 泄漏后 token 被直接复用';
+COMMENT ON COLUMN refresh_tokens.device_id IS '与 user_settings.device_id 同源, 同一用户多设备各自独立';
+COMMENT ON COLUMN refresh_tokens.revoked_at IS 'NULL = 有效; 非空 = 已撤销 (登出/踢出/旋转失效)';
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens (user_id) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens (token_hash) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_device ON refresh_tokens (user_id, device_id) WHERE revoked_at IS NULL;
+
 -- ============================================================
 -- F.1 静态数据缓存 — 资源名称表（只读参考数据）
 -- 数据源: PKHeX.Core 内置文本资源

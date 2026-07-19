@@ -31,7 +31,8 @@ public class AuthService
     /// <summary>
     /// 用户注册 — BCrypt 哈希 + 插入 users 表
     /// </summary>
-    public async Task<AuthResponse> Register(RegisterRequest request, string? acceptLanguage = null)
+    public async Task<AuthResponse> Register(RegisterRequest request, string? acceptLanguage = null,
+        Guid? deviceId = null, string? userAgent = null)
     {
         // 检查用户名/邮箱唯一性
         var existing = await _db.QueryFirstOrDefaultAsync<User>(
@@ -55,13 +56,14 @@ public class AuthService
             VALUES (@Id, @Username, @Email, @PasswordHash, @PreferredLang)",
             new { Id = userId, request.Username, request.Email, PasswordHash = passwordHash, PreferredLang = preferredLang });
 
-        return GenerateTokens(userId, request.Username, request.Email, preferredLang);
+        return await GenerateTokensAsync(userId, request.Username, request.Email, preferredLang, deviceId, userAgent);
     }
 
     /// <summary>
     /// 用户登录 — 查询 + BCrypt 验证 + JWT 签发
     /// </summary>
-    public async Task<AuthResponse> Login(LoginRequest request)
+    public async Task<AuthResponse> Login(LoginRequest request,
+        Guid? deviceId = null, string? userAgent = null)
     {
         var user = await _db.QueryFirstOrDefaultAsync<User>(
             "SELECT * FROM users WHERE username = @Username",
@@ -73,15 +75,15 @@ public class AuthService
         if (!BCrypt.Net.BCrypt.EnhancedVerify(request.Password, user.PasswordHash))
             throw BusinessException.FromKey("auth.invalidCredentials", 401);
 
-        return GenerateTokens(user.Id, user.Username, user.Email, user.PreferredLang);
+        return await GenerateTokensAsync(user.Id, user.Username, user.Email, user.PreferredLang, deviceId, userAgent);
     }
 
     /// <summary>
-    /// 刷新 access_token
+    /// 刷新 access_token — 验签 + 查 DB 未撤销记录 + 旋转 (旧 revoked + 新 INSERT)
     /// </summary>
-    public async Task<AuthResponse> RefreshToken(string refreshToken)
+    public async Task<AuthResponse> RefreshToken(string refreshToken,
+        Guid? deviceId = null, string? userAgent = null)
     {
-        // 验证 refresh token
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.UTF8.GetBytes(_configuration["Jwt:Secret"]!);
 
@@ -97,9 +99,11 @@ public class AuthService
                 ValidAudience = _configuration["Jwt:Audience"],
                 ValidateLifetime = true,
                 ClockSkew = TimeSpan.Zero
-            }, out _);
+            }, out var validatedToken);
 
             var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var username = principal.FindFirstValue(ClaimTypes.Name) ?? string.Empty;
+            var jti = Guid.Parse(((JwtSecurityToken)validatedToken).Id);
 
             var user = await _db.QueryFirstOrDefaultAsync<User>(
                 "SELECT * FROM users WHERE id = @Id AND is_active = TRUE",
@@ -108,12 +112,111 @@ public class AuthService
             if (user == null)
                 throw BusinessException.FromKey("auth.userDisabledOrMissing", 401);
 
-            return GenerateTokens(user.Id, user.Username, user.Email, user.PreferredLang);
+            // 验证 DB 中此 token 未被撤销
+            var tokenHash = HashToken(refreshToken);
+            var record = await _db.QueryFirstOrDefaultAsync<dynamic>(
+                @"SELECT id, device_id FROM refresh_tokens
+                  WHERE jti = @Jti AND token_hash = @Hash
+                    AND revoked_at IS NULL AND expires_at > NOW()",
+                new { Jti = jti, Hash = tokenHash });
+
+            if (record == null)
+                throw BusinessException.FromKey("auth.invalidRefreshToken", 401);
+
+            // 旋转: 旧 token 撤销
+            await _db.ExecuteAsync(
+                "UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = @Id",
+                new { Id = (Guid)record.id });
+
+            // 沿用原 device_id (旋转不换设备); 若前端带了 device_id 则校验一致
+            var effectiveDeviceId = deviceId ?? (Guid)record.device_id;
+
+            return await GenerateTokensAsync(user.Id, user.Username, user.Email, user.PreferredLang,
+                effectiveDeviceId, userAgent);
+        }
+        catch (BusinessException)
+        {
+            throw;
         }
         catch (SecurityTokenException)
         {
             throw BusinessException.FromKey("auth.invalidRefreshToken", 401);
         }
+    }
+
+    /// <summary>
+    /// 登出 — 撤销当前设备的有效 refresh_token
+    /// </summary>
+    public async Task Logout(Guid userId, Guid deviceId, string? refreshToken)
+    {
+        if (!string.IsNullOrEmpty(refreshToken))
+        {
+            // 撤销特定 token (前端传当前 refresh_token)
+            var tokenHash = HashToken(refreshToken);
+            await _db.ExecuteAsync(@"
+                UPDATE refresh_tokens SET revoked_at = NOW()
+                WHERE user_id = @Uid AND token_hash = @Hash AND revoked_at IS NULL",
+                new { Uid = userId, Hash = tokenHash });
+        }
+        else
+        {
+            // 兜底: 撤销该用户该设备的所有有效 token
+            await _db.ExecuteAsync(@"
+                UPDATE refresh_tokens SET revoked_at = NOW()
+                WHERE user_id = @Uid AND device_id = @Did AND revoked_at IS NULL",
+                new { Uid = userId, Did = deviceId });
+        }
+    }
+
+    /// <summary>
+    /// 列出当前用户所有有效设备
+    /// </summary>
+    public async Task<List<DeviceDto>> ListDevices(Guid userId, Guid? currentDeviceId)
+    {
+        var rows = await _db.QueryAsync<DeviceDto>(@"
+            SELECT DISTINCT ON (device_id)
+                   device_id AS DeviceId,
+                   device_label AS DeviceLabel,
+                   user_agent AS UserAgent,
+                   last_used_at AS LastUsedAt,
+                   issued_at AS IssuedAt,
+                   expires_at AS ExpiresAt
+              FROM refresh_tokens
+             WHERE user_id = @Uid AND revoked_at IS NULL
+             ORDER BY device_id, last_used_at DESC NULLS LAST",
+            new { Uid = userId });
+
+        foreach (var d in rows)
+            d.IsCurrent = currentDeviceId.HasValue && d.DeviceId == currentDeviceId.Value;
+
+        return rows.ToList();
+    }
+
+    /// <summary>
+    /// 撤销指定设备的所有有效 token (踢出设备)
+    /// </summary>
+    public async Task RevokeDevice(Guid userId, Guid deviceId)
+    {
+        await _db.ExecuteAsync(@"
+            UPDATE refresh_tokens SET revoked_at = NOW()
+            WHERE user_id = @Uid AND device_id = @Did AND revoked_at IS NULL",
+            new { Uid = userId, Did = deviceId });
+    }
+
+    /// <summary>
+    /// 更新设备显示名
+    /// </summary>
+    public async Task UpdateDeviceLabel(Guid userId, Guid deviceId, string label)
+    {
+        if (string.IsNullOrWhiteSpace(label))
+            throw BusinessException.FromKey("auth.deviceLabelEmpty", 400);
+        if (label.Length > 50)
+            throw BusinessException.FromKey("auth.deviceLabelTooLong", 400);
+
+        await _db.ExecuteAsync(@"
+            UPDATE refresh_tokens SET device_label = @Label
+            WHERE user_id = @Uid AND device_id = @Did AND revoked_at IS NULL",
+            new { Uid = userId, Did = deviceId, Label = label });
     }
 
     /// <summary>
@@ -152,12 +255,38 @@ public class AuthService
 
     // ── 私有方法 ────────────────────────────────────────
 
-    private AuthResponse GenerateTokens(Guid userId, string username, string email, string preferredLang)
+    private async Task<AuthResponse> GenerateTokensAsync(Guid userId, string username, string email,
+        string preferredLang, Guid? deviceId, string? userAgent)
     {
-        var accessToken = GenerateJwt(userId, username,
-            int.Parse(_configuration["Jwt:ExpireHours"] ?? "2"));
-        var refreshToken = GenerateJwt(userId, username,
-            int.Parse(_configuration["Jwt:RefreshExpireDays"] ?? "7") * 24);
+        var accessExpireHours = int.Parse(_configuration["Jwt:ExpireHours"] ?? "2");
+        var refreshExpireDays = int.Parse(_configuration["Jwt:RefreshExpireDays"] ?? "7");
+
+        var accessJti = Guid.NewGuid();
+        var refreshJti = Guid.NewGuid();
+
+        var accessToken = GenerateJwt(userId, username, accessExpireHours, accessJti);
+        var refreshToken = GenerateJwt(userId, username, refreshExpireDays * 24, refreshJti);
+
+        // 持久化 refresh_token 记录
+        var effectiveDeviceId = deviceId ?? Guid.NewGuid();
+        var tokenHash = HashToken(refreshToken);
+        var expiresAt = DateTime.UtcNow.AddDays(refreshExpireDays);
+
+        await _db.ExecuteAsync(@"
+            INSERT INTO refresh_tokens
+                (user_id, device_id, token_hash, jti, expires_at, device_label, user_agent)
+            VALUES
+                (@Uid, @Did, @Hash, @Jti, @ExpiresAt, @Label, @UserAgent)",
+            new
+            {
+                Uid = userId,
+                Did = effectiveDeviceId,
+                Hash = tokenHash,
+                Jti = refreshJti,
+                ExpiresAt = expiresAt,
+                Label = (string?)null,
+                UserAgent = TruncateUserAgent(userAgent)
+            });
 
         return new AuthResponse
         {
@@ -169,8 +298,22 @@ public class AuthService
                 Username = username,
                 Email = email,
                 PreferredLang = NormalizeLang(preferredLang)
-            }
+            },
+            DeviceId = effectiveDeviceId
         };
+    }
+
+    private static string HashToken(string token)
+    {
+        var bytes = Encoding.UTF8.GetBytes(token);
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static string? TruncateUserAgent(string? ua)
+    {
+        if (string.IsNullOrEmpty(ua)) return null;
+        return ua.Length > 256 ? ua[..256] : ua;
     }
 
     private static bool IsSupportedLang(string? lang) =>
@@ -209,13 +352,14 @@ public class AuthService
 
     public static string NormalizeForClient(string? lang) => NormalizeLang(lang);
 
-    private string GenerateJwt(Guid userId, string username, int expireHours)
+    private string GenerateJwt(Guid userId, string username, int expireHours, Guid jti)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Secret"]!));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]
         {
+            new Claim(JwtRegisteredClaimNames.Jti, jti.ToString()),
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
             new Claim(ClaimTypes.Name, username),
         };

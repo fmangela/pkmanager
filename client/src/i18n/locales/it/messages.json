@@ -81,5 +81,8 @@
   "loading.gbaEmulator": "Loading emulator...",
   "loading.gbaEmulatorNew": "Loading emulator (new game)...",
   "loading.ndsEmulator": "Loading NDS emulator...",
-  "loading.ndsEmulatorNew": "Loading NDS emulator (new game)..."
+  "loading.ndsEmulatorNew": "Loading NDS emulator (new game)...",
+  "auth.logoutSuccess": "Disconnesso",
+  "auth.deviceRevoked": "Dispositivo disconnesso",
+  "auth.deviceRenamed": "Nome dispositivo aggiornato"
 }

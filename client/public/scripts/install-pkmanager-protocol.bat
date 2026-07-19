@@ -25,7 +25,7 @@ if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 if errorlevel 1 goto :install_dir_error
 
 echo [1/4] Writing PowerShell launcher...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$src = Join-Path (Split-Path -LiteralPath $env:SELF -Parent) 'pkmanager-launcher.ps1'; if (-not (Test-Path -LiteralPath $src)) { throw 'launcher source not found' }; $encoding = New-Object System.Text.UTF8Encoding $true; $content = [System.IO.File]::ReadAllText($src, $encoding); [System.IO.File]::WriteAllText($env:PS1, $content, $encoding)"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$batPath='%~f0'; $lines = Get-Content -LiteralPath $batPath -Encoding UTF8; $start = [Array]::IndexOf($lines, 'REM @@LAUNCHER_START@@'); $end = [Array]::IndexOf($lines, 'REM @@LAUNCHER_END@@'); if ($start -lt 0 -or $end -le $start) { throw 'launcher markers not found in ' + $batPath }; $body = $lines[($start + 1)..($end - 1)] | ForEach-Object { $_ -replace '^REM ?', '' }; $encoding = New-Object System.Text.UTF8Encoding $true; [System.IO.File]::WriteAllLines('%PS1%', $body, $encoding)"
 set "EXTRACT_RC=%errorlevel%"
 if not "%EXTRACT_RC%"=="0" goto :extract_error
 if not exist "%PS1%" goto :extract_missing
@@ -207,6 +207,7 @@ REM                     return $match.FullName
 REM                 }
 REM             }
 REM         } catch {
+REM             # ignore search failures on inaccessible roots
 REM         }
 REM     }
 REM 
@@ -524,5 +525,6 @@ REM     } catch {
 REM         Write-Host "[WARN] Automatic sync failed: $($_.Exception.Message)" -ForegroundColor Yellow
 REM     }
 REM }
+REM 
 REM Read-Host "Press Enter to close this window"
 REM @@LAUNCHER_END@@

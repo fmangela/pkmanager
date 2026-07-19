@@ -448,5 +448,10 @@
   "mysteryGift.invalidSlot": "Ungültige Slot-Nummer (0-23)",
   "mysteryGift.injectSuccess": "Wonder Card injiziert",
   "mysteryGift.removeSuccess": "Wonder Card entfernt",
-  "mysteryGift.clearSuccess": "Alle Wonder Cards wurden gelöscht"
+  "mysteryGift.clearSuccess": "Alle Wonder Cards wurden gelöscht",
+  "auth.logoutSuccess": "Abgemeldet",
+  "auth.deviceRevoked": "Gerät abgemeldet",
+  "auth.deviceRenamed": "Gerätename aktualisiert",
+  "auth.deviceLabelEmpty": "Gerätename darf nicht leer sein",
+  "auth.deviceLabelTooLong": "Gerätename darf höchstens 50 Zeichen lang sein"
 }

@@ -448,5 +448,10 @@
   "mysteryGift.invalidSlot": "Número de espacio no válido (0-23)",
   "mysteryGift.injectSuccess": "Wonder card inyectada",
   "mysteryGift.removeSuccess": "Wonder card eliminada",
-  "mysteryGift.clearSuccess": "Se han eliminado todas las wonder cards"
+  "mysteryGift.clearSuccess": "Se han eliminado todas las wonder cards",
+  "auth.logoutSuccess": "Sesión cerrada",
+  "auth.deviceRevoked": "Dispositivo expulsado",
+  "auth.deviceRenamed": "Nombre del dispositivo actualizado",
+  "auth.deviceLabelEmpty": "El nombre del dispositivo no puede estar vacío",
+  "auth.deviceLabelTooLong": "El nombre del dispositivo debe tener máximo 50 caracteres"
 }

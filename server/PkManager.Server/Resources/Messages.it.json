@@ -448,5 +448,10 @@
   "mysteryGift.invalidSlot": "Numero di slot non valido (0-23)",
   "mysteryGift.injectSuccess": "Wonder card iniettata",
   "mysteryGift.removeSuccess": "Wonder card rimossa",
-  "mysteryGift.clearSuccess": "Tutte le wonder card sono state cancellate"
+  "mysteryGift.clearSuccess": "Tutte le wonder card sono state cancellate",
+  "auth.logoutSuccess": "Disconnesso",
+  "auth.deviceRevoked": "Dispositivo disconnesso",
+  "auth.deviceRenamed": "Nome dispositivo aggiornato",
+  "auth.deviceLabelEmpty": "Il nome del dispositivo non può essere vuoto",
+  "auth.deviceLabelTooLong": "Il nome del dispositivo deve essere al massimo 50 caratteri"
 }

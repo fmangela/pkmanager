@@ -10,12 +10,12 @@ import SavesPage from './pages/Saves';
 import BankPage from './pages/Bank';
 import SaveEditor from './pages/SaveEditor';
 import SettingsPage from './pages/Settings';
+import DevicesPage from './pages/Devices';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import DiagnosticPanel from './components/DiagnosticPanel';
 import { useDiagnosticStore } from './stores/diagnosticStore';
 import { useAuthStore } from './stores/authStore';
-import { authApi } from './api/auth';
 import i18n from './i18n/i18n';
 
 const EmulatorPage = React.lazy(() => import('./pages/Emulator'));
@@ -44,6 +44,7 @@ const LazyRoute: React.FC<{
 // ── Health check on mount ───────────────────────────────────────────
 
 const HealthChecker: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const restoreSession = useAuthStore((s) => s.restoreSession);
   const setUser = useAuthStore((s) => s.setUser);
 
   useEffect(() => {
@@ -77,17 +78,12 @@ const HealthChecker: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         store.setHealth('down');
       });
 
-    // 2. Auth token validity (if token exists)
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      authApi
-        .me()
-        .then((res) => {
-          const user = res.data;
-          if (user?.preferredLang) {
-            localStorage.setItem('pkmanager_lang', user.preferredLang);
-            void i18n.changeLanguage(user.preferredLang);
-          }
+    // 2. Session restore: call /auth/refresh to validate refresh token + fetch new access token
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (refreshToken) {
+      restoreSession()
+        .then(() => {
+          const user = useAuthStore.getState().user;
           if (user) setUser(user);
           store.log({
             category: 'health',
@@ -95,20 +91,19 @@ const HealthChecker: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             message: i18n.t('diagnostic.authTokenValid', { ns: 'messages', defaultValue: 'Auth Token 有效' }),
           });
         })
-        .catch((err) => {
+        .catch(() => {
           store.log({
             category: 'auth',
             level: 'warn',
             message: i18n.t('diagnostic.authTokenInvalid', {
               ns: 'messages',
-              defaultValue: 'Auth Token 验证失败: {{error}}',
-              error: err.response?.status || err.message,
+              defaultValue: 'Auth Token 验证失败',
             }),
           });
           store.setHealth('degraded');
         });
     }
-  }, [setUser]);
+  }, [restoreSession, setUser]);
 
   return <>{children}</>;
 };
@@ -203,6 +198,14 @@ const App: React.FC = () => {
                   element={
                     <ProtectedRoute>
                       <SettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/devices"
+                  element={
+                    <ProtectedRoute>
+                      <DevicesPage />
                     </ProtectedRoute>
                   }
                 />

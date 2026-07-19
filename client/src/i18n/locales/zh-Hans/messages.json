@@ -81,5 +81,8 @@
   "loading.gbaEmulator": "加载模拟器...",
   "loading.gbaEmulatorNew": "加载模拟器 (新游戏)...",
   "loading.ndsEmulator": "加载 NDS 模拟器...",
-  "loading.ndsEmulatorNew": "加载 NDS 模拟器 (新游戏)..."
+  "loading.ndsEmulatorNew": "加载 NDS 模拟器 (新游戏)...",
+  "auth.logoutSuccess": "已退出登录",
+  "auth.deviceRevoked": "设备已踢出",
+  "auth.deviceRenamed": "设备名已更新"
 }

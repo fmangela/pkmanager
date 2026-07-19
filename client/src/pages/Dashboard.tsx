@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, Row, Col, Typography, Button, Modal, List, Tag, Spin, App, Segmented } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { BankOutlined, SaveOutlined, PlusOutlined, SettingOutlined, SunOutlined, MoonOutlined, DesktopOutlined } from '@ant-design/icons';
+import { BankOutlined, SaveOutlined, PlusOutlined, SettingOutlined, SunOutlined, MoonOutlined, DesktopOutlined, LogoutOutlined, MobileOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme, type ThemeMode } from '../components/theme-context';
 import { saveFileApi, type SaveFileInfo } from '../api/saveFile';
@@ -13,6 +13,7 @@ import GameCover from '../components/GameCover';
 import PageContainer from '../components/PageContainer';
 import { launchLocalSave } from '../lib/localLaunch';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { useAuthStore } from '../stores/authStore';
 import type { ApiError } from '../api/axios';
 
 const { Title, Text } = Typography;
@@ -28,9 +29,11 @@ const createWorkbenchCardStyle = (accent: string): WorkbenchCardStyle => ({
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
   const { t } = useTranslation(['common', 'messages', 'pages']);
+  const logout = useAuthStore((s) => s.logout);
+  const user = useAuthStore((s) => s.user);
 
   // Modal state — selectedGame is null when closed
   const [selectedGame, setSelectedGame] = useState<{ gameId: string; generation: number } | null>(null);
@@ -140,12 +143,39 @@ const DashboardPage: React.FC = () => {
     }
   };
 
+  const handleLogout = () => {
+    modal.confirm({
+      title: t('dashboard.logoutTitle', { ns: 'pages', defaultValue: '退出登录' }),
+      content: t('dashboard.logoutConfirm', { ns: 'pages', defaultValue: '将退出当前设备并跳转登录页，确定吗？' }),
+      okText: t('dashboard.logout', { ns: 'pages', defaultValue: '退出登录' }),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        await logout();
+        window.location.href = '/login';
+      },
+    });
+  };
+
   return (
     <PageContainer
       title={t('dashboard.title', { ns: 'pages', defaultValue: '工作台' })}
       extra={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <LanguageSwitcher />
+          <Button
+            size="small"
+            icon={<MobileOutlined />}
+            onClick={() => navigate('/devices')}
+            title={user?.username}
+          >
+            {t('dashboard.myDevices', { ns: 'pages', defaultValue: '我的设备' })}
+          </Button>
+          <Button
+            size="small"
+            danger
+            icon={<LogoutOutlined />}
+            onClick={handleLogout}
+          />
           <Segmented
             size="small"
             options={[

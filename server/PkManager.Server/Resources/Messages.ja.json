@@ -448,5 +448,10 @@
   "mysteryGift.invalidSlot": "無効なスロット番号です（0-23）",
   "mysteryGift.injectSuccess": "wonder card を注入しました",
   "mysteryGift.removeSuccess": "wonder card を削除しました",
-  "mysteryGift.clearSuccess": "すべての wonder card を削除しました"
+  "mysteryGift.clearSuccess": "すべての wonder card を削除しました",
+  "auth.logoutSuccess": "ログアウトしました",
+  "auth.deviceRevoked": "デバイスを強制ログアウトしました",
+  "auth.deviceRenamed": "デバイス名を更新しました",
+  "auth.deviceLabelEmpty": "デバイス名は空にできません",
+  "auth.deviceLabelTooLong": "デバイス名は最大50文字です"
 }

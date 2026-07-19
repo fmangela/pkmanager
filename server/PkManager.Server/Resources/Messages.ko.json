@@ -448,5 +448,10 @@
   "mysteryGift.invalidSlot": "잘못된 슬롯 번호입니다 (0-23)",
   "mysteryGift.injectSuccess": "wonder card가 주입되었습니다",
   "mysteryGift.removeSuccess": "wonder card가 제거되었습니다",
-  "mysteryGift.clearSuccess": "모든 wonder card가 삭제되었습니다"
+  "mysteryGift.clearSuccess": "모든 wonder card가 삭제되었습니다",
+  "auth.logoutSuccess": "로그아웃되었습니다",
+  "auth.deviceRevoked": "기기가 강제 로그아웃되었습니다",
+  "auth.deviceRenamed": "기기 이름이 변경되었습니다",
+  "auth.deviceLabelEmpty": "기기 이름은 비워둘 수 없습니다",
+  "auth.deviceLabelTooLong": "기기 이름은 최대 50자입니다"
 }

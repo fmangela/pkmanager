@@ -29,6 +29,16 @@ const apiClient = axios.create({
   },
 });
 
+// Raw axios instance for internal refresh calls — bypasses response interceptor
+// (avoids recursive 401 handling + ApiResponse unwrapping quirks)
+const rawClient = axios.create({
+  baseURL: '/api',
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 // ── Diagnostic logging helper ───────────────────────────────────────
 
 function logApiError(url: string, method: string, status: number, message: string) {
@@ -62,7 +72,58 @@ apiClient.interceptors.request.use((config) => {
 
 // ── Response interceptor ────────────────────────────────────────────
 // Unwraps ApiResponse<T> { code, message, data }, logs errors
-// to diagnostic store, and handles 401 with a soft redirect.
+// to diagnostic store, and handles 401 with refresh-token auto-renew.
+
+// Single-flight refresh: multiple concurrent 401s share the same refresh promise.
+let _refreshPromise: Promise<string> | null = null;
+
+async function refreshAccessToken(): Promise<string> {
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = (async () => {
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) throw new Error('no refresh token');
+
+    // Use rawClient to bypass the response interceptor (avoid recursive 401 handling)
+    const deviceId = localStorage.getItem('pkmanager_device_id');
+    const res = await rawClient.post('/auth/refresh', { refreshToken }, {
+      headers: deviceId ? { 'X-Device-Id': deviceId } : undefined,
+    });
+    const body = res.data as { code: number; data?: { accessToken: string; refreshToken: string }; message?: string };
+    if (body.code !== 0 || !body.data) {
+      throw new Error(body.message || 'refresh failed');
+    }
+    localStorage.setItem('access_token', body.data.accessToken);
+    localStorage.setItem('refresh_token', body.data.refreshToken);
+    return body.data.accessToken;
+  })().finally(() => {
+    _refreshPromise = null;
+  });
+  return _refreshPromise;
+}
+
+function isRefreshRequest(url?: string): boolean {
+  if (!url) return false;
+  return url.includes('/auth/refresh') || url.includes('/auth/logout');
+}
+
+function redirectToLogin() {
+  try {
+    sessionStorage.setItem('pkmanager_return_url', window.location.href);
+  } catch { /* ignore */ }
+  try {
+    useDiagnosticStore.getState().log({
+      category: 'auth',
+      level: 'warn',
+      message: getI18nText('api.tokenExpiredRedirect', undefined, 'messages') || 'Token 已过期，即将跳转登录页',
+      context: window.location.href,
+    });
+  } catch { /* ignore */ }
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  setTimeout(() => {
+    window.location.href = '/login';
+  }, 1500);
+}
 
 apiClient.interceptors.response.use(
   (response) => {
@@ -89,7 +150,7 @@ apiClient.interceptors.response.use(
 
     return response;
   },
-  (error) => {
+  async (error) => {
     const url = error.config?.url || '';
     const method = error.config?.method?.toUpperCase() || 'GET';
     const status = error.response?.status || 0;
@@ -123,32 +184,31 @@ apiClient.interceptors.response.use(
       logApiError(url, method, status || 0, msg);
     }
 
-    // ── 401: Soft redirect (save URL, delay, log) ─────────────────
+    // ── 401: try refresh-token auto-renew, fall back to login redirect ──
 
+    if (status === 401 && !isRefreshRequest(url) && !error.config?._retried) {
+      try {
+        const newAccessToken = await refreshAccessToken();
+        // Replay original request with new token
+        const newConfig = {
+          ...error.config,
+          _retried: true,
+          headers: {
+            ...error.config?.headers,
+            Authorization: `Bearer ${newAccessToken}`,
+          },
+        };
+        return apiClient.request(newConfig);
+      } catch {
+        // refresh failed (refresh token expired/revoked) → kick to login
+        redirectToLogin();
+        return Promise.reject(error);
+      }
+    }
+
+    // refresh endpoint itself returned 401, or retry already failed → redirect
     if (status === 401) {
-      // Save current location so login can redirect back
-      try {
-        sessionStorage.setItem('pkmanager_return_url', window.location.href);
-      } catch { /* ignore */ }
-
-      // Log to diagnostic store
-      try {
-        useDiagnosticStore.getState().log({
-          category: 'auth',
-          level: 'warn',
-          message: getI18nText('api.tokenExpiredRedirect', undefined, 'messages') || 'Token 已过期，即将跳转登录页',
-          context: window.location.href,
-        });
-      } catch { /* ignore */ }
-
-      // Clear tokens
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-
-      // Delay redirect to allow diagnostic store to persist + user to see context
-      setTimeout(() => {
-        window.location.href = '/login';
-      }, 1500);
+      redirectToLogin();
     }
 
     return Promise.reject(error);

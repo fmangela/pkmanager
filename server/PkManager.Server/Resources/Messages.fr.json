@@ -448,5 +448,10 @@
   "mysteryGift.invalidSlot": "Numéro d'emplacement invalide (0-23)",
   "mysteryGift.injectSuccess": "Wonder card injectée",
   "mysteryGift.removeSuccess": "Wonder card supprimée",
-  "mysteryGift.clearSuccess": "Toutes les wonder cards ont été effacées"
+  "mysteryGift.clearSuccess": "Toutes les wonder cards ont été effacées",
+  "auth.logoutSuccess": "Déconnecté",
+  "auth.deviceRevoked": "Appareil déconnecté",
+  "auth.deviceRenamed": "Nom de l'appareil mis à jour",
+  "auth.deviceLabelEmpty": "Le nom de l'appareil ne peut pas être vide",
+  "auth.deviceLabelTooLong": "Le nom de l'appareil doit contenir au plus 50 caractères"
 }

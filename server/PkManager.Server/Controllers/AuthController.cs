@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using PkManager.Server.Helpers;
@@ -43,7 +44,9 @@ public class AuthController : ControllerBase
                 "common.invalidRequest"));
 
         var acceptLanguage = Request.Headers["Accept-Language"].FirstOrDefault();
-        var result = await _authService.Register(request, acceptLanguage);
+        var deviceId = GetDeviceId();
+        var userAgent = GetUserAgent();
+        var result = await _authService.Register(request, acceptLanguage, deviceId, userAgent);
         return Ok(ApiResponse<AuthResponse>.Ok(
             result,
             _messages.Get("auth.registerSuccess"),
@@ -62,7 +65,9 @@ public class AuthController : ControllerBase
                 _messages.Get("common.invalidRequest"),
                 "common.invalidRequest"));
 
-        var result = await _authService.Login(request);
+        var deviceId = GetDeviceId();
+        var userAgent = GetUserAgent();
+        var result = await _authService.Login(request, deviceId, userAgent);
         return Ok(ApiResponse<AuthResponse>.Ok(
             result,
             _messages.Get("auth.loginSuccess"),
@@ -70,12 +75,14 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// 刷新 access_token
+    /// 刷新 access_token (旋转 refresh_token)
     /// </summary>
     [HttpPost("refresh")]
     public async Task<ActionResult<ApiResponse<AuthResponse>>> Refresh([FromBody] RefreshRequest request)
     {
-        var result = await _authService.RefreshToken(request.RefreshToken);
+        var deviceId = GetDeviceId();
+        var userAgent = GetUserAgent();
+        var result = await _authService.RefreshToken(request.RefreshToken, deviceId, userAgent);
         return Ok(ApiResponse<AuthResponse>.Ok(
             result,
             _messages.Get("common.success"),
@@ -83,9 +90,32 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// 登出 — 撤销当前设备的 refresh_token
+    /// </summary>
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<object>>> Logout([FromBody] LogoutRequest request)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null)
+            return Unauthorized(ApiResponse<object>.Error(
+                401,
+                _messages.Get("common.unauthorized"),
+                "common.unauthorized"));
+
+        var deviceId = GetDeviceId();
+        await _authService.Logout(userId.Value, deviceId, request.RefreshToken);
+        return Ok(ApiResponse<object>.Ok(
+            new { },
+            _messages.Get("auth.logoutSuccess"),
+            "auth.logoutSuccess"));
+    }
+
+    /// <summary>
     /// 获取当前用户信息
     /// </summary>
     [HttpGet("me")]
+    [Authorize]
     public async Task<ActionResult<ApiResponse<UserDto>>> Me()
     {
         var userId = _userContext.UserId;
@@ -103,9 +133,80 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// 列出当前用户所有有效设备
+    /// </summary>
+    [HttpGet("devices")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<List<DeviceDto>>>> ListDevices()
+    {
+        var userId = _userContext.UserId;
+        if (userId == null)
+            return Unauthorized(ApiResponse<List<DeviceDto>>.Error(
+                401,
+                _messages.Get("common.unauthorized"),
+                "common.unauthorized"));
+
+        var currentDeviceId = GetDeviceId();
+        var devices = await _authService.ListDevices(userId.Value, currentDeviceId);
+        return Ok(ApiResponse<List<DeviceDto>>.Ok(
+            devices,
+            _messages.Get("common.success"),
+            "common.success"));
+    }
+
+    /// <summary>
+    /// 撤销指定设备的所有有效 token (踢出设备)
+    /// </summary>
+    [HttpDelete("devices/{deviceId:guid}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<object>>> RevokeDevice(Guid deviceId)
+    {
+        var userId = _userContext.UserId;
+        if (userId == null)
+            return Unauthorized(ApiResponse<object>.Error(
+                401,
+                _messages.Get("common.unauthorized"),
+                "common.unauthorized"));
+
+        await _authService.RevokeDevice(userId.Value, deviceId);
+        return Ok(ApiResponse<object>.Ok(
+            new { },
+            _messages.Get("auth.deviceRevoked"),
+            "auth.deviceRevoked"));
+    }
+
+    /// <summary>
+    /// 更新设备显示名
+    /// </summary>
+    [HttpPut("devices/{deviceId:guid}/label")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<object>>> RenameDevice(Guid deviceId, [FromBody] RenameDeviceRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ApiResponse<object>.Error(
+                400,
+                _messages.Get("common.invalidRequest"),
+                "common.invalidRequest"));
+
+        var userId = _userContext.UserId;
+        if (userId == null)
+            return Unauthorized(ApiResponse<object>.Error(
+                401,
+                _messages.Get("common.unauthorized"),
+                "common.unauthorized"));
+
+        await _authService.UpdateDeviceLabel(userId.Value, deviceId, request.Label);
+        return Ok(ApiResponse<object>.Ok(
+            new { },
+            _messages.Get("auth.deviceRenamed"),
+            "auth.deviceRenamed"));
+    }
+
+    /// <summary>
     /// 更新当前账号的语言偏好
     /// </summary>
     [HttpPut("language")]
+    [Authorize]
     public async Task<ActionResult<ApiResponse<bool>>> SetLanguage([FromBody] SetLanguageRequest request)
     {
         var userId = _userContext.UserId;
@@ -123,6 +224,17 @@ public class AuthController : ControllerBase
             _messages.Get("auth.languageUpdated"),
             "auth.languageUpdated"));
     }
+
+    // ── helpers ──────────────────────────────────────────
+
+    private Guid GetDeviceId()
+    {
+        var header = Request.Headers["X-Device-Id"].FirstOrDefault();
+        if (Guid.TryParse(header, out var id)) return id;
+        return Guid.NewGuid();
+    }
+
+    private string? GetUserAgent() => Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? ua : null;
 }
 
 public class RefreshRequest

@@ -448,5 +448,10 @@
   "mysteryGift.invalidSlot": "槽位編號無效（0-23）",
   "mysteryGift.injectSuccess": "wonder card 已注入",
   "mysteryGift.removeSuccess": "wonder card 已移除",
-  "mysteryGift.clearSuccess": "已清空全部 wonder card"
+  "mysteryGift.clearSuccess": "已清空全部 wonder card",
+  "auth.logoutSuccess": "已登出",
+  "auth.deviceRevoked": "裝置已踢出",
+  "auth.deviceRenamed": "裝置名稱已更新",
+  "auth.deviceLabelEmpty": "裝置名稱不可為空",
+  "auth.deviceLabelTooLong": "裝置名稱最多 50 個字元"
 }
