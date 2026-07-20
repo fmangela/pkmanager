@@ -212,5 +212,9 @@
   "devices.logoutCurrentTitle": "登出目前裝置",
   "devices.logoutCurrentConfirm": "將登出目前裝置並跳轉登入頁，確定嗎？",
   "devices.loadFailed": "載入裝置列表失敗",
-  "devices.hint": "同一帳號可同時登入多台裝置，互不影響。每台裝置的登入狀態最長保留 7 天，過期或被踢出後需要重新登入。"
+  "devices.hint": "同一帳號可同時登入多台裝置，互不影響。每台裝置的登入狀態最長保留 7 天，過期或被踢出後需要重新登入。",
+  "dashboard.logoutBlockedTitle": "暫時無法登出",
+  "dashboard.logoutBlockedLocalRunning": "偵測到本機模擬器正在執行（{{filename}}）。請先退出本機模擬器並等待存檔自動回傳，再登出。",
+  "dashboard.logoutBlockedWebUnsynced": "偵測到有網頁模擬器分頁尚未同步存檔。請先在各網頁模擬器中點擊「同步存檔」或關閉分頁，再登出。",
+  "dashboard.logoutBlockedAnyway": "仍然登出（可能遺失未同步存檔）"
 }

@@ -234,6 +234,31 @@ async Task EnsureWonderCardSchemaAsync(Npgsql.NpgsqlConnection db)
         CREATE INDEX IF NOT EXISTS idx_wonder_cards_language     ON wonder_cards (language);
         CREATE INDEX IF NOT EXISTS idx_wonder_cards_species      ON wonder_cards (species_id) WHERE species_id IS NOT NULL;
 
+        -- ── refresh_tokens 表 (服务端化, 支持登出/设备管理/旋转) ──
+        -- 升级数据库自动建表, 避免登录/注册时 INSERT 触发 500
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+            id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id         UUID          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            device_id       UUID          NOT NULL,
+            token_hash      TEXT          NOT NULL,
+            jti             UUID          NOT NULL,
+            issued_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+            expires_at      TIMESTAMPTZ   NOT NULL,
+            revoked_at      TIMESTAMPTZ,
+            last_used_at    TIMESTAMPTZ,
+            device_label    TEXT,
+            user_agent      TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user   ON refresh_tokens (user_id) WHERE revoked_at IS NULL;
+        CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash   ON refresh_tokens (token_hash) WHERE revoked_at IS NULL;
+        CREATE INDEX IF NOT EXISTS idx_refresh_tokens_device ON refresh_tokens (user_id, device_id) WHERE revoked_at IS NULL;
+
+        COMMENT ON TABLE refresh_tokens IS 'Refresh Token 服务端记录 — 支持多设备共存、登出撤销、设备管理';
+        COMMENT ON COLUMN refresh_tokens.token_hash IS 'SHA-256(明文 refresh token), 防 DB 泄漏后 token 被直接复用';
+        COMMENT ON COLUMN refresh_tokens.device_id IS '与 user_settings.device_id 同源, 同一用户多设备各自独立';
+        COMMENT ON COLUMN refresh_tokens.revoked_at IS 'NULL = 有效; 非空 = 已撤销 (登出/踢出/旋转失效)';
+
         COMMENT ON COLUMN users.preferred_lang IS 'Account-level UI language preference';
         COMMENT ON TABLE wonder_cards IS '配信 Wonder Card 完整数据表 — 二进制本体在 raw_data 列，文件镜像在 client/public/assets/wondercards/{gen6,gen7}/';
         COMMENT ON COLUMN wonder_cards.card_id IS 'Wonder Card 内部 ID (0-2047)';

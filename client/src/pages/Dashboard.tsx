@@ -14,6 +14,7 @@ import PageContainer from '../components/PageContainer';
 import { launchLocalSave } from '../lib/localLaunch';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import { useAuthStore } from '../stores/authStore';
+import { canLogout, useEmulatorActivityStore } from '../stores/emulatorActivityStore';
 import type { ApiError } from '../api/axios';
 
 const { Title, Text } = Typography;
@@ -144,6 +145,47 @@ const DashboardPage: React.FC = () => {
   };
 
   const handleLogout = () => {
+    const state = useEmulatorActivityStore.getState();
+    const localLaunch = state.localLaunch;
+    const unsyncedTabs = Array.from(state.webTabs.values()).filter(t => t.dirty);
+    if (!canLogout()) {
+      const reasons: string[] = [];
+      if (localLaunch) {
+        reasons.push(
+          t('dashboard.logoutBlockedLocalRunning', {
+            ns: 'pages',
+            defaultValue: '检测到本机模拟器正在运行（{{filename}}）。请先退出本机模拟器并等待存档自动回传，再退出登录。',
+            filename: localLaunch.filename || localLaunch.saveFileId.slice(0, 8),
+          }),
+        );
+      }
+      if (unsyncedTabs.length > 0) {
+        reasons.push(
+          t('dashboard.logoutBlockedWebUnsynced', {
+            ns: 'pages',
+            defaultValue: '检测到有网页模拟器标签页尚未同步存档。请先在各网页模拟器中点击「同步存档」或关闭标签页，再退出登录。',
+          }),
+        );
+      }
+      modal.confirm({
+        title: t('dashboard.logoutBlockedTitle', { ns: 'pages', defaultValue: '暂时无法退出登录' }),
+        content: (
+          <div>
+            {reasons.map((r, i) => (
+              <p key={i} style={{ marginBottom: i < reasons.length - 1 ? 8 : 0 }}>{r}</p>
+            ))}
+          </div>
+        ),
+        okText: t('dashboard.logoutBlockedAnyway', { ns: 'pages', defaultValue: '仍然退出（可能丢失未同步存档）' }),
+        okButtonProps: { danger: true },
+        cancelText: t('cancel', { ns: 'common', defaultValue: '取消' }),
+        onOk: async () => {
+          await logout();
+          window.location.href = '/login';
+        },
+      });
+      return;
+    }
     modal.confirm({
       title: t('dashboard.logoutTitle', { ns: 'pages', defaultValue: '退出登录' }),
       content: t('dashboard.logoutConfirm', { ns: 'pages', defaultValue: '将退出当前设备并跳转登录页，确定吗？' }),

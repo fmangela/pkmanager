@@ -23,6 +23,7 @@ import {
   toArrayBuffer,
 } from '../lib/inputUtil';
 import { getI18nText } from '../i18n/i18n';
+import { generateTabId, registerWebEmulatorTab } from '../stores/emulatorActivityStore';
 
 type ScreenScale = 1 | 2;
 const SZ: Record<ScreenScale, { w: number; h: number }> = { 1: { w: 256, h: 192 }, 2: { w: 512, h: 384 } };
@@ -93,6 +94,9 @@ const NdsEmulatorPage: React.FC = () => {
   const [synced, setSynced] = useState(false);
   const emuRef = useRef<NdsEmulator|null>(null);
   const initDone = useRef(false);
+  const webTabIdRef = useRef<string>(generateTabId());
+  const syncedRef = useRef<boolean>(false);
+  const effectiveSaveIdRef = useRef<string | null>(saveFileId || null);
   const [gpConnected, setGpConnected] = useState(false);
   const [gpId, setGpId] = useState<string | null>(null);
   const initialGamepadMapRef = useRef(gamepadMap);
@@ -194,6 +198,16 @@ const NdsEmulatorPage: React.FC = () => {
     saveNumberSetting(NDS_GAMEPAD_RUMBLE_INTENSITY_KEY, gamepadRumbleIntensity);
   }, [gamepadRumbleIntensity]);
 
+  // 跨标签页心跳: 让 Dashboard 知道本网页模拟器标签页存在且未同步
+  useEffect(() => {
+    const cleanup = registerWebEmulatorTab(
+      webTabIdRef.current,
+      () => effectiveSaveIdRef.current,
+      () => !syncedRef.current,
+    );
+    return cleanup;
+  }, []);
+
   // FPS counter
   useEffect(() => {
     let c = 0, last = performance.now(), run = true;
@@ -233,12 +247,14 @@ const NdsEmulatorPage: React.FC = () => {
         }
         if (resp.data?.saveFileId && !effectiveSaveId.current) {
           effectiveSaveId.current = resp.data.saveFileId;
+          effectiveSaveIdRef.current = resp.data.saveFileId;
           setSaveName(et('saveNameTemplate', '存档 - {{trainerName}}', {
             trainerName: resp.data.trainerName || et('trainerFallback', '训练家'),
           }));
           console.log(`[ndsSync] New save created: ${effectiveSaveId.current}`);
         }
         setSynced(true);
+        syncedRef.current = true;
         return true;
       }
       console.error('[ndsSync] Server error:', r.status);

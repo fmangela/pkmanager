@@ -6,6 +6,7 @@ import i18n from '../i18n/i18n';
 import PageContainer from '../components/PageContainer';
 import { authApi, type DeviceDto } from '../api/auth';
 import { useAuthStore } from '../stores/authStore';
+import { canLogout, useEmulatorActivityStore } from '../stores/emulatorActivityStore';
 import { formatLocaleDateTime } from '../i18n/locale';
 
 const { Text } = Typography;
@@ -48,7 +49,7 @@ const DevicesPage: React.FC = () => {
       const res = await authApi.listDevices();
       setDevices(res.data);
     } catch {
-      message.error(t('pages.devices.loadFailed', { defaultValue: '加载设备列表失败' }));
+      message.error(t('devices.loadFailed', { defaultValue: '加载设备列表失败' }));
     } finally {
       setLoading(false);
     }
@@ -61,26 +62,26 @@ const DevicesPage: React.FC = () => {
   const handleRename = (device: DeviceDto) => {
     let next = device.deviceLabel ?? '';
     modal.confirm({
-      title: t('pages.devices.renameTitle', { defaultValue: '重命名设备' }),
+      title: t('devices.renameTitle', { defaultValue: '重命名设备' }),
       content: (
         <Input
           defaultValue={next}
           maxLength={50}
           onChange={(e) => { next = e.target.value; }}
-          placeholder={t('pages.devices.renamePlaceholder', { defaultValue: '如：我的电脑' })}
+          placeholder={t('devices.renamePlaceholder', { defaultValue: '如：我的电脑' })}
         />
       ),
       onOk: async () => {
         if (!next.trim()) {
-          message.warning(t('pages.devices.labelEmpty', { defaultValue: '设备名不能为空' }));
+          message.warning(t('devices.labelEmpty', { defaultValue: '设备名不能为空' }));
           throw new Error('empty');
         }
         try {
           await authApi.renameDevice(device.deviceId, next.trim());
-          message.success(t('messages.auth.deviceRenamed', { defaultValue: '设备名已更新' }));
+          message.success(t('auth.deviceRenamed', { ns: 'messages', defaultValue: '设备名已更新' }));
           await loadDevices();
         } catch {
-          message.error(t('pages.devices.renameFailed', { defaultValue: '重命名失败' }));
+          message.error(t('devices.renameFailed', { defaultValue: '重命名失败' }));
           throw new Error('failed');
         }
       },
@@ -89,11 +90,52 @@ const DevicesPage: React.FC = () => {
 
   const handleRevoke = (device: DeviceDto) => {
     if (device.isCurrent || device.deviceId === currentDeviceId) {
-      // Revoke current device = logout
+      // Revoke current device = logout — check emulator activity first
+      const state = useEmulatorActivityStore.getState();
+      const localLaunch = state.localLaunch;
+      const unsyncedTabs = Array.from(state.webTabs.values()).filter(t => t.dirty);
+      if (!canLogout()) {
+        const reasons: string[] = [];
+        if (localLaunch) {
+          reasons.push(
+            t('dashboard.logoutBlockedLocalRunning', {
+              ns: 'pages',
+              defaultValue: '检测到本机模拟器正在运行（{{filename}}）。请先退出本机模拟器并等待存档自动回传，再退出登录。',
+              filename: localLaunch.filename || localLaunch.saveFileId.slice(0, 8),
+            }),
+          );
+        }
+        if (unsyncedTabs.length > 0) {
+          reasons.push(
+            t('dashboard.logoutBlockedWebUnsynced', {
+              ns: 'pages',
+              defaultValue: '检测到有网页模拟器标签页尚未同步存档。请先在各网页模拟器中点击「同步存档」或关闭标签页，再退出登录。',
+            }),
+          );
+        }
+        modal.confirm({
+          title: t('dashboard.logoutBlockedTitle', { ns: 'pages', defaultValue: '暂时无法退出登录' }),
+          content: (
+            <div>
+              {reasons.map((r, i) => (
+                <p key={i} style={{ marginBottom: i < reasons.length - 1 ? 8 : 0 }}>{r}</p>
+              ))}
+            </div>
+          ),
+          okText: t('dashboard.logoutBlockedAnyway', { ns: 'pages', defaultValue: '仍然退出（可能丢失未同步存档）' }),
+          okButtonProps: { danger: true },
+          cancelText: t('cancel', { ns: 'common', defaultValue: '取消' }),
+          onOk: async () => {
+            await logout();
+            window.location.href = '/login';
+          },
+        });
+        return;
+      }
       modal.confirm({
-        title: t('pages.devices.logoutCurrentTitle', { defaultValue: '退出当前设备' }),
-        content: t('pages.devices.logoutCurrentConfirm', { defaultValue: '将退出当前设备并跳转登录页，确定吗？' }),
-        okText: t('pages.devices.logout', { defaultValue: '退出登录' }),
+        title: t('devices.logoutCurrentTitle', { defaultValue: '退出当前设备' }),
+        content: t('devices.logoutCurrentConfirm', { defaultValue: '将退出当前设备并跳转登录页，确定吗？' }),
+        okText: t('devices.logout', { defaultValue: '退出登录' }),
         okButtonProps: { danger: true },
         onOk: async () => {
           await logout();
@@ -103,17 +145,17 @@ const DevicesPage: React.FC = () => {
       return;
     }
     modal.confirm({
-      title: t('pages.devices.kickOutTitle', { defaultValue: '踢出设备' }),
-      content: t('pages.devices.kickOutConfirm', { defaultValue: '该设备下次请求将被强制登出，确定吗？' }),
-      okText: t('pages.devices.kickOut', { defaultValue: '踢出' }),
+      title: t('devices.kickOutTitle', { defaultValue: '踢出设备' }),
+      content: t('devices.kickOutConfirm', { defaultValue: '该设备下次请求将被强制登出，确定吗？' }),
+      okText: t('devices.kickOut', { defaultValue: '踢出' }),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await authApi.revokeDevice(device.deviceId);
-          message.success(t('messages.auth.deviceRevoked', { defaultValue: '设备已踢出' }));
+          message.success(t('auth.deviceRevoked', { ns: 'messages', defaultValue: '设备已踢出' }));
           await loadDevices();
         } catch {
-          message.error(t('pages.devices.kickOutFailed', { defaultValue: '踢出失败' }));
+          message.error(t('devices.kickOutFailed', { defaultValue: '踢出失败' }));
         }
       },
     });
@@ -121,7 +163,7 @@ const DevicesPage: React.FC = () => {
 
   const columns = [
     {
-      title: t('pages.devices.deviceName', { defaultValue: '设备' }),
+      title: t('devices.deviceName', { defaultValue: '设备' }),
       key: 'name',
       render: (_: unknown, d: DeviceDto) => (
         <Space direction="vertical" size={0}>
@@ -129,7 +171,7 @@ const DevicesPage: React.FC = () => {
             <DesktopOutlined />
             <Text strong>{d.deviceLabel || summarizeUa(d.userAgent) || d.deviceId.slice(0, 8)}</Text>
             {(d.isCurrent || d.deviceId === currentDeviceId) && (
-              <Tag color="green">{t('pages.devices.currentDevice', { defaultValue: '当前设备' })}</Tag>
+              <Tag color="green">{t('devices.currentDevice', { defaultValue: '当前设备' })}</Tag>
             )}
           </Space>
           <Text type="secondary" style={{ fontSize: 12 }}>
@@ -139,19 +181,19 @@ const DevicesPage: React.FC = () => {
       ),
     },
     {
-      title: t('pages.devices.lastUsed', { defaultValue: '最后使用' }),
+      title: t('devices.lastUsed', { defaultValue: '最后使用' }),
       dataIndex: 'lastUsedAt',
       key: 'lastUsed',
       render: (v: string | null) => v ? formatLocaleDateTime(v, i18n.language) : '—',
     },
     {
-      title: t('pages.devices.expiresAt', { defaultValue: '过期时间' }),
+      title: t('devices.expiresAt', { defaultValue: '过期时间' }),
       dataIndex: 'expiresAt',
       key: 'expiresAt',
       render: (v: string) => formatLocaleDateTime(v, i18n.language),
     },
     {
-      title: t('pages.devices.actions', { defaultValue: '操作' }),
+      title: t('devices.actions', { defaultValue: '操作' }),
       key: 'actions',
       width: 200,
       render: (_: unknown, d: DeviceDto) => (
@@ -161,7 +203,7 @@ const DevicesPage: React.FC = () => {
             icon={<EditOutlined />}
             onClick={() => handleRename(d)}
           >
-            {t('pages.devices.rename', { defaultValue: '重命名' })}
+            {t('devices.rename', { defaultValue: '重命名' })}
           </Button>
           <Button
             size="small"
@@ -170,8 +212,8 @@ const DevicesPage: React.FC = () => {
             onClick={() => handleRevoke(d)}
           >
             {(d.isCurrent || d.deviceId === currentDeviceId)
-              ? t('pages.devices.logout', { defaultValue: '退出登录' })
-              : t('pages.devices.kickOut', { defaultValue: '踢出' })}
+              ? t('devices.logout', { defaultValue: '退出登录' })
+              : t('devices.kickOut', { defaultValue: '踢出' })}
           </Button>
         </Space>
       ),
@@ -180,12 +222,12 @@ const DevicesPage: React.FC = () => {
 
   return (
     <PageContainer
-      title={t('pages.devices.title', { defaultValue: '我的设备' })}
+      title={t('devices.title', { defaultValue: '我的设备' })}
       backTo="/dashboard"
       maxWidth={900}
       extra={
         <Button icon={<ReloadOutlined />} onClick={loadDevices} loading={loading}>
-          {t('pages.devices.refresh', { defaultValue: '刷新' })}
+          {t('devices.refresh', { defaultValue: '刷新' })}
         </Button>
       }
     >
@@ -198,7 +240,7 @@ const DevicesPage: React.FC = () => {
       />
       <div style={{ marginTop: 16 }}>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          {t('pages.devices.hint', { defaultValue: '同一账号可同时登录多台设备，互不影响。每台设备的登录状态最长保留 7 天，过期或被踢出后需要重新登录。' })}
+          {t('devices.hint', { defaultValue: '同一账号可同时登录多台设备，互不影响。每台设备的登录状态最长保留 7 天，过期或被踢出后需要重新登录。' })}
         </Text>
       </div>
     </PageContainer>

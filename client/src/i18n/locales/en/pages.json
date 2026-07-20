@@ -212,5 +212,9 @@
   "devices.logoutCurrentTitle": "Log Out Current Device",
   "devices.logoutCurrentConfirm": "You will be logged out of this device and redirected to the login page. Continue?",
   "devices.loadFailed": "Failed to load device list",
-  "devices.hint": "The same account can be logged in on multiple devices simultaneously without affecting each other. Each device session lasts up to 7 days; after expiry or being kicked out, you must log in again."
+  "devices.hint": "The same account can be logged in on multiple devices simultaneously without affecting each other. Each device session lasts up to 7 days; after expiry or being kicked out, you must log in again.",
+  "dashboard.logoutBlockedTitle": "Cannot log out right now",
+  "dashboard.logoutBlockedLocalRunning": "A local emulator is still running ({{filename}}). Please exit it and wait for the save to sync back before logging out.",
+  "dashboard.logoutBlockedWebUnsynced": "One or more web emulator tabs have unsynced saves. Please click \"Sync Save\" in each web emulator (or close the tab) before logging out.",
+  "dashboard.logoutBlockedAnyway": "Log out anyway (may lose unsynced saves)"
 }

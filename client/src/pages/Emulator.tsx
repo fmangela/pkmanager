@@ -23,6 +23,7 @@ import {
 import { useGamepad } from '../hooks/useGamepad';
 import CheatsModal from '../components/CheatsModal';
 import { getI18nText } from '../i18n/i18n';
+import { generateTabId, registerWebEmulatorTab } from '../stores/emulatorActivityStore';
 
 type ScreenScale = 1 | 2 | 4;
 const SZ: Record<ScreenScale, { w: number; h: number }> = { 1: { w: 240, h: 160 }, 2: { w: 480, h: 320 }, 4: { w: 960, h: 640 } };
@@ -64,6 +65,9 @@ const EmulatorPage: React.FC = () => {
   const [cheatsOpen, setCheatsOpen] = useState(false);
   const emuRef = useRef<MGBAEmulator|null>(null);
   const initDone = useRef(false);
+  const webTabIdRef = useRef<string>(generateTabId());
+  const syncedRef = useRef<boolean>(false);
+  const effectiveSaveIdRef = useRef<string | null>(saveFileId || null);
   const et = (key: string, defaultValue: string, options?: Record<string, unknown>) => t(key, { defaultValue, ...(options ?? {}) });
   const buttonLabels: Record<string, string> = {
     Up: et('button.up', '↑上'),
@@ -141,6 +145,16 @@ const EmulatorPage: React.FC = () => {
     saveNumberSetting(GBA_GAMEPAD_DEADZONE_KEY, gamepadDeadzone);
   }, [gamepadDeadzone]);
 
+  // 跨标签页心跳: 让 Dashboard 知道本网页模拟器标签页存在且未同步
+  useEffect(() => {
+    const cleanup = registerWebEmulatorTab(
+      webTabIdRef.current,
+      () => effectiveSaveIdRef.current,
+      () => !syncedRef.current,
+    );
+    return cleanup;
+  }, []);
+
   // FPS — independent rAF counter
   useEffect(() => {
     let c = 0, last = performance.now(), run = true;
@@ -185,12 +199,14 @@ const EmulatorPage: React.FC = () => {
         // 新游戏首次同步: 服务器返回新创建的 saveFileId，存储供后续使用
         if (resp.data?.saveFileId && !effectiveSaveId.current) {
           effectiveSaveId.current = resp.data.saveFileId;
+          effectiveSaveIdRef.current = resp.data.saveFileId;
           setSaveName(et('saveNameTemplate', '存档 - {{trainerName}}', {
             trainerName: resp.data.trainerName || et('trainerFallback', '训练家'),
           }));
           console.log(`[syncSave] New save created: ${effectiveSaveId.current}`);
         }
         setSynced(true);
+        syncedRef.current = true;
         return true;
       }
       console.error('[syncSave] Server error:', r.status);

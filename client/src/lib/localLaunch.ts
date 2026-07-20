@@ -3,6 +3,7 @@ import { emulatorApi, type LaunchLocalResult } from '../api/saveFile';
 import { buildLinuxScript } from './linuxLauncherScript';
 import { buildWindowsScript } from './windowsLauncherScript';
 import { getI18nText } from '../i18n/i18n';
+import { useEmulatorActivityStore } from '../stores/emulatorActivityStore';
 
 const detectProtocolSupport = (protoUrl: string) => new Promise<boolean>((resolve) => {
   let done = false;
@@ -67,6 +68,7 @@ export const launchLocalSave = async (
     const supported = await detectProtocolSupport(protoUrl);
     if (supported) {
       message.success(getI18nText('localLaunch.launching', undefined, 'messages') || '正在启动模拟器...');
+      useEmulatorActivityStore.getState().startLocalLaunch(saveFileId, fallbackName);
       return;
     }
   } catch {
@@ -89,4 +91,5 @@ export const launchLocalSave = async (
     || `No one-click launch protocol was detected. The launch script (${fileName}) was downloaded. Run it to inject the save, start the emulator, and sync automatically after exit.`,
     8,
   );
+  useEmulatorActivityStore.getState().startLocalLaunch(saveFileId, fallbackName);
 };

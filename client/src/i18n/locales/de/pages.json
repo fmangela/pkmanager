@@ -212,5 +212,9 @@
   "devices.logoutCurrentTitle": "Aktuelles Gerät abmelden",
   "devices.logoutCurrentConfirm": "Sie werden von diesem Gerät abgemeldet und zur Anmeldeseite weitergeleitet. Fortfahren?",
   "devices.loadFailed": "Geräteliste konnte nicht geladen werden",
-  "devices.hint": "Dasselbe Konto kann gleichzeitig auf mehreren Geräten angemeldet sein, ohne sich zu beeinflussen. Die Sitzung jedes Geräts bleibt bis zu 7 Tage aktiv; nach Ablauf oder erzwungener Abmeldung müssen Sie sich erneut anmelden."
+  "devices.hint": "Dasselbe Konto kann gleichzeitig auf mehreren Geräten angemeldet sein, ohne sich zu beeinflussen. Die Sitzung jedes Geräts bleibt bis zu 7 Tage aktiv; nach Ablauf oder erzwungener Abmeldung müssen Sie sich erneut anmelden.",
+  "dashboard.logoutBlockedTitle": "Abmeldung derzeit nicht möglich",
+  "dashboard.logoutBlockedLocalRunning": "Ein lokaler Emulator läuft noch ({{filename}}). Bitte beenden Sie ihn und warten Sie auf die Synchronisierung des Speicherstands, bevor Sie sich abmelden.",
+  "dashboard.logoutBlockedWebUnsynced": "Ein oder mehrere Web-Emulator-Tabs haben nicht synchronisierte Speicherstände. Klicken Sie in jedem Web-Emulator auf „Speichern synchronisieren“ (oder schließen Sie den Tab), bevor Sie sich abmelden.",
+  "dashboard.logoutBlockedAnyway": "Trotzdem abmelden (nicht synchronisierte Speicherstände können verloren gehen)"
 }

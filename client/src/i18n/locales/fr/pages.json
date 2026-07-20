@@ -212,5 +212,9 @@
   "devices.logoutCurrentTitle": "Déconnecter l'appareil actuel",
   "devices.logoutCurrentConfirm": "Vous serez déconnecté de cet appareil et redirigé vers la page de connexion. Continuer ?",
   "devices.loadFailed": "Échec du chargement de la liste des appareils",
-  "devices.hint": "Le même compte peut être connecté sur plusieurs appareils simultanément sans interférence. La session de chaque appareil dure jusqu'à 7 jours ; après expiration ou déconnexion forcée, vous devrez vous reconnecter."
+  "devices.hint": "Le même compte peut être connecté sur plusieurs appareils simultanément sans interférence. La session de chaque appareil dure jusqu'à 7 jours ; après expiration ou déconnexion forcée, vous devrez vous reconnecter.",
+  "dashboard.logoutBlockedTitle": "Déconnexion impossible pour le moment",
+  "dashboard.logoutBlockedLocalRunning": "Un émulateur local est en cours d'exécution ({{filename}}). Veuillez le quitter et attendre la synchronisation de la sauvegarde avant de vous déconnecter.",
+  "dashboard.logoutBlockedWebUnsynced": "Une ou plusieurs fenêtres d'émulateur web ont des sauvegardes non synchronisées. Cliquez sur « Synchroniser » dans chaque émulateur web (ou fermez la fenêtre) avant de vous déconnecter.",
+  "dashboard.logoutBlockedAnyway": "Se déconnecter quand même (des sauvegardes non synchronisées peuvent être perdues)"
 }

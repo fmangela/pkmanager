@@ -212,5 +212,9 @@
   "devices.logoutCurrentTitle": "現在のデバイスをログアウト",
   "devices.logoutCurrentConfirm": "現在のデバイスからログアウトしログインページへ移動します。よろしいですか？",
   "devices.loadFailed": "デバイスリストの読み込みに失敗しました",
-  "devices.hint": "同じアカウントで複数のデバイスから同時にログインできます。各デバイスのログイン状態は最長7日間保持され、期限切れまたは強制ログアウト後は再度ログインが必要です。"
+  "devices.hint": "同じアカウントで複数のデバイスから同時にログインできます。各デバイスのログイン状態は最長7日間保持され、期限切れまたは強制ログアウト後は再度ログインが必要です。",
+  "dashboard.logoutBlockedTitle": "今はログアウトできません",
+  "dashboard.logoutBlockedLocalRunning": "ローカルエミュレータが実行中です（{{filename}}）。先にエミュレータを終了し、セーブの自動同期を待ってからログアウトしてください。",
+  "dashboard.logoutBlockedWebUnsynced": "セーブを未同期の Web エミュレータタブがあります。各 Web エミュレータで「セーブ同期」をクリックするかタブを閉じてからログアウトしてください。",
+  "dashboard.logoutBlockedAnyway": "それでもログアウト（未同期のセーブが失われる可能性があります）"
 }

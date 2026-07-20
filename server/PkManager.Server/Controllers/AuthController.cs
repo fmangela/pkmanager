@@ -91,20 +91,14 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// 登出 — 撤销当前设备的 refresh_token
+    /// 用 [AllowAnonymous]: 用户点登出时 access_token 可能已过期, [Authorize] 会 401 拦截导致后端 token 没被撤销
+    /// AuthService.Logout 从 refresh_token 解析 userId 自行撤销, 不依赖 access_token
     /// </summary>
     [HttpPost("logout")]
-    [Authorize]
+    [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<object>>> Logout([FromBody] LogoutRequest request)
     {
-        var userId = _userContext.UserId;
-        if (userId == null)
-            return Unauthorized(ApiResponse<object>.Error(
-                401,
-                _messages.Get("common.unauthorized"),
-                "common.unauthorized"));
-
-        var deviceId = GetDeviceId();
-        await _authService.Logout(userId.Value, deviceId, request.RefreshToken);
+        await _authService.Logout(request.RefreshToken);
         return Ok(ApiResponse<object>.Ok(
             new { },
             _messages.Get("auth.logoutSuccess"),

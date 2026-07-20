@@ -115,7 +115,7 @@ public class AuthService
             // 验证 DB 中此 token 未被撤销
             var tokenHash = HashToken(refreshToken);
             var record = await _db.QueryFirstOrDefaultAsync<dynamic>(
-                @"SELECT id, device_id FROM refresh_tokens
+                @"SELECT id, device_id, device_label, user_agent FROM refresh_tokens
                   WHERE jti = @Jti AND token_hash = @Hash
                     AND revoked_at IS NULL AND expires_at > NOW()",
                 new { Jti = jti, Hash = tokenHash });
@@ -123,16 +123,23 @@ public class AuthService
             if (record == null)
                 throw BusinessException.FromKey("auth.invalidRefreshToken", 401);
 
-            // 旋转: 旧 token 撤销
+            // 旋转: 旧 token 撤销 + 标记 last_used_at
             await _db.ExecuteAsync(
-                "UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = @Id",
+                "UPDATE refresh_tokens SET revoked_at = NOW(), last_used_at = NOW() WHERE id = @Id",
                 new { Id = (Guid)record.id });
 
-            // 沿用原 device_id (旋转不换设备); 若前端带了 device_id 则校验一致
-            var effectiveDeviceId = deviceId ?? (Guid)record.device_id;
+            // 始终沿用记录里存储的 device_id, 拒绝调用方传入的不一致 id
+            // (防止 session 被挪到别的 device_id 上绕过撤销)
+            var effectiveDeviceId = (Guid)record.device_id;
+            if (deviceId.HasValue && deviceId.Value != effectiveDeviceId)
+                throw BusinessException.FromKey("auth.invalidRefreshToken", 401);
+
+            // 旋转时继承 device_label (用户改的名字不能被刷新丢掉) + 沿用原 UA (没传才用旧的)
+            var carryLabel = (string?)record.device_label;
+            var carryUa = string.IsNullOrEmpty(userAgent) ? (string?)record.user_agent : userAgent;
 
             return await GenerateTokensAsync(user.Id, user.Username, user.Email, user.PreferredLang,
-                effectiveDeviceId, userAgent);
+                effectiveDeviceId, carryUa, carryLabel);
         }
         catch (BusinessException)
         {
@@ -146,26 +153,50 @@ public class AuthService
 
     /// <summary>
     /// 登出 — 撤销当前设备的有效 refresh_token
+    /// access_token 可能已过期 (用户点登出时 [Authorize] 无法通过), 这里改为从 refresh_token 解析 userId
+    /// 即使 refresh_token 已失效也返回成功 (幂等登出), 前端一定会清 localStorage
     /// </summary>
-    public async Task Logout(Guid userId, Guid deviceId, string? refreshToken)
+    public async Task Logout(string? refreshToken)
     {
-        if (!string.IsNullOrEmpty(refreshToken))
+        if (string.IsNullOrEmpty(refreshToken))
+            return;
+
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var key = Encoding.UTF8.GetBytes(_configuration["Jwt:Secret"]!);
+
+        // 验签 + 解析 (允许过期, 登出不应因 refresh_token 过期而失败)
+        ClaimsPrincipal? principal;
+        try
         {
-            // 撤销特定 token (前端传当前 refresh_token)
-            var tokenHash = HashToken(refreshToken);
-            await _db.ExecuteAsync(@"
-                UPDATE refresh_tokens SET revoked_at = NOW()
-                WHERE user_id = @Uid AND token_hash = @Hash AND revoked_at IS NULL",
-                new { Uid = userId, Hash = tokenHash });
+            principal = tokenHandler.ValidateToken(refreshToken, new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(key),
+                ValidateIssuer = true,
+                ValidIssuer = _configuration["Jwt:Issuer"],
+                ValidateAudience = true,
+                ValidAudience = _configuration["Jwt:Audience"],
+                ValidateLifetime = false,  // 过期 refresh 仍可登出
+                ClockSkew = TimeSpan.Zero
+            }, out _);
         }
-        else
+        catch
         {
-            // 兜底: 撤销该用户该设备的所有有效 token
-            await _db.ExecuteAsync(@"
-                UPDATE refresh_tokens SET revoked_at = NOW()
-                WHERE user_id = @Uid AND device_id = @Did AND revoked_at IS NULL",
-                new { Uid = userId, Did = deviceId });
+            // token 不合法 (伪造/损坏) — 视为已登出, 前端照常清 localStorage
+            return;
         }
+
+        var userIdStr = principal!.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdStr, out var userId))
+            return;
+
+        var tokenHash = HashToken(refreshToken);
+
+        // 撤销匹配 token_hash 的记录 (前端传当前 refresh_token)
+        await _db.ExecuteAsync(@"
+            UPDATE refresh_tokens SET revoked_at = NOW()
+            WHERE user_id = @Uid AND token_hash = @Hash AND revoked_at IS NULL",
+            new { Uid = userId, Hash = tokenHash });
     }
 
     /// <summary>
@@ -182,7 +213,7 @@ public class AuthService
                    issued_at AS IssuedAt,
                    expires_at AS ExpiresAt
               FROM refresh_tokens
-             WHERE user_id = @Uid AND revoked_at IS NULL
+             WHERE user_id = @Uid AND revoked_at IS NULL AND expires_at > NOW()
              ORDER BY device_id, last_used_at DESC NULLS LAST",
             new { Uid = userId });
 
@@ -256,7 +287,7 @@ public class AuthService
     // ── 私有方法 ────────────────────────────────────────
 
     private async Task<AuthResponse> GenerateTokensAsync(Guid userId, string username, string email,
-        string preferredLang, Guid? deviceId, string? userAgent)
+        string preferredLang, Guid? deviceId, string? userAgent, string? deviceLabel = null)
     {
         var accessExpireHours = int.Parse(_configuration["Jwt:ExpireHours"] ?? "2");
         var refreshExpireDays = int.Parse(_configuration["Jwt:RefreshExpireDays"] ?? "7");
@@ -267,7 +298,7 @@ public class AuthService
         var accessToken = GenerateJwt(userId, username, accessExpireHours, accessJti);
         var refreshToken = GenerateJwt(userId, username, refreshExpireDays * 24, refreshJti);
 
-        // 持久化 refresh_token 记录
+        // 持久化 refresh_token 记录 (旋转时继承 label)
         var effectiveDeviceId = deviceId ?? Guid.NewGuid();
         var tokenHash = HashToken(refreshToken);
         var expiresAt = DateTime.UtcNow.AddDays(refreshExpireDays);
@@ -284,7 +315,7 @@ public class AuthService
                 Hash = tokenHash,
                 Jti = refreshJti,
                 ExpiresAt = expiresAt,
-                Label = (string?)null,
+                Label = deviceLabel,
                 UserAgent = TruncateUserAgent(userAgent)
             });
 

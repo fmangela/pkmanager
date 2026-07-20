@@ -212,5 +212,9 @@
   "devices.logoutCurrentTitle": "Cerrar sesión del dispositivo actual",
   "devices.logoutCurrentConfirm": "Se cerrará la sesión en este dispositivo y serás redirigido a la página de inicio de sesión. ¿Continuar?",
   "devices.loadFailed": "Error al cargar la lista de dispositivos",
-  "devices.hint": "La misma cuenta puede iniciar sesión en múltiples dispositivos simultáneamente sin interferencias. La sesión de cada dispositivo dura hasta 7 días; tras expirar o ser expulsado, deberás iniciar sesión nuevamente."
+  "devices.hint": "La misma cuenta puede iniciar sesión en múltiples dispositivos simultáneamente sin interferencias. La sesión de cada dispositivo dura hasta 7 días; tras expirar o ser expulsado, deberás iniciar sesión nuevamente.",
+  "dashboard.logoutBlockedTitle": "No puedes cerrar sesión ahora",
+  "dashboard.logoutBlockedLocalRunning": "Un emulador local sigue en ejecución ({{filename}}). Sal de él y espera a que se sincronice la partida antes de cerrar sesión.",
+  "dashboard.logoutBlockedWebUnsynced": "Hay pestañas del emulador web con partidas no sincronizadas. Haz clic en «Sincronizar partida» en cada emulador web (o cierra la pestaña) antes de cerrar sesión.",
+  "dashboard.logoutBlockedAnyway": "Cerrar sesión de todos modos (pueden perderse partidas no sincronizadas)"
 }

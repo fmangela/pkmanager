@@ -212,5 +212,9 @@
   "devices.logoutCurrentTitle": "Disconnetti dispositivo attuale",
   "devices.logoutCurrentConfirm": "Verrai disconnesso da questo dispositivo e reindirizzato alla pagina di login. Continuare?",
   "devices.loadFailed": "Caricamento lista dispositivi fallito",
-  "devices.hint": "Lo stesso account può essere connesso su più dispositivi simultaneamente senza interferenze. La sessione di ogni dispositivo dura fino a 7 giorni; dopo la scadenza o disconnessione forzata, dovrai rifare il login."
+  "devices.hint": "Lo stesso account può essere connesso su più dispositivi simultaneamente senza interferenze. La sessione di ogni dispositivo dura fino a 7 giorni; dopo la scadenza o disconnessione forzata, dovrai rifare il login.",
+  "dashboard.logoutBlockedTitle": "Impossibile uscire ora",
+  "dashboard.logoutBlockedLocalRunning": "Un emulatore locale è in esecuzione ({{filename}}). Esci e attendi la sincronizzazione del salvataggio prima di disconnetterti.",
+  "dashboard.logoutBlockedWebUnsynced": "Una o più schede dell'emulatore web hanno salvataggi non sincronizzati. Fai clic su « Sincronizza » in ogni emulatore web (o chiudi la scheda) prima di disconnetterti.",
+  "dashboard.logoutBlockedAnyway": "Esci comunque (potresti perdere salvataggi non sincronizzati)"
 }
