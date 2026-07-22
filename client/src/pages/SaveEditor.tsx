@@ -887,18 +887,26 @@ const SaveEditor: React.FC = () => {
                       {saveData.party.map((slot: BoxSlotDto) => (
                         <div key={slot.slotIndex} className="save-editor-party-grid__item">
                           {slot.isEmpty ? (
-                            <div
-                              className="pokemon-slot-card is-empty pokemon-slot-card--party"
-                              style={{ cursor: 'pointer' }}
-                              onClick={() => {
-                                setCreateTarget({ boxIndex: -1, slotIndex: slot.slotIndex, isParty: true });
-                                setCreateModalOpen(true);
-                              }}
-                            >
-                              <Text type="secondary" className="pokemon-slot-card__slot-index">
-                                <PlusOutlined style={{ fontSize: 16, opacity: 0.3 }} />
-                              </Text>
-                            </div>
+                            slot.slotIndex === partyCount ? (
+                              <div
+                                className="pokemon-slot-card is-empty pokemon-slot-card--party"
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => {
+                                  setCreateTarget({ boxIndex: -1, slotIndex: slot.slotIndex, isParty: true });
+                                  setCreateModalOpen(true);
+                                }}
+                              >
+                                <Text type="secondary" className="pokemon-slot-card__slot-index">
+                                  <PlusOutlined style={{ fontSize: 16, opacity: 0.3 }} />
+                                </Text>
+                              </div>
+                            ) : (
+                              <div className="pokemon-slot-card is-empty pokemon-slot-card--party">
+                                <Text type="secondary" className="pokemon-slot-card__slot-index">
+                                  <PlusOutlined style={{ fontSize: 16, opacity: 0.1 }} />
+                                </Text>
+                              </div>
+                            )
                           ) : (
                             <div
                               className={`pokemon-slot-card pokemon-slot-card--party${editPanelOpen && editingIsParty && editingSlotIndex === slot.slotIndex ? ' is-selected' : ''}`}

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Select, InputNumber, Space, Typography, App, Tag } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { PlusOutlined } from '@ant-design/icons';
@@ -26,12 +26,16 @@ const CreatePokemonModal: React.FC<Props> = ({
   open, saveFileId, targetGameVersion, boxIndex, slotIndex, isParty, onCancel, onCreated,
 }) => {
   const { t } = useTranslation(['pages', 'messages', 'common']);
-  const { species } = useResourceStore();
+  const { species, loadAll } = useResourceStore();
   const { message } = App.useApp();
   const [selectedSpecies, setSelectedSpecies] = useState<number | undefined>();
   const [form, setForm] = useState(0);
   const [level, setLevel] = useState(50);
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (open) loadAll();
+  }, [open, loadAll]);
 
   const pt = (key: string, defaultValue: string, options?: Record<string, unknown>) =>
     t(key, { ns: 'pages', defaultValue, ...(options ?? {}) });
