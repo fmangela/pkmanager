@@ -11,7 +11,7 @@ import {
   SafetyCertificateOutlined, AppstoreOutlined, LeftOutlined, RightOutlined,
   StarFilled, SortAscendingOutlined, SunOutlined, MoonOutlined, DesktopOutlined,
   InboxOutlined, ShoppingOutlined, IdcardOutlined, BookOutlined, SearchOutlined, ToolOutlined,
-  GiftOutlined,
+  GiftOutlined, PlusOutlined,
 } from '@ant-design/icons';
 import {
   DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors,
@@ -24,6 +24,7 @@ import { useDiagnosticStore } from '../stores/diagnosticStore';
 import { useTheme, type ThemeMode } from '../components/theme-context';
 import { bankApi, type BankListItem } from '../api/bank';
 import EditPanel from '../components/editor/EditPanel';
+import CreatePokemonModal from '../components/editor/CreatePokemonModal';
 import BagPanel from '../components/editor/BagPanel';
 import TrainerPanel from '../components/editor/TrainerPanel';
 import PokedexPanel from '../components/editor/PokedexPanel';
@@ -70,13 +71,14 @@ const getDownloadFileName = (contentDisposition?: string, fallback = 'save.sav')
 // ── Draggable Slot Component ─────────────────────────
 const DraggableSlot: React.FC<{
   boxIndex: number; slot: BoxSlotDto; onPokemonClick?: (p: PokemonDto) => void;
+  onEmptySlotClick?: (boxIndex: number, slotIndex: number, isParty: boolean) => void;
   legalityStatus?: LegalityStatus;
   spriteStyle?: SpriteStyle;
   isEditSelected?: boolean;
   isMultiSelected?: boolean;
   showCheckbox?: boolean;
   onToggleSelect?: (boxIndex: number, slotIndex: number, shiftKey: boolean) => void;
-}> = ({ boxIndex, slot, onPokemonClick, legalityStatus, spriteStyle, isEditSelected, isMultiSelected, showCheckbox, onToggleSelect }) => {
+}> = ({ boxIndex, slot, onPokemonClick, onEmptySlotClick, legalityStatus, spriteStyle, isEditSelected, isMultiSelected, showCheckbox, onToggleSelect }) => {
   const { t } = useTranslation(['pages', 'editor']);
   const slotId = saveSlotId(boxIndex, slot.slotIndex);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: slotId, disabled: slot.isEmpty });
@@ -104,12 +106,19 @@ const DraggableSlot: React.FC<{
     <div
       ref={(node) => { setNodeRef(node); setDropRef(node); }}
       className={slotClassName}
-      style={legalityColor ? ({ '--slot-legality': legalityColor } as React.CSSProperties) : undefined}
+      style={isEmpty
+        ? { cursor: 'pointer', ...(legalityColor ? { '--slot-legality': legalityColor } as React.CSSProperties : {}) }
+        : (legalityColor ? ({ '--slot-legality': legalityColor } as React.CSSProperties) : undefined)}
       {...(!isEmpty ? { ...attributes, ...listeners } : {})}
-      onClick={() => { if (!isEmpty && p && onPokemonClick) onPokemonClick(p); }}
+      onClick={() => {
+        if (!isEmpty && p && onPokemonClick) onPokemonClick(p);
+        if (isEmpty && onEmptySlotClick) onEmptySlotClick(boxIndex, slot.slotIndex, false);
+      }}
     >
       {isEmpty ? (
-        <Text type="secondary" className="pokemon-slot-card__slot-index">{slot.slotIndex + 1}</Text>
+        <Text type="secondary" className="pokemon-slot-card__slot-index pokemon-slot-card__slot-index--empty">
+          <PlusOutlined style={{ fontSize: 16, opacity: 0.3 }} />
+        </Text>
       ) : (
         <>
           {/* Multi-select checkbox */}
@@ -213,6 +222,8 @@ const SaveEditor: React.FC = () => {
   const [editingSlotIndex, setEditingSlotIndex] = useState<number | undefined>();
   const [editingIsParty, setEditingIsParty] = useState(false);
   const [editPanelOpen, setEditPanelOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createTarget, setCreateTarget] = useState<{ boxIndex: number; slotIndex: number; isParty: boolean }>({ boxIndex: 0, slotIndex: 0, isParty: false });
   const [legalityScanning, setLegalityScanning] = useState(false);
   const [sortingCurrentBox, setSortingCurrentBox] = useState(false);
   const [sortingBoxes, setSortingBoxes] = useState(false);
@@ -853,6 +864,10 @@ const SaveEditor: React.FC = () => {
                               setEditingIsParty(false);
                               setEditPanelOpen(true);
                             }}
+                            onEmptySlotClick={(boxIdx, slotIdx, isParty) => {
+                              setCreateTarget({ boxIndex: boxIdx, slotIndex: slotIdx, isParty });
+                              setCreateModalOpen(true);
+                            }}
                           />
                         );
                       })}
@@ -872,8 +887,17 @@ const SaveEditor: React.FC = () => {
                       {saveData.party.map((slot: BoxSlotDto) => (
                         <div key={slot.slotIndex} className="save-editor-party-grid__item">
                           {slot.isEmpty ? (
-                            <div className="pokemon-slot-card is-empty pokemon-slot-card--party">
-                              <Text type="secondary" className="pokemon-slot-card__slot-index">{t('saveEditor.emptySlot', { ns: 'pages', defaultValue: '空' })}</Text>
+                            <div
+                              className="pokemon-slot-card is-empty pokemon-slot-card--party"
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => {
+                                setCreateTarget({ boxIndex: -1, slotIndex: slot.slotIndex, isParty: true });
+                                setCreateModalOpen(true);
+                              }}
+                            >
+                              <Text type="secondary" className="pokemon-slot-card__slot-index">
+                                <PlusOutlined style={{ fontSize: 16, opacity: 0.3 }} />
+                              </Text>
                             </div>
                           ) : (
                             <div
@@ -982,6 +1006,17 @@ const SaveEditor: React.FC = () => {
         boxCount={saveData.boxes.length}
         onClose={() => { setEditPanelOpen(false); setEditingPokemon(null); setEditingBoxIndex(undefined); setEditingSlotIndex(undefined); }}
         onSaved={fetchData}
+      />
+
+      <CreatePokemonModal
+        open={createModalOpen}
+        saveFileId={id!}
+        targetGameVersion={saveData.gameVersion}
+        boxIndex={createTarget.boxIndex}
+        slotIndex={createTarget.slotIndex}
+        isParty={createTarget.isParty}
+        onCancel={() => setCreateModalOpen(false)}
+        onCreated={() => { setCreateModalOpen(false); fetchData(); }}
       />
 
       <AllBoxesModal
