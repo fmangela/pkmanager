@@ -90,7 +90,8 @@ public class LegalizationService
             return (null, Text("legalize.speciesUnrecognized"), null);
 
         // 2. 创建空白 PKM 并投影 ShowdownSet 字段
-        var pk = EntityBlank.GetBlank(trainerInfo);
+        var version = (GameVersion)request.TargetGameVersion;
+        var pk = CreateBlankForVersion(version, trainerInfo);
 
         try
         {
@@ -125,7 +126,6 @@ public class LegalizationService
         var moves = new ReadOnlyMemory<ushort>(set.Moves);
 
         // 4. 搜索合法遭遇
-        var version = (GameVersion)request.TargetGameVersion;
         IEnumerable<IEncounterable> encounters;
         try
         {
@@ -174,9 +174,10 @@ public class LegalizationService
         LegalizationRequest request, ITrainerInfo trainerInfo)
     {
         var changes = new List<string>();
+        var version = (GameVersion)request.TargetGameVersion;
 
         // 1. 创建空白 PKM
-        var blank = EntityBlank.GetBlank(trainerInfo);
+        var blank = CreateBlankForVersion(version, trainerInfo);
 
         blank.Species = (ushort)request.Species;
         blank.Form = (byte)(request.Form ?? 0);
@@ -205,7 +206,6 @@ public class LegalizationService
             : new ReadOnlyMemory<ushort>();
 
         // 4. 搜索遭遇
-        var version = (GameVersion)request.TargetGameVersion;
         IEnumerable<IEncounterable> encounters;
         try
         {
@@ -281,17 +281,17 @@ public class LegalizationService
         LegalizationRequest request, ITrainerInfo trainerInfo)
     {
         var changes = new List<string>();
+        var version = (GameVersion)request.TargetGameVersion;
 
-        var blank = EntityBlank.GetBlank(trainerInfo);
+        var blank = CreateBlankForVersion(version, trainerInfo);
+
+        ApplyTrainerIdentity(blank, trainerInfo, request);
 
         blank.Species = (ushort)request.Species;
         blank.Form = (byte)(request.Form ?? 0);
         blank.Gender = request.Gender ?? blank.GetSaneGender();
         blank.CurrentLevel = (byte)(request.Level ?? 50);
-
-        // 闪光
-        if (request.IsShiny == true)
-            blank.SetShiny();
+        blank.ClearNickname();
 
         // 性格
         if (request.Nature.HasValue)
@@ -307,7 +307,6 @@ public class LegalizationService
 
         // 最小捕获字段
         blank.Ball = (byte)Ball.Poke;
-        blank.Version = (GameVersion)request.TargetGameVersion;
         blank.MetLevel = (byte)(request.Level ?? 50);
 
         // 招式
@@ -318,17 +317,16 @@ public class LegalizationService
                     ? (ushort)request.DesiredMoves[i] : (ushort)0);
         }
 
-        // OT 保留
         if (request.PreserveOT && !string.IsNullOrEmpty(request.OriginalTrainerName))
-        {
-            blank.OriginalTrainerName = request.OriginalTrainerName;
             changes.Add("PreservedOT");
-        }
+
+        ApplyGeneratedIdentityValues(blank, request.IsShiny == true, changes);
 
         changes.Add("ForceCreate");
         changes.Add($"Ball={(byte)Ball.Poke}");
         changes.Add($"Version={(GameVersion)request.TargetGameVersion}");
 
+        blank.RefreshChecksum();
         return (blank, null, changes);
     }
 
@@ -634,6 +632,68 @@ public class LegalizationService
 
     // ── 辅助方法 ────────────────────────────────────────────
 
+    private static PKM CreateBlankForVersion(GameVersion version, ITrainerInfo trainerInfo)
+    {
+        var context = version.Context;
+        if (context == EntityContext.None)
+            return EntityBlank.GetBlank(trainerInfo);
+
+        return EntityBlank.GetBlank(context.Generation, version);
+    }
+
+    private static void ApplyTrainerIdentity(PKM pk, ITrainerInfo trainerInfo, LegalizationRequest request)
+    {
+        pk.Version = (GameVersion)request.TargetGameVersion;
+        pk.Language = trainerInfo.Language > 0 ? trainerInfo.Language : (int)LanguageID.English;
+        pk.OriginalTrainerName = request.PreserveOT && !string.IsNullOrEmpty(request.OriginalTrainerName)
+            ? request.OriginalTrainerName
+            : trainerInfo.OT;
+        pk.OriginalTrainerGender = trainerInfo.Gender;
+        pk.ID32 = trainerInfo.ID32;
+
+        if (trainerInfo is IRegionOriginReadOnly origin && pk is IRegionOrigin region)
+        {
+            region.ConsoleRegion = origin.ConsoleRegion;
+            region.Country = origin.Country;
+            region.Region = origin.Region;
+        }
+    }
+
+    private static void ApplyGeneratedIdentityValues(PKM pk, bool forceShiny, List<string> changes)
+    {
+        if (pk.Format <= 2)
+        {
+            if (forceShiny)
+            {
+                pk.SetShiny();
+                changes.Add("Shiny");
+            }
+            return;
+        }
+
+        if (forceShiny)
+            pk.SetShiny();
+        else
+        {
+            do
+            {
+                pk.PID = EntityPID.GetRandomPID(
+                    Util.Rand,
+                    pk.Species,
+                    pk.Gender,
+                    pk.Version,
+                    pk.Nature,
+                    pk.Form,
+                    pk.PID);
+            }
+            while (pk.IsShiny);
+        }
+
+        pk.SetRandomEC();
+        changes.Add("RandomPID");
+        changes.Add("RandomEC");
+    }
+
     /// <summary>
     /// 将 ShowdownSet 中的用户指定字段投影到已生成的 PKM 上。
     /// Nature/Ability 在此方法中处理；Nickname/HeldItem/IVs/EVs/Friendship/Moves 也写回。
@@ -910,7 +970,7 @@ public class LegalizationService
         var strings = _pkhexStrings.GetStrings();
 
         // 1. 创建空白 PKM
-        var blank = EntityBlank.GetBlank(trainerInfo);
+        var blank = CreateBlankForVersion(trainerInfo.Version, trainerInfo);
         blank.Species = (ushort)request.Species;
         blank.Form = (byte)request.Form;
 
@@ -1339,7 +1399,7 @@ public class LegalizationService
         if (tokenData.SaveFileId != saveFileId)
             return null;
 
-        var blank = EntityBlank.GetBlank(trainerInfo);
+        var blank = CreateBlankForVersion(trainerInfo.Version, trainerInfo);
         blank.Species = (ushort)tokenData.Species;
         blank.Form = (byte)tokenData.Form;
 
