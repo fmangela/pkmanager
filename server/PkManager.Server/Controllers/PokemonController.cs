@@ -343,7 +343,9 @@ public class PokemonController : LocalizedControllerBase
             var trainerInfo = await ResolveTrainerInfo(request.TrainerSaveFileId,
                 (GameVersion)request.TargetGameVersion);
 
-            var (pkm, error, changes) = _legalizationService.GenerateFromTemplate(request, trainerInfo);
+            var (pkm, error, changes) = request.ForceCreate
+                ? _legalizationService.GenerateForcedTemplate(request, trainerInfo)
+                : _legalizationService.GenerateFromTemplate(request, trainerInfo);
 
             if (pkm == null)
                 return Ok(OkMessageFallback(

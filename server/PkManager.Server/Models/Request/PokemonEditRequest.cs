@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace PkManager.Server.Models.Request;
 
@@ -54,9 +55,35 @@ public class PokemonEditRequest
     public int? MetLocation { get; set; }
     public byte? MetLevel { get; set; }
     public int? OriginGame { get; set; }
-    public string? MetDate { get; set; }  // yyyy-MM-dd
+    private string? _metDate;
+    private string? _eggDate;
+
+    public string? MetDate
+    {
+        get => _metDate;
+        set
+        {
+            _metDate = value;
+            MetDateProvided = true;
+        }
+    }  // yyyy-MM-dd
     public int? EggLocation { get; set; }
-    public string? EggDate { get; set; }
+    public string? EggDate
+    {
+        get => _eggDate;
+        set
+        {
+            _eggDate = value;
+            EggDateProvided = true;
+        }
+    }
+
+    [JsonIgnore]
+    public bool MetDateProvided { get; private set; }
+
+    [JsonIgnore]
+    public bool EggDateProvided { get; private set; }
+
     public int? MetTimeOfDay { get; set; }  // Gen2
     public int? GroundTile { get; set; }  // Gen4
     public int? BattleVersion { get; set; }  // Gen8+

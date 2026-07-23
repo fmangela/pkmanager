@@ -42,6 +42,12 @@ public class LegalizationRequest
 
     /// <summary>训练家来源存档 ID（从中提取 OT/TID/SID 信息）。版本信息按 TargetGameVersion 覆盖。</summary>
     public Guid? TrainerSaveFileId { get; set; }
+
+    /// <summary>
+    /// 强制创建:遭遇搜索失败时,跳过合法性校验直接生成 PKM。
+    /// 用于化石复活/幻兽等无自然遭遇模板的物种。生成的 PKM 可能显示 Illegal,但可正常写入存档。
+    /// </summary>
+    public bool ForceCreate { get; set; }
 }
 
 /// <summary>

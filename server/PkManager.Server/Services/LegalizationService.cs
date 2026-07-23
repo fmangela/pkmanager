@@ -271,6 +271,67 @@ public class LegalizationService
         return (null, Text("legalize.noEncounterTemplateAdjust"), changes);
     }
 
+    // ── 强制创建(无遭遇模板时) ────────────────────────────────
+
+    /// <summary>
+    /// 强制创建 PKM:跳过遭遇搜索,用空白模板 + 训练家信息 + 最小捕获字段直接生成。
+    /// 用于化石复活/幻兽等无自然遭遇模板的物种。生成的 PKM 合法性可能为 Illegal,但可正常写入存档。
+    /// </summary>
+    public (PKM? Pkm, string? Error, List<string> Changes) GenerateForcedTemplate(
+        LegalizationRequest request, ITrainerInfo trainerInfo)
+    {
+        var changes = new List<string>();
+
+        var blank = EntityBlank.GetBlank(trainerInfo);
+
+        blank.Species = (ushort)request.Species;
+        blank.Form = (byte)(request.Form ?? 0);
+        blank.Gender = request.Gender ?? blank.GetSaneGender();
+        blank.CurrentLevel = (byte)(request.Level ?? 50);
+
+        // 闪光
+        if (request.IsShiny == true)
+            blank.SetShiny();
+
+        // 性格
+        if (request.Nature.HasValue)
+            blank.SetNature((Nature)request.Nature.Value);
+
+        // 特性
+        if (request.Ability.HasValue && blank.PersonalInfo != null)
+        {
+            var slot = MapAbilityIdToSlot(request.Ability.Value, blank.PersonalInfo);
+            if (slot.HasValue)
+                PokemonEditService.ApplyAbilitySelection(blank, request.Ability.Value, slot.Value);
+        }
+
+        // 最小捕获字段
+        blank.Ball = (byte)Ball.Poke;
+        blank.Version = (GameVersion)request.TargetGameVersion;
+        blank.MetLevel = (byte)(request.Level ?? 50);
+
+        // 招式
+        if (request.DesiredMoves is { Length: > 0 })
+        {
+            for (int i = 0; i < 4; i++)
+                blank.SetMove(i, i < request.DesiredMoves.Length
+                    ? (ushort)request.DesiredMoves[i] : (ushort)0);
+        }
+
+        // OT 保留
+        if (request.PreserveOT && !string.IsNullOrEmpty(request.OriginalTrainerName))
+        {
+            blank.OriginalTrainerName = request.OriginalTrainerName;
+            changes.Add("PreservedOT");
+        }
+
+        changes.Add("ForceCreate");
+        changes.Add($"Ball={(byte)Ball.Poke}");
+        changes.Add($"Version={(GameVersion)request.TargetGameVersion}");
+
+        return (blank, null, changes);
+    }
+
     // ── 自动修复 ────────────────────────────────────────────
 
     /// <summary>

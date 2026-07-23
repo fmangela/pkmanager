@@ -263,6 +263,7 @@ export interface LegalizationRequest {
   preserveOT?: boolean;
   originalTrainerName?: string;
   trainerSaveFileId?: string;
+  forceCreate?: boolean;
 }
 
 export interface ShowdownImportRequest {

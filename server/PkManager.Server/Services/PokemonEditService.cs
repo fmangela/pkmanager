@@ -311,14 +311,24 @@ public class PokemonEditService
         if (request.OriginGame.HasValue)
             pkm.Version = (GameVersion)request.OriginGame.Value;
 
-        if (request.MetDate != null && DateOnly.TryParse(request.MetDate, out var metDate))
-            pkm.MetDate = metDate;
+        if (request.MetDateProvided)
+        {
+            if (DateOnly.TryParse(request.MetDate, out var metDate))
+                pkm.MetDate = metDate;
+            else if (string.IsNullOrWhiteSpace(request.MetDate))
+                pkm.MetDate = null;
+        }
 
         if (request.EggLocation.HasValue)
             pkm.EggLocation = (ushort)request.EggLocation.Value;
 
-        if (request.EggDate != null && DateOnly.TryParse(request.EggDate, out var eggDate))
-            pkm.EggMetDate = eggDate;
+        if (request.EggDateProvided)
+        {
+            if (DateOnly.TryParse(request.EggDate, out var eggDate))
+                pkm.EggMetDate = eggDate;
+            else if (string.IsNullOrWhiteSpace(request.EggDate))
+                pkm.EggMetDate = null;
+        }
 
         if (request.MetTimeOfDay.HasValue)
         {

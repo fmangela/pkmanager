@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Select, InputNumber, Space, Typography, App, Tag } from 'antd';
+import { Modal, Select, InputNumber, Space, Typography, App, Tag, Checkbox, Alert } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import type { ApiError } from '../../api/axios';
 import { saveFileApi } from '../../api/saveFile';
 import { useResourceStore } from '../../stores/resourceStore';
@@ -31,6 +31,7 @@ const CreatePokemonModal: React.FC<Props> = ({
   const [selectedSpecies, setSelectedSpecies] = useState<number | undefined>();
   const [form, setForm] = useState(0);
   const [level, setLevel] = useState(50);
+  const [forceCreate, setForceCreate] = useState(false);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -54,6 +55,7 @@ const CreatePokemonModal: React.FC<Props> = ({
     setSelectedSpecies(undefined);
     setForm(0);
     setLevel(50);
+    setForceCreate(false);
   };
 
   const handleCancel = () => {
@@ -74,6 +76,7 @@ const CreatePokemonModal: React.FC<Props> = ({
         level,
         targetGameVersion,
         trainerSaveFileId: saveFileId,
+        forceCreate,
       });
       const data = legalRes.data;
       if (!data.success || !data.pkmDataBase64) {
@@ -83,7 +86,9 @@ const CreatePokemonModal: React.FC<Props> = ({
       await saveFileApi.updateSaveSlot(
         data.pkmDataBase64, saveFileId, boxIndex, slotIndex, isParty, {},
       );
-      message.success(pt('saveEditor.createModal.createSuccess', '创建成功'));
+      message.success(forceCreate
+        ? pt('saveEditor.createModal.forceCreateSuccess', '已强制创建(可能不合法)')
+        : pt('saveEditor.createModal.createSuccess', '创建成功'));
       reset();
       onCreated();
     } catch (err: unknown) {
@@ -110,9 +115,11 @@ const CreatePokemonModal: React.FC<Props> = ({
       open={open}
       onCancel={handleCancel}
       width={480}
-      okText={pt('saveEditor.createModal.createBtn', '创建')}
+      okText={forceCreate
+        ? pt('saveEditor.createModal.forceCreateBtn', '强制创建')
+        : pt('saveEditor.createModal.createBtn', '创建')}
       cancelText={t('cancel', { ns: 'common', defaultValue: '取消' })}
-      okButtonProps={{ loading: creating, icon: <PlusOutlined /> }}
+      okButtonProps={{ loading: creating, icon: <PlusOutlined />, danger: forceCreate }}
       onOk={handleCreate}
       destroyOnClose
     >
@@ -186,6 +193,27 @@ const CreatePokemonModal: React.FC<Props> = ({
             />
           </div>
         </Space>
+
+        <div style={{ borderTop: '1px dashed #e8e8e8', paddingTop: 12, marginTop: 4 }}>
+          <Checkbox
+            checked={forceCreate}
+            onChange={(e) => setForceCreate(e.target.checked)}
+            disabled={!selectedSpecies}
+          >
+            <Space size={4}>
+              <WarningOutlined style={{ color: forceCreate ? '#fa8c16' : '#bfbfbf' }} />
+              <span>{pt('saveEditor.createModal.forceCreateLabel', '强制创建(无合法遭遇时)')}</span>
+            </Space>
+          </Checkbox>
+          {forceCreate && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginTop: 8, padding: '6px 12px', fontSize: 12 }}
+              message={pt('saveEditor.createModal.forceCreateHint', '生成的宝可梦合法性可能显示 Illegal(如化石宝可梦无自然遭遇)。仍可正常写入存档并使用,但无法通过官方合法性校验。')}
+            />
+          )}
+        </div>
       </Space>
     </Modal>
   );
